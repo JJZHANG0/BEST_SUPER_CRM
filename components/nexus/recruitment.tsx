@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Users, CalendarDays, GraduationCap, ClipboardList, FolderOpen, Search, ChevronRight, Download, Eye, Copy } from 'lucide-react';
+import { Users, CalendarDays, GraduationCap, ClipboardList, FolderOpen, Search, ChevronRight, Download, Eye, Copy, CircleDollarSign, UserRoundCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { useNexus, useVisible } from '@/lib/nexus/store';
@@ -22,23 +22,54 @@ export function Poster({program}:{program:string}) {
     </DialogContent></Dialog>
   </>;
 }
+function SalesCohortDialog({team,open,onOpenChange}:{team:Team|null;open:boolean;onOpenChange:(open:boolean)=>void}) {
+  const s=useNexus();
+  if(!team)return null;
+  const p=s.programs.find(p=>p.id===team.program)!;
+  const offer=programOffers[p.id],cohort=cohortOffers[team.id],a=cohortAvailability(team,s.enrollments);
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sales-cohort-dialog">
+    <DialogTitle className="sr-only">{p.name} · {team.name}招生详情</DialogTitle>
+    <DialogDescription className="sr-only">查看项目招生进度、剩余名额、价格与开课信息。</DialogDescription>
+    <div className="sales-modal-hero"><ProgramMark program={p}/><div><span>{offer.code} · {team.id}</span><h2>{p.name}</h2><p>{team.name}</p></div><Badge tone={a.status==='招生中'?'green':'neutral'}>{a.status}</Badge></div>
+    <div className="sales-modal-metrics"><div><span>招生进度</span><b>{a.confirmed}<small> / {a.capacity} 人</small></b></div><div><span>剩余名额</span><b>{a.remaining}<small> 个</small></b></div><div><span>项目单价</span><b>{money(offer.fee)}<small> / 人</small></b></div></div>
+    <div className="sales-modal-progress"><div><span>当前招生完成度</span><b>{a.progress}%</b></div><Meter value={a.progress}/></div>
+    <dl className="sales-detail-grid"><div><dt>计划开课</dt><dd>{cohort?.opens||'待安排'}</dd></div><div><dt>报名截止</dt><dd>{cohort?.deadline||'待发布'}</dd></div><div><dt>授课老师</dt><dd>{team.teacher}（示例）</dd></div><div><dt>运营对接</dt><dd>{offer.operations}</dd></div><div><dt>上课时间</dt><dd>{cohort?.schedule||'待安排'}</dd></div><div><dt>课程计划</dt><dd>{offer.sessions} 次 · {offer.hours} 课时</dd></div></dl>
+    <p className="sales-price-note">{offer.feeNote}</p>
+    <div className="sales-modal-actions"><Poster program={team.program}/><button className="primary" onClick={()=>{onOpenChange(false);s.go('programs/'+team.program)}}>查看项目资料<ChevronRight size={16}/></button></div>
+  </DialogContent></Dialog>;
+}
 export function CohortCard({team}:{team:Team}) {
+  const [open,setOpen]=useState(false);
   const s=useNexus(),p=s.programs.find(p=>p.id===team.program)!,offer=programOffers[p.id],cohort=cohortOffers[team.id];
   const a=cohortAvailability(team,s.enrollments);
-  return <article className="glass admission-card">
+  return <><article className="glass admission-card">
     <div className="card-top"><ProgramMark program={p} small/><Badge tone={a.status==='招生中'?'green':'neutral'}>{a.status}</Badge></div>
-    <button className="admission-heading" onClick={()=>s.go('teams/'+team.id)}><h2>{team.name}</h2><ChevronRight size={19}/></button>
+    <button className="admission-heading" onClick={()=>setOpen(true)}><h2>{team.name}</h2><ChevronRight size={19}/></button>
     <p className="admission-program">{p.name}</p><div className="admission-code">{offer.code} · {team.id}</div>
     <div className="admission-numbers"><span>已报名 <b>{a.confirmed}</b> / {a.capacity} 人</span><strong>{a.status==='招生中'?`剩余 ${a.remaining} 个名额`:a.status==='筹备中'?'尚未开放报名':a.status==='已满员'?'暂无名额':'本期已截止'}</strong></div>
     <Meter value={a.progress}/>
     <dl className="admission-facts"><div><dt><GraduationCap size={15}/>授课老师</dt><dd>{team.teacher}（示例）</dd></div><div><dt><ClipboardList size={15}/>运营对接</dt><dd>{offer.operations}</dd></div><div><dt><CalendarDays size={15}/>计划开课</dt><dd>{cohort?.opens||'待安排'}</dd></div><div><dt>课程计划</dt><dd>{offer.sessions} 次 · {offer.hours} 课时</dd></div></dl>
     <div className="admission-price"><strong>{money(offer.fee)}<small> / 人</small></strong><Badge tone="neutral">演示报价</Badge></div>
-    <button className="card-link" onClick={()=>s.go('teams/'+team.id)}>查看招生与队伍详情<ChevronRight size={16}/></button>
-  </article>;
+    <button className="card-link" onClick={()=>setOpen(true)}>查看招生与队伍详情<ChevronRight size={16}/></button>
+  </article><SalesCohortDialog team={team} open={open} onOpenChange={setOpen}/></>;
 }
 export function CohortGrid({program,limit}:{program?:string;limit?:number}) {
   const s=useNexus();let teams=s.teams.filter(t=>!program||t.program===program);if(limit)teams=teams.slice(0,limit);
   return <div className="admission-grid">{teams.map(t=><CohortCard key={t.id} team={t}/>)}</div>;
+}
+function SalesPipeline() {
+  const s=useNexus();const [selected,setSelected]=useState<Team|null>(null);
+  return <section className="glass sales-pipeline"><div className="sales-pipeline-title"><div><h2>招生项目概览</h2><span>{s.teams.length} 个开班项目 · 点击任意一行查看详情</span></div><button className="text-button" onClick={()=>s.go('programs')}>项目库<ChevronRight size={15}/></button></div>
+    <div className="sales-pipeline-head" aria-hidden="true"><span>项目 / 队伍</span><span>招生进度</span><span>剩余名额</span><span>项目单价</span><span>状态</span><span/></div>
+    <div className="sales-pipeline-body">{s.teams.map(team=>{const p=s.programs.find(p=>p.id===team.program)!,offer=programOffers[p.id],a=cohortAvailability(team,s.enrollments);return <button className="sales-pipeline-row" key={team.id} onClick={()=>setSelected(team)} aria-label={`查看${p.name}${team.name}招生详情`}>
+      <span className="sales-project-cell"><ProgramMark program={p} small/><span><strong>{p.name}</strong><small>{team.name} · {team.id}</small></span></span>
+      <span className="sales-progress-cell"><span><b>{a.confirmed}</b> / {a.capacity} 人<small>{a.progress}%</small></span><Meter value={a.progress}/></span>
+      <span className="sales-seats-cell"><b>{a.remaining}</b><small>个名额</small></span>
+      <span className="sales-unit-price"><b>{money(offer.fee)}</b><small>/ 人</small></span>
+      <span className="sales-status-cell"><Badge tone={a.status==='招生中'?'green':'neutral'}>{a.status}</Badge></span><ChevronRight className="sales-row-arrow" size={18}/>
+    </button>})}</div>
+    <SalesCohortDialog team={selected} open={!!selected} onOpenChange={open=>{if(!open)setSelected(null)}}/>
+  </section>;
 }
 export function RecruitmentHub() {
   const s=useNexus();const [q,setQ]=useState(''),[status,setStatus]=useState('全部招生状态'),[project,setProject]=useState(s.programs.find(p=>p.id===new URLSearchParams(s.route.split('?')[1]).get('program'))?.name||'全部项目');
@@ -76,11 +107,10 @@ export function TeamRoster({team}:{team:Team}) {
   </section>;
 }
 export default function SalesHome() {
-  const s=useNexus(),v=useVisible();const open=s.teams.filter(t=>cohortAvailability(t,s.enrollments).status==='招生中');const remaining=open.reduce((n,t)=>n+cohortAvailability(t,s.enrollments).remaining,0);
-  return <><div className="welcome"><div><div className="eyebrow">SALES & ADMISSIONS WORKSPACE</div><h1>早上好，Alex <span className="hello-spark">✧</span></h1><p>找到合适的项目，把每一个招生问题说清楚。</p></div><Badge tone="neutral">演示工作空间</Badge></div>
-    <div className="stats-grid">{[{label:'项目库',value:s.programs.length,unit:'个',icon:FolderOpen,to:'programs'},{label:'正在招生',value:open.length,unit:'支队伍',icon:Users,to:'teams'},{label:'可报名额',value:remaining,unit:'个',icon:GraduationCap,to:'teams'},{label:'我的学生',value:v.students.length,unit:'位',icon:ClipboardList,to:'students'}].map(x=><button key={x.label} className="glass stat-card" onClick={()=>s.go(x.to)}><div className="stat-top"><span>{x.label}</span><span className="stat-icon violet"><x.icon size={19}/></span></div><div className="stat-value">{x.value}<span>{x.unit}</span></div><div className="stat-foot">查看详情<ChevronRight size={15}/></div></button>)}</div>
-    <div className="sales-entry-strip glass"><div><h2>招生前，先确认这几件事</h2><p>名额与截止时间 · 项目金额 · 授课老师 · 运营对接 · 课程和海报</p></div><button className="primary" onClick={()=>s.go('programs')}>查看全部项目</button></div>
-    <SectionTitle title="开班队伍与招生名额" sub="按队伍了解招生条件与课程安排" action="全部队伍" onClick={()=>s.go('teams')}/><CohortGrid limit={6}/>
+  const s=useNexus(),v=useVisible();const mine=new Set(v.students.map(x=>x.id));const revenue=s.enrollments.filter(e=>mine.has(e.student)&&!['已退出','待分配'].includes(e.status)).reduce((sum,e)=>sum+(programOffers[e.program]?.fee||0),0);const activeStudents=v.students.filter(x=>x.status==='进行中').length;const revenueText=revenue>=10000?(revenue/10000).toFixed(1)+'万':money(revenue);
+  return <><div className="welcome sales-welcome"><div><div className="eyebrow">SALES WORKSPACE</div><h1>早上好，Alex <span className="hello-spark">✧</span></h1></div><Badge tone="neutral">销售工作台</Badge></div>
+    <div className="stats-grid sales-stats">{[{label:'项目库',value:s.programs.length,unit:'个',icon:FolderOpen,to:'programs'},{label:'我的学生',value:v.students.length,unit:'位',icon:ClipboardList,to:'students'},{label:'我的当前营收',value:revenueText,unit:'演示',icon:CircleDollarSign,to:'students'},{label:'进行中学生',value:activeStudents,unit:'位',icon:UserRoundCheck,to:'students'}].map(x=><button key={x.label} className="glass stat-card" onClick={()=>s.go(x.to)}><div className="stat-top"><span>{x.label}</span><span className="stat-icon violet"><x.icon size={19}/></span></div><div className="stat-value">{x.value}<span>{x.unit}</span></div><div className="stat-foot">查看详情<ChevronRight size={15}/></div></button>)}</div>
+    <SalesPipeline/>
     <footer className="page-footer"><span>PROJECT NEXUS · Innovation, connected.</span><span>虚构演示数据 · 非实时库存或正式报价</span></footer>
   </>;
 }
