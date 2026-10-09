@@ -2,7 +2,8 @@ import {readFileSync,existsSync,readdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const prefix='/BEST_SUPER_CRM';
 const html=readFileSync('out/index.html','utf8');
-assert(html.includes('开班队伍与招生名额'));
+assert(html.includes('欢迎回来'));
+assert(!html.includes('已报名 4')); // No workspace content rendered before demo sign-in.
 for(const m of html.matchAll(/(?:src|href)="([^"#]+)"/g)){
   const u=m[1];if(!u.startsWith('/'))continue;
   assert(u.startsWith(prefix+'/'),`Root-relative asset outside Pages base: ${u}`);

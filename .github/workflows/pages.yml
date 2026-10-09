@@ -21,6 +21,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Validate admissions calculations
         run: node tests/recruitment.mjs
+      - name: Validate demo authorization
+        run: node tests/auth.mjs
       - name: Build static site
         run: npm run build:pages
       - name: Validate exported paths
