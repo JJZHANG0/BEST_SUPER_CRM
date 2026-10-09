@@ -27,3 +27,5 @@ export type Resource = typeof resources[number];
 export const announcements=[{title:'BPA 新赛季招生资料已更新',tag:'资料更新',date:'今天 09:20',text:'项目介绍与招生手册已发布，可在项目中心查看。',program:'bpa'},{title:'康莱德项目中期材料提交提醒',tag:'重要提醒',date:'昨天 16:45',text:'请各队伍于 10 月 15 日前完成中期成果整理。',program:'conrad'},{title:'CTB 本周课程安排已发布',tag:'课程通知',date:'昨天 14:30',text:'请提前查看研究方法课程的课前准备。',program:'ctb'}];
 
 export const enrollments:Enrollment[]=[...students.map(x=>({id:'E-'+x.id,student:x.id,program:x.program,team:x.team,status:x.status})),{id:'E-DEMO-0002-extra',student:'DEMO-0002',program:'bpa',team:'T007',status:'已结项'}];
+
+teams.push({id:'T013',name:'寒假创客第一期',program:'winter',teacher:'陈老师',stage:1,status:'正常进行',note:''},{id:'T014',name:'暑假创客预备队',program:'summer',teacher:'林老师',stage:1,status:'正常进行',note:''});

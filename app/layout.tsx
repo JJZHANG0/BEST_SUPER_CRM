@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { assetUrl } from "@/lib/nexus/assets";
 
 export const metadata: Metadata = {
   title: "PROJECT NEXUS · 创新项目协同管理平台",
   description: "连接教育创新项目、学生与教学团队的协同工作空间。",
-  manifest: "/manifest.webmanifest",
+  manifest: assetUrl("manifest.webmanifest"),
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: assetUrl("favicon.svg"),
+    shortcut: assetUrl("favicon.svg"),
   },
 };
 

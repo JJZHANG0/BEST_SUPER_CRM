@@ -1,6 +1,6 @@
-# PROJECT NEXUS
+# BEST_SUPER_CRM · PROJECT NEXUS
 
-教育创新项目 CRM 前端 V1。React 19 + TypeScript + Vinext（Next.js API）+ Tailwind 4 + shadcn/Radix，统一 Crystal Purple / Liquid Glass 设计。
+教育创新项目 CRM 前端 V1.1。React 19 + TypeScript + Vinext（Next.js API）+ Tailwind 4 + shadcn/Radix，统一 Crystal Purple / Liquid Glass 设计。
 
 ## 运行
 
@@ -12,7 +12,7 @@ npm run dev
 npm run build
 ```
 
-本地地址：http://127.0.0.1:5173。主入口直接展示运营演示工作台，`/#/login` 提供登录交互。
+本地地址：http://127.0.0.1:5173。主入口直接展示销售招生工作台，`/#/login` 提供登录交互。
 
 ## 演示账号
 
@@ -39,13 +39,32 @@ npm run build
 - 应用 manifest、图标、standalone 配置；未注册 Service Worker、未缓存学生数据。
 - 页面功能模块按需加载，用户输入经 React 输出转义，支持减少动画偏好。
 
+## 销售招生工作台
+
+销售可浏览 8 个项目、14 支开班队伍，查看项目编号、演示价格、招生进度与余位、开课和截止时间、授课老师、运营对接人、课程结构及海报。支持按项目、队伍编号和招生状态筛选。有效报名按学生去重，退出、结项及待分配记录不占用名额；暂停中的学生仍保留名额。其他顾问负责的队员仅展示年级和参与状态，本人负责的学生可打开档案。
+
+## GitHub Pages
+
+- 网站：https://jjzhang0.github.io/BEST_SUPER_CRM/
+- 代码：https://github.com/JJZHANG0/BEST_SUPER_CRM
+- `main` 推送触发 `.github/workflows/pages.yml`，生成并发布纯静态页面。
+
+```sh
+npm run build:pages
+node tests/static-paths.mjs
+node tests/recruitment.mjs
+node scripts/preview-static.mjs
+```
+
+静态预览：http://127.0.0.1:4173/BEST_SUPER_CRM/。构建产物为 `out/`，所有脚本、海报、PDF 与 manifest 已适配仓库子目录。服务器迁移说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
 ## 数据与接入边界
 
 `lib/nexus/data.ts` 定义虚构数据与类型，`lib/nexus/store.tsx` 为可替换的数据访问边界。所有业务修改仅在内存中保留，刷新重置；未使用 localStorage 或 IndexedDB 保存学生数据。文件权限与销售归属检查仅是前端演示，不构成安全边界；静态示例文件本身不含敏感信息。
 
 正式上线前必须接入真实身份认证、服务端 RBAC/销售行级范围、受控文件存储与签名下载、审计与持久化接口。已提供独立 Enrollment 记录、关联新项目、学生档案编辑与负责销售分配。Excel 导入导出、账号权限管理为后续扩展，不把预留项包装为已实现。
 
-PWA 预留不代表已实现完整安装条件、离线 CRM 或推送。没有真实会议链接、招生费用或报名入口。
+PWA 预留不代表已实现完整安装条件、离线 CRM 或推送。所有费用都是演示报价，没有真实会议链接或付费报名入口。
 
 ## 验收
 
