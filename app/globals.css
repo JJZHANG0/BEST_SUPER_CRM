@@ -484,32 +484,15 @@ html[data-workspace=sales] .sales-pipeline-filters{
   transition:background .18s,box-shadow .18s,border-color .18s,transform .18s;
 }
 .sales-pipeline-row:last-child{border-bottom:0}
+/* Rows stay businesslike: a quiet ice tint + hairline, no navy fill or filters. */
 html[data-workspace=sales] .sales-pipeline-row:hover{
-  background:linear-gradient(110deg,rgba(36,92,140,.58),rgba(56,128,185,.42));
-  border-bottom-color:transparent;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 0 0 1px rgba(130,200,245,.18),inset 0 0 0 1px rgba(255,255,255,.06);
+  background:linear-gradient(100deg,rgba(214,236,250,.55),rgba(236,246,253,.42));
+  border-bottom-color:rgba(200,224,240,.6);
+  box-shadow:inset 2px 0 0 rgba(58,154,216,.55);
   transform:none;
 }
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-project-cell strong,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-progress-cell b,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-seats-cell b,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-unit-price b{color:#f4fbff}
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-project-cell small,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-progress-cell>span,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-progress-cell small,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-seats-cell,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-unit-price,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-seats-cell small,
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-unit-price small{color:#c5dff0}
-html[data-workspace=sales] .sales-pipeline-row:hover .sales-row-arrow{color:#d7eefc}
-html[data-workspace=sales] .sales-pipeline-row:hover .meter{background:rgba(255,255,255,.18)}
-html[data-workspace=sales] .sales-pipeline-row:hover .meter>[data-slot=progress-indicator]{background:linear-gradient(90deg,#c8ebff,#7ec4f0)}
-html[data-workspace=sales] .sales-pipeline-row:hover .badge.neutral,
-html[data-workspace=sales] .sales-pipeline-row:hover .badge.green{
-  background:rgba(255,255,255,.16);
-  border-color:rgba(255,255,255,.28);
-  color:#eaf6ff;
-}
+html[data-workspace=sales] .sales-pipeline-row:hover .sales-project-cell strong{color:#1e2f3c}
+html[data-workspace=sales] .sales-pipeline-row:hover .sales-row-arrow{color:#3a9ad8}
 .sales-project-cell{display:flex;align-items:center;gap:12px;min-width:0}
 .sales-project-cell>span:last-child{min-width:0}
 .sales-project-cell strong{display:block;color:#3b4e5c;font-size:.82rem;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -587,7 +570,6 @@ html[data-workspace=sales] .sales-pipeline .text-button{color:#347eaa}
   }
   html[data-workspace=sales] body:before{display:none}
   html[data-workspace=sales] .sales-stats .stat-card:hover,
-  html[data-workspace=sales] .sales-pipeline-row:hover,
   html[data-workspace=sales] .global-search:hover,
   html[data-workspace=sales] .nav-button[data-active=true]{
     background:#2a6fa3;
@@ -601,3 +583,117 @@ html[data-workspace=sales] .sales-pipeline .text-button{color:#347eaa}
 @media(max-width:600px){.access-page{padding:18px 14px 20px;overflow-x:hidden}.access-header{padding:0 4px}.access-internal{font-size:.62rem;padding:8px 10px}.access-layout{gap:22px;margin:29px auto}.access-story{display:none}.access-card{padding:25px 18px;border-radius:21px}.access-welcome{margin-top:24px}.access-card h2{font-size:1.7rem}.access-role{gap:7px}.access-role button{font-size:.74rem}.access-footer{justify-content:center}.access-footer span:last-child{display:none}}
 @media(max-width:374px){.access-page{padding-left:10px;padding-right:10px}.access-brand>span{width:36px;height:36px}.access-internal{letter-spacing:0}.access-story h1{font-size:1.92rem}.crystal-scene{height:186px}.nexus-crystal{left:33%;width:95px;height:95px}.crystal-label{min-width:136px}.crystal-label small{display:none}.access-card{padding:22px 14px}.access-role button{padding:0 6px}.access-footer{font-size:.54rem}}
 @media(prefers-reduced-motion:reduce){.nexus-crystal,.crystal-halo,.crystal-spark,.access-spinner{animation:none}.access-submit{transition:none}}
+
+/* ---------------------------------------------------------------------------
+   Sales liquid glass — real refraction layer.
+   Technique ported from liquid-glass-react (MIT, © 2025 Max Rovensky,
+   https://github.com/rdev/liquid-glass-react). components/nexus/liquid-glass.tsx
+   marks targets with [data-lg] and points --lg-refract at a per-size SVG
+   displacement filter; html[data-liquid-glass=refract] is only set in Chromium.
+   --------------------------------------------------------------------------- */
+
+/* Soft ice-fluid light field: refraction needs something to bend. */
+html[data-workspace=sales] body:before{
+  background:
+    radial-gradient(ellipse 30% 22% at 24% 18%,rgba(150,208,246,.42),transparent 70%),
+    radial-gradient(ellipse 22% 30% at 71% 13%,rgba(190,228,252,.5),transparent 72%),
+    radial-gradient(ellipse 26% 18% at 58% 34%,rgba(120,190,238,.22),transparent 70%),
+    radial-gradient(ellipse 34% 26% at 86% 62%,rgba(166,214,246,.32),transparent 70%),
+    radial-gradient(ellipse 28% 30% at 12% 78%,rgba(196,232,252,.4),transparent 70%),
+    radial-gradient(ellipse 16% 10% at 40% 20%,rgba(255,255,255,.75),transparent 72%);
+  opacity:1;
+}
+html[data-workspace=sales] body:after{
+  content:"";position:fixed;inset:-10%;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 40% 6% at 46% 24%,rgba(255,255,255,.55),transparent 75%),
+    radial-gradient(ellipse 34% 5% at 66% 46%,rgba(140,200,240,.16),transparent 75%);
+  transform:rotate(-8deg);
+}
+
+/* Everything refractive shares one recipe; kind-specific tints are variables. */
+html[data-workspace=sales][data-liquid-glass] :is(.topbar .global-search,.sales-stats .stat-card,.nexus-sidebar .nav-button,.filter-toolbar .search-box,.filter-toolbar .choice,.primary)[data-lg]{
+  --lg-mx:50%;--lg-my:0%;--lg-angle:135deg;
+  --lg-fill:linear-gradient(160deg,rgba(255,255,255,.5),rgba(244,250,255,.26) 46%,rgba(224,241,252,.3));
+  --lg-shine:rgba(255,255,255,.42);
+  --lg-rim-a:rgba(255,255,255,.96);--lg-rim-b:rgba(176,218,246,.42);--lg-rim-c:rgba(255,255,255,.18);
+  --lg-depth:0 6px 20px rgba(40,100,150,.07),0 1px 2px rgba(40,100,150,.05);
+  border:1px solid transparent;
+  background:
+    radial-gradient(130% 100% at var(--lg-mx) var(--lg-my),var(--lg-shine),transparent 44%) padding-box,
+    var(--lg-fill) padding-box,
+    linear-gradient(var(--lg-angle),var(--lg-rim-a),var(--lg-rim-b) 28%,var(--lg-rim-c) 52%,var(--lg-rim-b) 76%,var(--lg-rim-a)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.78),
+    inset 0 -1px 1px rgba(140,195,232,.16),
+    inset 0 0 14px rgba(255,255,255,.16),
+    var(--lg-depth);
+  backdrop-filter:blur(14px) saturate(1.55);
+  -webkit-backdrop-filter:blur(14px) saturate(1.55);
+  transition:background .28s ease,box-shadow .28s ease,color .2s ease,transform .32s cubic-bezier(.2,.9,.25,1.25);
+}
+/* Chromium only: the SVG lens bends + splits the backdrop at the rim. */
+html[data-workspace=sales][data-liquid-glass=refract] :is(.topbar .global-search,.sales-stats .stat-card,.nexus-sidebar .nav-button,.filter-toolbar .search-box,.filter-toolbar .choice,.primary)[data-lg]{
+  backdrop-filter:var(--lg-refract) blur(1.5px) saturate(1.7) brightness(1.03);
+}
+/* Selected / hovered / primary = translucent deep liquid navy glass. */
+html[data-workspace=sales][data-liquid-glass] :is(.topbar .global-search:hover,.sales-stats .stat-card:hover,.nexus-sidebar .nav-button,.primary)[data-lg]{
+  --lg-fill:linear-gradient(150deg,rgba(26,70,116,.72),rgba(36,98,154,.6) 52%,rgba(58,132,192,.52));
+  --lg-shine:rgba(190,230,255,.26);
+  --lg-rim-a:rgba(214,240,255,.85);--lg-rim-b:rgba(110,186,236,.4);--lg-rim-c:rgba(255,255,255,.08);
+  --lg-depth:0 8px 24px rgba(22,66,108,.2),0 0 18px rgba(80,170,230,.12),0 0 0 1px rgba(120,195,245,.18);
+  color:#f4fbff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -1px 1px rgba(10,40,80,.2),inset 0 0 16px rgba(120,200,250,.1),var(--lg-depth);
+}
+html[data-workspace=sales][data-liquid-glass] .primary[data-lg]:hover{
+  --lg-fill:linear-gradient(150deg,rgba(30,82,134,.76),rgba(44,116,178,.64) 52%,rgba(70,150,210,.56));
+}
+html[data-workspace=sales][data-liquid-glass] .sales-stats .stat-card[data-lg]:hover{transform:translateY(-2px)}
+html[data-workspace=sales][data-liquid-glass] :is(.sales-stats .stat-card,.primary,.topbar .global-search)[data-lg]:active{transform:scale(.985)}
+html[data-workspace=sales][data-liquid-glass] .filter-toolbar .search-box[data-lg]:focus-within,
+html[data-workspace=sales][data-liquid-glass] .filter-toolbar .choice[data-lg]:focus-visible,
+html[data-workspace=sales][data-liquid-glass] .filter-toolbar .choice[data-lg][data-state=open]{
+  --lg-rim-a:rgba(255,255,255,1);--lg-rim-b:rgba(110,190,240,.62);
+  --lg-depth:0 0 0 3px rgba(90,180,235,.16),0 4px 16px rgba(50,130,190,.08);
+}
+html[data-workspace=sales][data-liquid-glass] .filter-toolbar .choice[data-lg]:hover{--lg-fill:linear-gradient(160deg,rgba(255,255,255,.62),rgba(232,245,255,.36))}
+html[data-workspace=sales][data-liquid-glass] .topbar .global-search[data-lg] kbd{background:rgba(255,255,255,.4);border-color:rgba(190,220,240,.5)}
+html[data-workspace=sales][data-liquid-glass] .topbar .global-search[data-lg]:hover kbd{background:rgba(255,255,255,.12);border-color:rgba(200,230,255,.35);color:#e8f6ff}
+/* KPI text stays deep ink on clear glass and turns ice-white on navy. */
+html[data-workspace=sales][data-liquid-glass] .sales-stats .stat-card[data-lg] .stat-icon.violet{background:rgba(255,255,255,.45);border-color:rgba(255,255,255,.7)}
+html[data-workspace=sales][data-liquid-glass] .sales-stats .stat-card[data-lg]:hover .stat-icon.violet{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.26);color:#e8f6ff}
+
+/* Glass lenses need an un-isolated backdrop: drop blur on containers that sit only
+   over the (already soft) light field, otherwise they become backdrop roots and the
+   lens would refract a flat white panel. Visually identical, cheaper to paint. */
+@media(min-width:768px){
+  html[data-workspace=sales][data-liquid-glass=refract] .topbar,
+  html[data-workspace=sales][data-liquid-glass=refract] .nexus-sidebar [data-slot=sidebar-inner]{backdrop-filter:none;-webkit-backdrop-filter:none}
+  html[data-workspace=sales][data-liquid-glass=refract] .nexus-sidebar [data-slot=sidebar-inner]{
+    background:
+      radial-gradient(ellipse 90% 26% at 30% 30%,rgba(176,220,248,.28),transparent 70%),
+      linear-gradient(180deg,rgba(255,255,255,.7),rgba(240,248,255,.56));
+  }
+}
+html[data-workspace=sales][data-liquid-glass=refract] .sales-pipeline-filters{
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:
+    radial-gradient(ellipse 26% 140% at 12% 50%,rgba(170,216,246,.32),transparent 72%),
+    radial-gradient(ellipse 20% 120% at 46% 40%,rgba(255,255,255,.7),transparent 72%),
+    radial-gradient(ellipse 30% 160% at 88% 60%,rgba(186,224,248,.26),transparent 72%),
+    linear-gradient(180deg,rgba(255,255,255,.42),rgba(236,247,255,.24));
+}
+
+@media(prefers-reduced-motion:reduce){
+  html[data-workspace=sales][data-liquid-glass] [data-lg]{transition:none}
+  html[data-workspace=sales][data-liquid-glass] [data-lg]:hover,
+  html[data-workspace=sales][data-liquid-glass] [data-lg]:active{transform:none!important}
+}
+@media(prefers-reduced-transparency:reduce){
+  html[data-workspace=sales] body:after{display:none}
+  html[data-workspace=sales][data-liquid-glass] [data-lg]{
+    backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+    --lg-fill:linear-gradient(#f7fbfe,#f7fbfe);
+  }
+  html[data-workspace=sales][data-liquid-glass] :is(.sales-stats .stat-card:hover,.nexus-sidebar .nav-button,.primary,.topbar .global-search:hover)[data-lg]{--lg-fill:linear-gradient(#2a6fa3,#2a6fa3)}
+}
