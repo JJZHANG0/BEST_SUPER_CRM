@@ -20,7 +20,7 @@ type St<T>=Dispatch<SetStateAction<T>>;
 export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollments:seed.Enrollment[];setEnrollments:St<seed.Enrollment[]>;role:Role;setRole:St<Role>;programs:seed.Program[];setPrograms:St<seed.Program[]>;students:seed.Student[];setStudents:St<seed.Student[]>;teams:seed.Team[];setTeams:St<seed.Team[]>;courses:seed.Course[];setCourses:St<seed.Course[]>;feedbacks:seed.Feedback[];setFeedbacks:St<seed.Feedback[]>;files:FileRecord[];setFiles:St<FileRecord[]>;route:string;go:(route:string)=>void;favorites:string[];setFavorites:St<string[]>;recent:string[];setRecent:St<string[]>;logs:string[];log:(s:string)=>void;
   /** Homework / assignment records shown in student detail. */
   assignments:Assignment[];setAssignments:St<Assignment[]>;
-  /** 项目推文: ops edit drafts and publish; sales read the published snapshot. */
+  /** 项目书 (one per project): ops edit drafts and publish; sales read the published snapshot. */
   articles:ProgramArticle[];updateArticles:(fn:(list:ProgramArticle[])=>ProgramArticle[])=>boolean;
   /** 推文: many per project (draft → published → withdrawn). Sales only receive published snapshots. */
   posts:ArticlePost[];updatePosts:(fn:(list:ArticlePost[])=>ArticlePost[])=>boolean;
