@@ -134,3 +134,10 @@ a **verified 公众号 (service account)**, the site on an **ICP-filed (备案) 
 and a server endpoint that signs `jsapi_ticket` with the 公众号 AppSecret. None of that exists yet, so this build
 does not attempt it. Until then WeChat shows the page title / link (sometimes the first large image); the public
 page sets `document.title` to the article title and offers 「分享」 (copy link; Web Share API on phones outside WeChat).
+
+## 部门负责人（leader）权限、排课与课表导出（migration 0006）
+
+- `drizzle/0006_leader_sessions_lesson_teacher.sql` 新增 `users.leader`（默认 false，并把 `zhangjiejia@nexus.local` 设为 true）、`course_sessions` 表、`courses.code/location`、`lesson_records.teacher`。部署服务器时照常 `npm run db:migrate`（或启动时自动迁移），再 `npm run db:seed`（seed 只会给 staff 列表中标记 leader 的账号设置该标志，不会提升其他账号）。
+- 权限只看 `leader` 标志，不再看 superadmin：部门负责人可查看全部老师的课时记录 / 课情反馈 / 教务津贴（按老师分开）、审核绩效、指派任务，且不填写当月绩效；其他超级管理员（程雪晴、张雪航）与运营老师只能看到并修改自己的记录与津贴。API（`/bootstrap`、`PUT/DELETE /:collection/:id`、`/kpi*`、`POST /todos`）与 Pages 预览两条路径同一套规则（`lib/nexus/roles.ts`）。
+- 课程排课：新建课程可选「单次 / 每周重复（选上课日、开始日期、共 N 节或截止日期、开始/结束时间）/ 逐次添加」；每节课写入 `course_sessions`，今日课程 / 本周课程 / 课程日历按节显示。
+- 导出课表：课程管理 →「导出课表」，按「我的课程 / 某位授课老师 / 某个项目」与起始周、周数生成周一至周日 × 时间段的课表，浏览器端用 canvas 绘制并下载 PNG 或 PDF（A4 横版，每周一页，无第三方依赖）。
