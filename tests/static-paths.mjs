@@ -13,6 +13,7 @@ for(const m of html.matchAll(/(?:src|href)="([^"#]+)"/g)){
 assert(existsSync('out/.nojekyll'));
 const manifest=JSON.parse(readFileSync('out/manifest.webmanifest','utf8'));
 assert.equal(manifest.start_url,prefix+'/');assert.equal(manifest.icons[0].src,prefix+'/favicon.svg');
-for(const p of ['bpa','ctb','conrad','prime','ihosa','mvp','winter','summer'])assert(existsSync(`out/materials/poster-${p}.svg`));
+for(const p of ['bpa','ctb','conrad','prime','ihosa','mvp','winter','summer']){assert(existsSync(`out/materials/poster-${p}.svg`));assert(existsSync(`out/materials/cover-${p}.svg`),`Missing article cover for ${p}`)}
+for(const s of ['workshop','research','showcase'])assert(existsSync(`out/materials/scene-${s}.svg`),`Missing article illustration ${s}`);
 assert(existsSync('out/materials/R1.pdf'));
-console.log('Static HTML, repository asset base, manifest, eight posters and PDF references passed.');
+console.log('Static HTML, repository asset base, manifest, eight posters, article covers/illustrations and PDF references passed.');
