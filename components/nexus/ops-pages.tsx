@@ -16,6 +16,7 @@ import {
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
 } from '@/lib/nexus/ops';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState } from './ui';
+import { ZoomModal } from './zoom-modal';
 
 const ALL = '__all';
 function download(name: string, text: string) {
@@ -293,16 +294,24 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
   </DialogContent></Dialog>;
 }
 
+/** 课程编号 · 日期 · 老师 on one row, then the 实到 / 课时 chips on the next (cards and the zoomed detail). */
+function FeedbackMeta({ code, date, teacher, attendance, hours }: { code?: string; date: string; teacher: string; attendance?: string; hours?: number }) {
+  return <div className="lf-meta">
+    <p className="lf-meta-line">{code && <span className="lf-code">{code}</span>}<span>{date}</span><span>{teacher}</span></p>
+    {(attendance || hours != null) && <div className="lf-tags">{attendance && <Badge tone="neutral"><Users size={11} />{attendance}</Badge>}{hours != null && <Badge tone="violet"><Link2 size={11} />课时 {hours} 小时</Badge>}</div>}
+  </div>;
+}
+
 export function LessonFeedbackPage() {
   const { s, all, month, matches, toolbar, course, teacher, setTeacher } = useOpsFilters();
   const params = new URLSearchParams(s.route.split('?')[1]);
   const [editing, setEditing] = useState<LessonFeedback | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<{ id: string; el: HTMLElement } | null>(null);
   const [open, setOpen] = useState(params.has('new'));
   const [lessonId] = useState(params.get('lesson'));
   const me = s.user?.email || '';
   const rows = useMemo(() => visibleLessons(s.lessonFeedbacks, s.viewer, me).filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [s.lessonFeedbacks, s.viewer, me, matches]);
-  const remove = async (f: LessonFeedback) => { if (!confirmDelete('课情反馈')) return; if (await s.removeRecord('lessonFeedbacks', f.id)) toast.success('已删除'); };
+  const remove = async (f: LessonFeedback) => { if (!confirmDelete('课情反馈')) return false; if (await s.removeRecord('lessonFeedbacks', f.id)) { toast.success('已删除'); return true; } return false; };
   const close = () => { setOpen(false); setEditing(null); if (s.route.includes('new')) s.go('lesson-feedback'); };
   return <>
     <PageTitle title="课情反馈" en="LESSON FEEDBACK" description={all ? '部门负责人：按老师查看全部课情反馈，按月份与项目筛选。' : '每节课后记录到课、内容与学生表现（记录课时时也可一并填写）；只有你和部门负责人能看到。'} action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />
@@ -311,18 +320,29 @@ export function LessonFeedbackPage() {
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
         <div className="results-meta">{rows.length} 条反馈<span>{month ? monthLabel(month) : '全部月份'} · {all ? '全部老师' : '仅显示你的反馈'}</span></div>
-        {rows.length ? <div className="lesson-feedback-list">{rows.map(f => { const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; const preview = f.content || f.performance || f.nextSteps || ''; return <article key={f.id} className={"lesson-feedback-card"+(expanded===f.id?'':' collapsed')} onClick={e=>{if((e.target as HTMLElement).closest('button,a'))return; setExpanded(x=>x===f.id?null:f.id)}}>
-          <header><div><strong>{c?.name || '已删除的课程'}</strong><small>{c?.code} · {f.date} · {s.staffName(f.opsTeacher)}</small></div>
-            <div className="lf-tags">{f.attendance && <Badge tone="neutral">{f.attendance}</Badge>}{l && <Badge tone="violet"><Link2 size={11} />课时 {l.hours} 小时</Badge>}</div>
-            <div className="row-actions"><button className="icon-button" aria-label="编辑" title="编辑" onClick={e => { e.stopPropagation(); setEditing(f); setOpen(true); }}><Pencil size={15} /></button><button className="icon-button" aria-label="删除" title="删除" onClick={e => { e.stopPropagation(); remove(f); }}><Trash2 size={15} /></button></div>
-          </header>
-          <p className="lf-preview">{preview}</p>
-          <dl className="lf-body">{([['本次内容', f.content], ['学生表现', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
-          <span className="lf-expand">{expanded===f.id?'收起详情':'展开阅读'}</span>
-        </article>; })}</div>
+        {rows.length ? <div className="lf-grid">{rows.map(f => { const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; const preview = f.content || f.performance || f.nextSteps || f.issues || ''; const title = c?.name || '已删除的课程';
+          const open = (e: { currentTarget: HTMLElement }) => setZoom({ id: f.id, el: e.currentTarget });
+          return <article key={f.id} className={'lf-card' + (zoom?.id === f.id ? ' is-zoom-source' : '')} tabIndex={0} aria-haspopup="dialog" aria-label={`${title} · ${f.date}，查看完整课情反馈`}
+            onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; open(e); }}
+            onKeyDown={e => { if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); open(e); }}>
+            <div className="lf-card-head"><h3 title={title}>{title}</h3>
+              <div className="row-actions"><button className="icon-button" aria-label="编辑" title="编辑" onClick={() => { setEditing(f); setOpen(true); }}><Pencil size={15} /></button><button className="icon-button" aria-label="删除" title="删除" onClick={() => remove(f)}><Trash2 size={15} /></button></div>
+            </div>
+            <FeedbackMeta code={c?.code} date={f.date} teacher={s.staffName(f.opsTeacher)} attendance={f.attendance} hours={l?.hours} />
+            <p className="lf-preview">{preview || <span className="muted">未填写内容</span>}</p>
+          </article>; })}</div>
           : <EmptyState icon={MessageSquareText} title={month ? `${monthLabel(month)}还没有课情反馈` : '还没有课情反馈'} description="课后花一分钟记录到课、内容与表现，也可以从课时记录一键生成。" action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />}
       </>}
     </section>
+    {zoom && (() => { const f = s.lessonFeedbacks.find(x => x.id === zoom.id); if (!f) return null; const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; const title = c?.name || '已删除的课程';
+      const sections = ([['本次内容', f.content], ['学生表现', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v);
+      return <ZoomModal origin={zoom.el} label={`课情反馈：${title}`} onClosed={() => setZoom(null)}><div className="lf-detail">
+        <div className="eyebrow">LESSON FEEDBACK</div>
+        <h2>{title}</h2>
+        <FeedbackMeta code={c?.code} date={f.date} teacher={s.staffName(f.opsTeacher)} attendance={f.attendance} hours={l?.hours} />
+        {sections.length ? <dl>{sections.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl> : <p className="muted">这条反馈还没有填写内容。</p>}
+        <div className="lf-detail-actions"><button type="button" className="secondary compact" onClick={() => { setZoom(null); setEditing(f); setOpen(true); }}><Pencil size={15} />编辑</button><button type="button" className="text-button danger" onClick={async () => { if (await remove(f)) setZoom(null); }}><Trash2 size={15} />删除</button></div>
+      </div></ZoomModal>; })()}
     {open && <FeedbackDialog key={editing?.id || 'new'} record={editing} lessonId={editing ? null : lessonId} open={open} onClose={close} />}
   </>;
 }

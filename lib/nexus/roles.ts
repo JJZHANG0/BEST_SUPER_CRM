@@ -19,7 +19,7 @@ export const canWrite = (role: unknown) => isOpsLike(role);
 export const canManageSystem = (role: unknown) => role === 'superadmin';
 /**
  * Who is asking: role plus the explicit 部门负责人 (department head / leader) flag. Only 张捷嘉 carries
- * `leader`; being a superadmin does NOT grant leader rights (程雪晴 / 张雪航 are superadmins without it).
+ * `leader`; being a superadmin does NOT grant leader rights (程雪晴 is a superadmin without it; 张雪航 is ops).
  * Passing a bare role (string) is treated as a non-leader, so a forgotten call site fails closed.
  */
 export type Viewer = { role: unknown; leader?: boolean | null };

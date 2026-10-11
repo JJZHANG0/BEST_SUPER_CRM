@@ -6,11 +6,11 @@ const load=async file=>import('data:text/javascript;base64,'+Buffer.from(ts.tran
 const A=await load('lib/nexus/auth.ts');
 const R=await load('lib/nexus/roles.ts');
 
-// Staff directory: 5 运营部 accounts with full-pinyin logins, 3 superadmins + 2 ops, plus the public sales demo.
+// Staff directory: 5 运营部 accounts with full-pinyin logins, 2 superadmins + 3 ops (张雪航 demoted to ops), plus the public sales demo.
 const staff=A.staffAccounts;
 assert.equal(staff.length,5);
 assert.deepEqual(staff.map(a=>[a.name,a.email,a.role]),[
-  ['张捷嘉','zhangjiejia@nexus.local','superadmin'],['程雪晴','chengxueqing@nexus.local','superadmin'],['张雪航','zhangxuehang@nexus.local','superadmin'],
+  ['张捷嘉','zhangjiejia@nexus.local','superadmin'],['程雪晴','chengxueqing@nexus.local','superadmin'],['张雪航','zhangxuehang@nexus.local','ops'],
   ['许瑾','xujin@nexus.local','ops'],['方彦淇','fangyanqi@nexus.local','ops']]);
 assert.equal(new Set(staff.map(a=>a.email)).size,5,'logins are unique');
 // No plaintext staff passwords in the client bundle — only salted PBKDF2 hashes.
@@ -35,6 +35,19 @@ assert.equal(await A.authenticateDemo('xujin@nexus.local','NewPassw0rd!x',o),nul
 o={'new@nexus.local':{created:true,name:'新老师',role:'ops',...h}};
 assert.equal((await A.authenticateDemo('new@nexus.local','NewPassw0rd!x',o))?.name,'新老师');
 assert.equal(A.directory({'fangyanqi@nexus.local':{role:'superadmin'}}).find(u=>u.email==='fangyanqi@nexus.local').role,'superadmin');
+// users.v2 → v3 migration: a stale superadmin override on 张雪航 is lowered; other fields and accounts survive.
+const mig=A.migrateOverrides({'zhangxuehang@nexus.local':{role:'superadmin',avatar:'data:x',...h},'fangyanqi@nexus.local':{role:'superadmin'}});
+assert.equal(mig['zhangxuehang@nexus.local'].role,'ops');assert.equal(mig['zhangxuehang@nexus.local'].avatar,'data:x');assert.equal(mig['zhangxuehang@nexus.local'].hash,h.hash);
+assert.equal(mig['fangyanqi@nexus.local'].role,'superadmin','only demoted accounts are touched');
+assert.deepEqual(A.migrateOverrides(null),{});assert.deepEqual(A.migrateOverrides([1]),{});
+assert.equal(A.directory(mig).find(u=>u.email==='zhangxuehang@nexus.local').role,'ops');
+assert.equal(A.directory().find(u=>u.email==='zhangxuehang@nexus.local').role,'ops');
+// Server staff seed + migration 0009 agree: 张雪航 is ops, only 张捷嘉 is leader.
+const SS=await load('server/staff-seed.ts');
+assert.deepEqual(SS.staffSeed.map(a=>[a.email,a.role,a.leader===true]),staff.map(a=>[a.email,a.role,a.leader===true]));
+const journal=JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8'));
+assert(journal.entries.some(e=>e.tag==='0009_demote_zhangxuehang'));
+assert.match(readFileSync('drizzle/0009_demote_zhangxuehang.sql','utf8'),/SET "role" = 'ops'.*zhangxuehang@nexus\.local' AND "role" = 'superadmin'/s);
 const pw=A.randomPassword();assert.equal(pw.length,16);assert.deepEqual(R.passwordIssues(pw),[]);
 
 // Name-as-username login: every staff account's username is the person's name; email still works.

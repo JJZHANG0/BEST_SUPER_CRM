@@ -105,7 +105,7 @@ for n,(name,i,r,code,date) in enumerate(recs,1):
     lessons.append({'id':lid,'course':course['id'],'date':date,'hours':hours,'students':present,'opsTeacher':OPS[ops],'rate':rate,'unit':unit,'amount':amount,'note':note,'createdBy':OPS[ops]})
     content=s(r.get('课程反馈'))
     if content or s(r.get('本周作业')):
-        feedbacks.append({'id':f'LF-IMP-{n:03d}','course':course['id'],'lesson':lid,'date':date,'attendance':(f'实到 {present}/{due} 人' if due else (f'实到 {present} 人' if present is not None else '')),'content':content[:4000],'performance':s(r.get('课程进度')) and f'课程进度 {round(float(r.get("课程进度"))*100)}%','issues':s(r.get('教学异常报备'))[:4000],'nextSteps':s(r.get('本周作业'))[:2000],'opsTeacher':OPS[ops],'createdBy':OPS[ops]})
+        feedbacks.append({'id':f'LF-IMP-{n:03d}','course':course['id'],'lesson':lid,'date':date,'attendance':(f'实到 {present}/{due} 人' if due and present is not None else (f'应到 {due} 人' if due else (f'实到 {present} 人' if present is not None else ''))),'content':content[:4000],'performance':s(r.get('课程进度')) and f'课程进度 {round(float(r.get("课程进度"))*100)}%','issues':s(r.get('教学异常报备'))[:4000],'nextSteps':s(r.get('本周作业'))[:2000],'opsTeacher':OPS[ops],'createdBy':OPS[ops]})
 for c_ in courses: c_.pop('_rate')
 tlist=[{'id':f'TCH{n:03d}','name':t,'note':'','active':True} for n,t in enumerate(teachers,1)]
 out={'projects':plist,'courses':courses,'teachers':tlist,'lessons':lessons,'lessonFeedbacks':feedbacks}

@@ -7,7 +7,7 @@ import { mergeStoredArticles, type ProgramArticle } from './articles';
 import { seedPosts } from './post-seed';
 import { addMetrics, likedLocally, mergeStoredPosts, newPost, newSlug, readLocalMetrics, recordLocal, type ArticlePost, type LocalMetrics, type MetricKind, type PostMetrics } from './posts';
 import { isHealth, type Assignment } from './students';
-import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, type Overrides, type DirectoryUser } from './auth';
+import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, migrateOverrides, type Overrides, type DirectoryUser } from './auth';
 import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
@@ -87,13 +87,15 @@ const Context=createContext<Store>(null!);
  * API mode: data is loaded from /api/bootstrap after login and every record the UI changes is
  * written back with PUT /api/<collection>/<id>; the server is the source of truth.
  */
-export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v2',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1'} as const;
+export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v3',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1'} as const;
 /** v2 → v3 of 项目/课程/课时/课情反馈 loads the real data imported from the 运营部 spreadsheet (lib/nexus/real-seed.ts). */
-export const LEGACY_KEYS=['nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2','nexus.demo.students.v2','nexus.demo.teams.v2','nexus.demo.enrollments.v2'];
+export const LEGACY_KEYS=['nexus.demo.users.v2','nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2','nexus.demo.students.v2','nexus.demo.teams.v2','nexus.demo.enrollments.v2'];
 const PW_LATER_KEY='nexus.password-later.v1';
 function read(key:string){if(API_ENABLED||typeof window==='undefined')return null;try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null}catch{return null}}
 function readList<T>(key:string,fallback:readonly T[]):T[]{const v=read(key);return Array.isArray(v)?v as T[]:fallback.slice()}
 function write(key:string,value:unknown){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
+// users.v2 → v3: carry this browser's account overrides over, minus stale roles of demoted accounts (张雪航 → ops).
+if(typeof window!=='undefined'&&!API_ENABLED){try{const old=localStorage.getItem('nexus.demo.users.v2');if(old&&!localStorage.getItem(STORAGE_KEYS.users))localStorage.setItem(STORAGE_KEYS.users,JSON.stringify(migrateOverrides(JSON.parse(old))))}catch{/* storage unavailable */}}
 if(typeof window!=='undefined'&&!API_ENABLED){try{LEGACY_KEYS.forEach(k=>localStorage.removeItem(k))}catch{/* storage unavailable */}}
 type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[];courseSessions?:CourseSession[]};
 /** Browser-only fields that never go to the API. */

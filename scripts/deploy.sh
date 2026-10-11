@@ -3,7 +3,10 @@
 #   scripts/deploy.sh dev     -> http://<host>:8080/  (nexus_dev,  nexus-api-dev,  port 3002)
 #   scripts/deploy.sh prod    -> http://<host>/       (nexus_prod, nexus-api-prod, port 3001)
 # Env: NEXUS_SSH (default root@1.13.182.30), NEXUS_SSH_KEY (default ~/.ssh/nexus_deploy),
-#      ALLOW_DIRTY=1 to deploy prod from a dirty tree, SKIP_BUILD=1 to reuse out/ + server-dist/.
+#      ALLOW_DIRTY=1 to deploy prod from a dirty tree, SKIP_BUILD=1 to reuse out/ + server-dist/,
+#      PURGE_DEMO=1 to run `purge-demo` (old fictional demo rows) after migrate and before seed,
+#      DISABLE_DEMO_ACCOUNTS=1 to deactivate ops@nexus.demo / sales@nexus.demo after seed.
+#      Back up first: ssh root@host 'bash -s' < scripts/backup-db.sh
 # The server must have been provisioned once with deploy/server-setup.sh (see docs/DEPLOY.md).
 # Builds run locally (the 2 GiB server is not used for building).
 set -euo pipefail
@@ -37,7 +40,7 @@ tar -C "$STAGE" -czf "$STAGE/release.tgz" "$RELEASE"
 
 echo "== upload $RELEASE to $HOST ($ENV_NAME)"
 scp -q "${SSH_OPTS[@]}" "$STAGE/release.tgz" "$HOST:/tmp/nexus-$ENV_NAME-$RELEASE.tgz"
-ssh "${SSH_OPTS[@]}" "$HOST" ENV_NAME="$ENV_NAME" RELEASE="$RELEASE" PORT="$PORT" bash -s <<'REMOTE'
+ssh "${SSH_OPTS[@]}" "$HOST" ENV_NAME="$ENV_NAME" RELEASE="$RELEASE" PORT="$PORT" PURGE_DEMO="${PURGE_DEMO:-}" DISABLE_DEMO_ACCOUNTS="${DISABLE_DEMO_ACCOUNTS:-}" bash -s <<'REMOTE'
 set -euo pipefail
 DIR=/opt/nexus/$ENV_NAME; TGZ=/tmp/nexus-$ENV_NAME-$RELEASE.tgz
 [ -f "$DIR/.env" ] || { echo "missing $DIR/.env — run deploy/server-setup.sh first" >&2; exit 1; }
@@ -45,7 +48,9 @@ tar -C "$DIR/releases" -xzf "$TGZ"; rm -f "$TGZ"
 chown -R root:root "$DIR/releases/$RELEASE"; chmod -R a+rX "$DIR/releases/$RELEASE"
 run() { (set -a; . "$DIR/.env"; set +a; cd "$DIR/releases/$RELEASE/server"; runuser -u nexus --preserve-environment -- /usr/bin/node index.mjs "$@"); }
 echo "-- migrate"; run migrate
+if [ "$PURGE_DEMO" = 1 ]; then echo "-- purge-demo"; run purge-demo; fi
 echo "-- seed (idempotent)"; run seed
+if [ "$DISABLE_DEMO_ACCOUNTS" = 1 ]; then echo "-- disable-demo-accounts"; run disable-demo-accounts; fi
 PREV=$(readlink "$DIR/current" || true)
 ln -sfn "releases/$RELEASE" "$DIR/current.new" && mv -Tf "$DIR/current.new" "$DIR/current"
 systemctl enable -q "nexus-api-$ENV_NAME"; systemctl restart "nexus-api-$ENV_NAME"

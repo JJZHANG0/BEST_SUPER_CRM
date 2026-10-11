@@ -64,6 +64,13 @@
       "when": 1791705351428,
       "tag": "0008_lesson_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791705351429,
+      "tag": "0009_demote_zhangxuehang",
+      "breakpoints": true
     }
   ]
 }

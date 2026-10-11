@@ -98,8 +98,8 @@ assert.deepEqual(O.hoursByLessonTeacher(mine,courses,'2026-10').map(x=>[x.teache
 const all=O.visibleLessons(L,{role:'superadmin',leader:true},'zhangjiejia@nexus.local');
 assert.deepEqual(O.hoursByLessonTeacher(all,courses,'2026-10')[0],{teacher:'Dora',hours:5,count:2,amount:50},'leader sees the whole team');
 
-// Allowance visibility: superadmins without the flag (程雪晴 / 张雪航) only get their own.
-for(const who of ['chengxueqing@nexus.local','zhangxuehang@nexus.local'])assert.equal(O.visibleLessons(L,{role:'superadmin',leader:false},who).length,0);
+// Allowance visibility: superadmins / ops without the leader flag (程雪晴 superadmin, 张雪航 ops) only get their own.
+assert.equal(O.visibleLessons(L,{role:'superadmin',leader:false},'chengxueqing@nexus.local').length,0);assert.equal(O.visibleLessons(L,{role:'ops',leader:false},'zhangxuehang@nexus.local').length,0);
 assert.deepEqual(O.monthAllowance(L,'xujin@nexus.local','2026-10'),{amount:45,hours:4.5,count:3});
 const opsPages=readFileSync('components/nexus/ops-pages.tsx','utf8');
 assert(opsPages.includes('if (canSeeAllLessons(s.viewer))')&&opsPages.includes('monthAllowance(s.lessons, s.user?.email'),'dashboard 当月教务津贴: team total only for the leader');

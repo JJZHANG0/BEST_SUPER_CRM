@@ -84,6 +84,21 @@ NEXT_PUBLIC_API_BASE=http://127.0.0.1:3001/api npm run dev   # frontend against 
 Schema change: edit `db/schema.ts` → `npm run db:generate` → commit the new `drizzle/*.sql` → deploy (migrations run
 automatically).
 
+## Backups, demo purge and demo accounts
+
+```bash
+ssh root@1.13.182.30 'bash -s' < scripts/backup-db.sh        # pg_dump nexus_prod + nexus_dev → /opt/nexus/backups/<ts>/
+PURGE_DEMO=1 scripts/deploy.sh dev                            # migrate → purge-demo → seed
+PURGE_DEMO=1 DISABLE_DEMO_ACCOUNTS=1 scripts/deploy.sh prod   # … → seed → disable ops@/sales@nexus.demo
+```
+
+- `purge-demo` deletes the fictional rows of the original seed (DEMO-* students and their enrollments / homework /
+  feedback / status history, teams T001–T014, schedule C1–C18, files R1–R13, seed todos) and disables `ops@nexus.demo`.
+- `disable-demo-accounts` deactivates `ops@nexus.demo` and the advertised `sales@nexus.demo` (rows kept; `seed` never
+  re-enables them). Production runs it because it holds real student data; the production login page no longer offers
+  the 「填入销售示例账号」 button. Dev keeps the sales demo.
+- Migration `0009_demote_zhangxuehang.sql` (and `seed`) turn 张雪航 from superadmin into ops; only 张捷嘉 has `leader`.
+
 ## Accounts
 
 The demo accounts from the README are seeded in both environments. Production is publicly reachable, so
@@ -138,6 +153,6 @@ page sets `document.title` to the article title and offers 「分享」 (copy li
 ## 部门负责人（leader）权限、排课与课表导出（migration 0006）
 
 - `drizzle/0006_leader_sessions_lesson_teacher.sql` 新增 `users.leader`（默认 false，并把 `zhangjiejia@nexus.local` 设为 true）、`course_sessions` 表、`courses.code/location`、`lesson_records.teacher`。部署服务器时照常 `npm run db:migrate`（或启动时自动迁移），再 `npm run db:seed`（seed 只会给 staff 列表中标记 leader 的账号设置该标志，不会提升其他账号）。
-- 权限只看 `leader` 标志，不再看 superadmin：部门负责人可查看全部老师的课时记录 / 课情反馈 / 教务津贴（按老师分开）、审核绩效、指派任务，且不填写当月绩效；其他超级管理员（程雪晴、张雪航）与运营老师只能看到并修改自己的记录与津贴。API（`/bootstrap`、`PUT/DELETE /:collection/:id`、`/kpi*`、`POST /todos`）与 Pages 预览两条路径同一套规则（`lib/nexus/roles.ts`）。
+- 权限只看 `leader` 标志，不再看 superadmin：部门负责人可查看全部老师的课时记录 / 课情反馈 / 教务津贴（按老师分开）、审核绩效、指派任务，且不填写当月绩效；其他超级管理员（程雪晴）与运营老师（张雪航、许瑾、方彦淇）只能看到并修改自己的记录与津贴。API（`/bootstrap`、`PUT/DELETE /:collection/:id`、`/kpi*`、`POST /todos`）与 Pages 预览两条路径同一套规则（`lib/nexus/roles.ts`）。
 - 课程排课：新建课程可选「单次 / 每周重复（选上课日、开始日期、共 N 节或截止日期、开始/结束时间）/ 逐次添加」；每节课写入 `course_sessions`，今日课程 / 本周课程 / 课程日历按节显示。
 - 导出课表：课程管理 →「导出课表」，按「我的课程 / 某位授课老师 / 某个项目」与起始周、周数生成周一至周日 × 时间段的课表，浏览器端用 canvas 绘制并下载 PNG 或 PDF（A4 横版，每周一页，无第三方依赖）。

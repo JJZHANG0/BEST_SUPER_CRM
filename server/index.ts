@@ -4,6 +4,7 @@
  *   node index.mjs migrate    apply SQL migrations from ./drizzle next to the bundle (or MIGRATIONS_DIR)
  *   node index.mjs seed       insert reference data + staff accounts if missing (idempotent, never overwrites)
  *   node index.mjs purge-demo delete the fictional demo records left by older builds (explicit, one-off)
+ *   node index.mjs disable-demo-accounts  deactivate ops@nexus.demo + sales@nexus.demo (production)
  */
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,7 +14,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { loadConfig } from './config';
 import { connect } from './db';
 import { createApp } from './app';
-import { seed, purgeDemo } from './seed';
+import { seed, purgeDemo, disableDemoAccounts } from './seed';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = process.env.MIGRATIONS_DIR || [join(here, 'drizzle'), join(here, '..', 'drizzle')].find(p => existsSync(join(p, 'meta', '_journal.json'))) || join(here, 'drizzle');
@@ -25,6 +26,7 @@ async function main() {
   if (command === 'migrate') { await migrate(db, { migrationsFolder }); console.log('migrate: done'); await pool.end(); return; }
   if (command === 'seed') { await seed(db); await pool.end(); return; }
   if (command === 'purge-demo') { await purgeDemo(db); await pool.end(); return; }
+  if (command === 'disable-demo-accounts') { await disableDemoAccounts(db); await pool.end(); return; }
   if (command !== 'serve') throw new Error(`Unknown command: ${command}`);
   const app = createApp(db, config);
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, info => console.log(`nexus-api (${config.env}) listening on http://${info.address}:${info.port}`));

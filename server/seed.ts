@@ -34,6 +34,11 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
     if (a.leader) await db.update(schema.users).set({ leader: true }).where(eq(schema.users.email, a.email));
     if (!res.length) await db.update(schema.users).set({ username: a.username }).where(and(eq(schema.users.email, a.email), sql`${schema.users.username} is null`, sql`not exists (select 1 from users x where lower(x.username) = lower(${a.username}))`));
   }
+  // Data fix (also migration 0009): 张雪航 was seeded as superadmin by earlier builds; the staff list now says ops.
+  for (const a of staffSeed) if (a.email === 'zhangxuehang@nexus.local' && a.role === 'ops') {
+    const r = await db.update(schema.users).set({ role: 'ops', updatedAt: new Date() }).where(and(eq(schema.users.email, a.email), eq(schema.users.role, 'superadmin'))).returning({ id: schema.users.id });
+    if (r.length) log(`seed: ${a.username} superadmin → ops`);
+  }
   const sales = await db.insert(schema.users).values({ email: salesDemo.email, name: salesDemo.name, role: 'sales', salesName: salesDemo.salesName, passwordHash: await hashPassword(salesDemo.password) }).onConflictDoNothing().returning({ id: schema.users.id });
   if (sales.length) log(`seed: user ${salesDemo.email} (sales demo)`);
   const steps: [string, () => Promise<unknown[]>][] = [
@@ -77,6 +82,16 @@ export async function purgeDemo(db: Db, log: (s: string) => void = console.log) 
     await tx.update(schema.users).set({ active: false }).where(eq(schema.users.email, 'ops@nexus.demo'));
   });
   log('purge: done (ops@nexus.demo disabled)');
+}
+
+/**
+ * Disables the public demo logins (ops@nexus.demo and the advertised sales@nexus.demo) on a server that
+ * holds real data. Rows are kept (history / FK safety) and `seed` never re-enables them.
+ * Run explicitly: `node server-dist/index.mjs disable-demo-accounts` (production does this once).
+ */
+export async function disableDemoAccounts(db: Db, log: (s: string) => void = console.log) {
+  const rows = await db.update(schema.users).set({ active: false, updatedAt: new Date() }).where(and(inArray(schema.users.email, ['ops@nexus.demo', salesDemo.email]), eq(schema.users.active, true))).returning({ email: schema.users.email });
+  log(`demo accounts: disabled ${rows.length ? rows.map(r => r.email).join(', ') : 'none (already inactive or absent)'}`);
 }
 
 /** Insert-if-missing for the imported spreadsheet data. Existing rows (by 项目编号 / 课程编号 / 老师姓名 / id) are never overwritten. */

@@ -28,11 +28,28 @@ export const demoAccounts = [salesDemo] as const;
 export const staffAccounts: readonly StaffAccount[] = [
   { name: '张捷嘉', username: '张捷嘉', email: 'zhangjiejia@nexus.local', role: 'superadmin', leader: true, salt: 'bc355382768dcfbfe486ad56141c989f', hash: '15bbde64841f9b813b5f292f95627a72023759d42b3da899a8dc90a0d4c579bf' },
   { name: '程雪晴', username: '程雪晴', email: 'chengxueqing@nexus.local', role: 'superadmin', salt: 'b80d15780bd91e1b78c97de5d329a9f0', hash: '340e37e90f88182c420733e8daddab75152339e4a44b1b957db415bfaca4d971' },
-  { name: '张雪航', username: '张雪航', email: 'zhangxuehang@nexus.local', role: 'superadmin', salt: 'da11a3d08cd179b9e0c3693705238d63', hash: '4466ab71f1afca1d31b2378d478082ee6904f9ecb083306304ab6b196fba6030' },
+  { name: '张雪航', username: '张雪航', email: 'zhangxuehang@nexus.local', role: 'ops', salt: 'da11a3d08cd179b9e0c3693705238d63', hash: '4466ab71f1afca1d31b2378d478082ee6904f9ecb083306304ab6b196fba6030' },
   { name: '许瑾', username: '许瑾', email: 'xujin@nexus.local', role: 'ops', salt: 'ba918c0135e170b6e2438d7b496d5468', hash: 'b3f9323a95189bdac4ed6ed2a6024f8772637636887cd5e096bdbf382485455b' },
   { name: '方彦淇', username: '方彦淇', email: 'fangyanqi@nexus.local', role: 'ops', salt: '27f4d48997feff07dda12357def67a5e', hash: 'e78d8604ae8825cae0debc2ca1515d334a1203d72e975484adef00571d8281aa' },
 ];
 export const PBKDF2_ITERATIONS = 120_000;
+/** Built-in accounts whose role was lowered in a later build (张雪航: superadmin → ops, 2026-10). */
+export const DEMOTED: Readonly<Record<string, Role>> = { 'zhangxuehang@nexus.local': 'ops' };
+/**
+ * users.v2 → users.v3 (Pages preview): keeps every per-browser override (password, avatar, name…) but
+ * drops a stale elevated role on demoted built-in accounts, so the new built-in role applies.
+ */
+export function migrateOverrides(old: unknown): Overrides {
+  if (!old || typeof old !== 'object' || Array.isArray(old)) return {};
+  const out: Overrides = {};
+  for (const [email, o] of Object.entries(old as Overrides)) {
+    if (!o || typeof o !== 'object') continue;
+    const next = { ...o };
+    if (DEMOTED[email] && next.role && next.role !== DEMOTED[email]) next.role = DEMOTED[email];
+    out[email] = next;
+  }
+  return out;
+}
 
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const fromHex = (h: string) => new Uint8Array((h.match(/../g) || []).map(b => parseInt(b, 16)));

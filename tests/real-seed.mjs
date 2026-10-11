@@ -13,6 +13,7 @@ const pids=new Set(S.realProjects.map(p=>p.id)),cids=new Set(S.realCourses.map(c
 for(const c of S.realCourses){assert(pids.has(c.project),c.code);assert(types.has(c.classType),c.code);assert(c.opsTeacher===''||staff.includes(c.opsTeacher),c.code);assert(O.courseStatuses.includes(c.status));}
 for(const l of S.realLessons){assert(cids.has(l.course));assert(l.date>='2026-10-01','only records from 2026-10-01');assert(staff.includes(l.opsTeacher));assert.equal(l.amount,O.computeAllowance(l.rate,l.unit,l.hours,l.actualCount));}
 for(const f of S.realLessonFeedbacks){assert(cids.has(f.course));assert(S.realLessons.some(l=>l.id===f.lesson));}
+for(const f of S.realLessonFeedbacks)assert(!/None|undefined|null/.test(f.attendance),`no placeholder text in attendance: ${f.attendance}`);
 assert(!S.realTeachers.some(t=>['无所谓','未找到','0',''].includes(t.name)),'junk names dropped');
 // Store loads the real data on the bumped storage keys; server seed inserts it without overwriting.
 const store=readFileSync('lib/nexus/store.tsx','utf8');
