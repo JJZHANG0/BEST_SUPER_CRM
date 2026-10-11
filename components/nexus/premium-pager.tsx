@@ -4,8 +4,10 @@
  */
 import { useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Choice } from './ui';
 
 const SIZES = [10, 20, 50] as const;
+const SIZE_OPTS = SIZES.map(n => `${n} 条`);
 
 function pageWindow(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -35,6 +37,7 @@ export function PremiumPager({
   const window = useMemo(() => pageWindow(safe, pages), [safe, pages]);
   const from = total === 0 ? 0 : (safe - 1) * pageSize + 1;
   const to = Math.min(safe * pageSize, total);
+  const sizeLabel = `${pageSize} 条`;
 
   return (
     <nav className="premium-pager" aria-label="学生列表分页">
@@ -42,13 +45,12 @@ export function PremiumPager({
         <span>共 <b>{total}</b> 位 · 显示 {from}–{to}</span>
         <label className="premium-pager-size">
           每页
-          <select
-            aria-label="每页条数"
-            value={pageSize}
-            onChange={e => onPageSize(Number(e.target.value))}
-          >
-            {SIZES.map(n => <option key={n} value={n}>{n} 条</option>)}
-          </select>
+          <Choice
+            label="每页条数"
+            value={SIZE_OPTS.includes(sizeLabel as typeof SIZE_OPTS[number]) ? sizeLabel : SIZE_OPTS[1]!}
+            options={[...SIZE_OPTS]}
+            onChange={v => onPageSize(Number(v.replace(/\D/g, '')) || 20)}
+          />
         </label>
       </div>
       <div className="premium-pager-controls">

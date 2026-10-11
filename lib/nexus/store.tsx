@@ -8,6 +8,7 @@ import { seedPosts } from './post-seed';
 import { addMetrics, likedLocally, mergeStoredPosts, newPost, newSlug, readLocalMetrics, recordLocal, type ArticlePost, type LocalMetrics, type MetricKind, type PostMetrics } from './posts';
 import { isHealth, type Assignment } from './students';
 import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, migrateOverrides, type Overrides, type DirectoryUser } from './auth';
+import { applyTheme, writeStoredTheme, readStoredTheme, isThemeId, DEFAULT_THEME, type ThemeId } from './themes';
 import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
@@ -66,6 +67,8 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   staff:StaffMember[];staffName:(email:string)=>string;
   /** Upload / clear own avatar (≤256px square data URL on Pages; API stores on user). */
   updateAvatar:(dataUrl:string|null)=>Promise<string|null>;
+  /** Apply accent theme (instant CSS + persist localStorage / API). */
+  updateTheme:(id:ThemeId)=>Promise<string|null>;
   /** Change the signed-in user's password. Resolves to an error message, or null on success. */
   changePassword:(current:string,next:string)=>Promise<string|null>;
   /** 系统管理 · 用户管理 (superadmin). */
@@ -102,7 +105,7 @@ type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
 const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,assignedBy:t.assignedBy??null,assignedByName:t.assignedByName??null,ownerName:t.ownerName??null,ownerEmail:t.ownerEmail??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
-const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
+const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,theme:DEFAULT_THEME,mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
 const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName,leader:u.leader});
 const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):'无法连接服务器，请检查网络后重试';
 
@@ -147,7 +150,7 @@ export function Provider({children}:{children:ReactNode}){
   setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons((data.lessons??[]).map(normalizeLesson));setLessonFeedbacks(data.lessonFeedbacks??[]);setCourseSessions(data.courseSessions??[]);setApiStaff(data.staff??[]);
   // Keep blob URLs of files uploaded in this tab.
   setFiles(prev=>data.resources.map(r=>({...r,url:prev.find(p=>p.id===r.id)?.url})));
-  setUser(data.user);setRole(data.user.role);
+  setUser(data.user);setRole(data.user.role);applyTheme(isThemeId(data.user.theme)?data.user.theme:(readStoredTheme()||DEFAULT_THEME));
   setTodos((data.todos??[]).map(asTodo));
  },[]);
  const refresh=useCallback(async()=>{if(inflight.current.size)return;try{applyServer(await api.bootstrap<Bootstrap>())}catch(e){if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}},[applyServer]);
@@ -206,7 +209,7 @@ export function Provider({children}:{children:ReactNode}){
    let match:DirectoryUser|null=null;
    try{match=await authenticateDemo(email,password,overrides)}catch{return {ok:false,error:'当前浏览器不支持安全登录（需要 HTTPS），请更换浏览器后重试。'}}
    if(!match)return {ok:false,error:'账号或密码不正确，或账号已停用。'};
-   clearPwLater();setUser(demoUser(match));setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
+   clearPwLater();const du=demoUser(match);const th=isThemeId(overrides[match.email]?.theme)?overrides[match.email]!.theme as ThemeId:(readStoredTheme()||DEFAULT_THEME);applyTheme(th);setUser({...du,theme:th});setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
   }
   try{const res=await api.login(email,password);clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
   catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':'服务器暂时不可用，请稍后重试。'):'无法连接服务器，请检查网络后重试。'}}
@@ -219,6 +222,7 @@ export function Provider({children}:{children:ReactNode}){
  useEffect(()=>{if(!user?.email)return;try{setPasswordDeferred(sessionStorage.getItem(PW_LATER_KEY)===user.email)}catch{/* ignore */}},[user?.email]);
  // Any path that signs out (including setAuthenticated(false)) drops the session.
  const wasAuthed=useRef(false);
+ useEffect(()=>{applyTheme(readStoredTheme()||DEFAULT_THEME)},[]);
  useEffect(()=>{if(wasAuthed.current&&!authenticated){if(API_ENABLED)token.clear();setUser(null)}wasAuthed.current=authenticated},[authenticated]);
  const go=(s:string)=>{window.location.hash='/'+s;setRoute(s);window.scrollTo({top:0,behavior:'instant'});};
  useEffect(()=>{const change=()=>{setRoute(decodeURI(location.hash.replace(/^#\/?/,''))||'dashboard');window.scrollTo(0,0)};change();window.addEventListener('hashchange',change);return()=>window.removeEventListener('hashchange',change)},[]);
@@ -341,7 +345,14 @@ export function Provider({children}:{children:ReactNode}){
   if(API_ENABLED){try{const r=await api.updateAvatar(dataUrl);setUser(u=>u?{...u,avatar:r.user.avatar??null}:u);return null}catch(e){return apiError(e,'头像保存失败')}}
   const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),avatar:dataUrl}};setOverrides(next);setUser(u=>u?{...u,avatar:dataUrl}:u);write(STORAGE_KEYS.users,next);return null;
  };
-return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+  const updateTheme=async(id:ThemeId):Promise<string|null>=>{
+  if(!isThemeId(id))return '无效的主题';
+  applyTheme(id);writeStoredTheme(id);
+  if(!user)return null;
+  if(API_ENABLED){try{const r=await api.updateTheme(id);setUser(u=>u?{...u,theme:r.user.theme??id}:u);return null}catch(e){return apiError(e,'主题保存失败')}}
+  const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),theme:id}};setOverrides(next);setUser(u=>u?{...u,theme:id}:u);write(STORAGE_KEYS.users,next);return null;
+ };
+return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){const s=useNexus();const salesName=s.user?.salesName||'';const students=s.students.filter(x=>s.role!=='sales'||x.sales===salesName);const teams=s.teams;return {students,teams,courses:s.courses.filter(c=>s.role!=='sales'||(teams.some(t=>t.id===c.team)&&s.programs.find(p=>p.id===c.program)?.published)),files:s.files.filter(f=>s.role!=='sales'||f.public),feedbacks:s.feedbacks.filter(f=>s.role!=='sales'||(f.visible&&students.some(x=>x.id===f.student)))};}
 /** Display name of the signed-in user. */

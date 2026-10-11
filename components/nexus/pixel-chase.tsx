@@ -1,8 +1,9 @@
 'use client';
 /**
- * Pixel-art chase for the workbench lower-right card: a dog chasing a carrot,
- * pig, snake and rabbit, looping right→left. Click for a Web Audio bark + quip.
- * Respects prefers-reduced-motion (static frame).
+ * High-res pixel-art chase for the workbench card.
+ * Sequence (fleeing left, one-by-one with clear gaps): carrot → pig → snake → rabbit,
+ * then the dog chasing behind. ~1–2 CSS px per texel — detailed sprites, not chunky upscales.
+ * Click: Web Audio bark + quip. prefers-reduced-motion → static frame.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 
@@ -16,77 +17,106 @@ const QUIPS = [
   '老板说「很快就好」，已经很快了三周。',
 ];
 
-type Sprite = { pixels: string[]; colors: Record<string, string> };
+type Sprite = { pixels: string[]; colors: Record<string, string>; };
+const T = ''; // transparent
+
+/** Detailed panicked sprites — wider grids, small texels on canvas. */
+const CARROT: Sprite = {
+  colors: { '.': T, O: '#f08a2e', D: '#d46a18', L: '#ffb05a', G: '#4a9a3a', H: '#2f7a28', W: '#6bb84a' },
+  pixels: [
+    '......WW......',
+    '.....WGGH.....',
+    '....WGHGH.....',
+    '.....HG.G.....',
+    '......LO......',
+    '.....LODL.....',
+    '....LODOLD....',
+    '...LODOLDOL...',
+    '..LODOLDOLD...',
+    '..ODOLDOLDO...',
+    '...DOLDOLD....',
+    '....OLDOL.....',
+    '.....ODO......',
+    '......O.......',
+  ],
+};
+
+const PIG: Sprite = {
+  colors: { '.': T, P: '#f2a8b8', D: '#e07890', K: '#c45a72', N: '#2a1a20', W: '#fff', E: '#fff5f8', S: '#ffd0da' },
+  pixels: [
+    '....SS..SS......',
+    '...SPP..PP......',
+    '..SPPPPPPP.SS...',
+    '.SPWEWEPPPSPP...',
+    'SPPNNNNPPPPPP...',
+    'SPPPPPPPK.PPP...',
+    '.SPPPKPPP.PP....',
+    '..SPPPPPP.DD....',
+    '...PP..PP.KK....',
+    '...PD..PD.......',
+    '...KK..KK.......',
+  ],
+};
+
+const SNAKE: Sprite = {
+  colors: { '.': T, G: '#5cb85c', D: '#3a8a3a', L: '#7ed87e', Y: '#f0d050', N: '#1a2010', R: '#e05040', W: '#fff' },
+  pixels: [
+    '..............LL..',
+    '.............LYNW.',
+    '............LGGGR.',
+    '...........LGGGD..',
+    '.........LLGGD....',
+    '.......LLGGD......',
+    '.....LLGGD........',
+    '...LLGGD..........',
+    '.LLGGD............',
+    'LGGD..............',
+    'GD................',
+  ],
+};
+
+const RABBIT: Sprite = {
+  colors: { '.': T, W: '#f4f0ea', G: '#c8c0b4', P: '#f2a8b8', N: '#2a2420', E: '#fff', R: '#e07070', B: '#d8d0c4' },
+  pixels: [
+    '..B....B........',
+    '.WG....GW.......',
+    '.WW....WW.......',
+    '.WWB..BWW.......',
+    '.WWWWWWWW.BB....',
+    'WWWEWEWWW.WW....',
+    'WWNNNNWW.WWW....',
+    '.WWPPWWW.WW.....',
+    '..WWWWWWWW......',
+    '...WW..WW.......',
+    '...WR..WR.......',
+    '...BB..BB.......',
+  ],
+};
 
 const DOG: Sprite = {
-  colors: { '.': '', B: '#3d2a1f', C: '#c48a4a', W: '#f5efe6', N: '#1a120c', P: '#e8b4a0', R: '#d45a4a' },
+  colors: { '.': T, B: '#3d2a1f', C: '#c48a4a', A: '#a86e38', W: '#f5efe6', N: '#1a120c', P: '#e8b4a0', R: '#d45a4a', L: '#d4a060', E: '#fff' },
   pixels: [
-    '..BBB........',
-    '.BCCCB.......',
-    'BCCCCCB.BB...',
-    'BCWNWCBBCCB..',
-    'BCCCCC.CCCCB.',
-    '.BCCCCCCCPB..',
-    '..BCCCCCCB...',
-    '..BCB..BCB...',
-    '..BRB..BRB...',
-  ],
-};
-const CARROT: Sprite = {
-  colors: { '.': '', O: '#f08a2e', G: '#4a9a3a', D: '#d46a18' },
-  pixels: [
-    '....GG....',
-    '...GGG....',
-    '....GO....',
-    '...ODO....',
-    '..ODOD....',
-    '.ODODO....',
-    '..ODO.....',
-    '...O......',
-  ],
-};
-const PIG: Sprite = {
-  colors: { '.': '', P: '#f2a8b8', D: '#e07890', N: '#2a1a20', W: '#fff' },
-  pixels: [
-    '..PPP.......',
-    '.PPPPP.PP...',
-    'PPWNWPPPP...',
-    'PPPPPP.PP...',
-    '.PPDPPPP....',
-    '..PP..PP....',
-  ],
-};
-const SNAKE: Sprite = {
-  colors: { '.': '', G: '#5cb85c', D: '#3a8a3a', Y: '#f0d050', N: '#1a2010' },
-  pixels: [
-    '........GG..',
-    '.......GYNG.',
-    '......GGGG..',
-    '...GGGGD....',
-    '.GGGD.......',
-    'GGD.........',
-  ],
-};
-const RABBIT: Sprite = {
-  colors: { '.': '', W: '#f4f0ea', G: '#c8c0b4', P: '#f2a8b8', N: '#2a2420', E: '#fff' },
-  pixels: [
-    '.G...G......',
-    '.W...W......',
-    '.WW.WW......',
-    'WWWEWW.WW...',
-    'WWNNW.WWW...',
-    '.WWWPWWW....',
-    '..WW.WW.....',
+    '.....BBB..........',
+    '....BCCCB.BB......',
+    '...BCCCCCBCCB.....',
+    '..BCWEWECBCCCB....',
+    '..BCNNNN.CCCCB....',
+    '...BCCCCACCCCB....',
+    '....BCCCCCCCPB....',
+    '....ABCCCCCCB.....',
+    '.....BCB..BCB.....',
+    '.....BRB..BRB.....',
+    '.....AAA..AAA.....',
   ],
 };
 
 function drawSprite(ctx: CanvasRenderingContext2D, spr: Sprite, ox: number, oy: number, scale: number, flip = false) {
   const rows = spr.pixels;
-  const w = rows[0].length;
+  const w = rows[0]!.length;
   for (let y = 0; y < rows.length; y++) {
+    const row = rows[y]!;
     for (let x = 0; x < w; x++) {
-      const ch = rows[y][x];
-      const col = spr.colors[ch];
+      const col = spr.colors[row[x]!] ?? '';
       if (!col) continue;
       const dx = flip ? ox + (w - 1 - x) * scale : ox + x * scale;
       ctx.fillStyle = col;
@@ -100,7 +130,6 @@ function bark() {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new AC();
     const t0 = ctx.currentTime;
-    // Short noisy "bark": two descending square bursts + noise.
     const mk = (freq: number, start: number, dur: number, type: OscillatorType, gain: number) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -115,7 +144,6 @@ function bark() {
     };
     mk(420, 0, 0.09, 'square', 0.18);
     mk(280, 0.1, 0.12, 'square', 0.14);
-    // Soft noise burst
     const len = Math.floor(ctx.sampleRate * 0.08);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -159,39 +187,46 @@ export function PixelChase({ className = '' }: { className?: string }) {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    // Soft purple ground
+
+    const accentSoft = getComputedStyle(document.documentElement).getPropertyValue('--nx-accent-soft').trim() || '#ede6fc';
+    const accentSofter = getComputedStyle(document.documentElement).getPropertyValue('--nx-accent-softer').trim() || '#f5f0fc';
     const g = ctx.createLinearGradient(0, 0, cssW, cssH);
-    g.addColorStop(0, '#ebe4f9');
-    g.addColorStop(1, '#e4dff6');
+    g.addColorStop(0, accentSoft + 'cc');
+    g.addColorStop(1, accentSofter);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, cssW, cssH);
-    // Stars / dots
+
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 22; i++) {
       const x = ((i * 47 + 13) % cssW);
       const y = ((i * 31 + 9) % Math.max(20, cssH - 50));
-      ctx.fillRect(x, y, 2, 2);
+      ctx.fillRect(x, y, 1.5, 1.5);
     }
-    // Sprite stack ~9px tall; target ≥2/3 of card height for the dog/pack.
-    const scale = Math.max(4, Math.floor((cssH * 0.72) / 9));
-    const ground = Math.max(4, cssH - 10 - 9 * scale);
-    // Loop period ~7s; entities run right→left
-    const period = 7000;
-    const phase = staticFrame ? 0.35 : ((t % period) / period);
-    const runX = (offset: number, spread: number) => {
+
+    // High-res: ~1–2 CSS px per texel. Sprites are ~14–18px tall in texel space.
+    const spriteH = 14;
+    // Cap scale so texels stay fine; prefer 1.5–2.5 px.
+    const scale = Math.max(1.5, Math.min(2.5, (cssH * 0.42) / spriteH));
+    const ground = Math.max(8, cssH - 14 - spriteH * scale);
+
+    const period = 9000;
+    const phase = staticFrame ? 0.28 : ((t % period) / period);
+    // One-by-one: large phase gaps so characters don't blob together.
+    // Leading (leftmost when mid-chase) = carrot; dog furthest right (chasing).
+    const track = cssW + 220;
+    const runX = (offset: number) => {
       const p = (phase + offset) % 1;
-      return cssW + 40 - p * (cssW + spread);
+      return cssW + 80 - p * track;
     };
-    // Order: dog chasing the pack (dog furthest right among the chase)
-    drawSprite(ctx, CARROT, runX(0.0, 120), ground - 2, scale, true);
-    drawSprite(ctx, PIG, runX(0.08, 140), ground + scale, scale, true);
-    drawSprite(ctx, SNAKE, runX(0.16, 150), ground + scale * 2, scale, true);
-    drawSprite(ctx, RABBIT, runX(0.24, 160), ground, scale, true);
-    drawSprite(ctx, DOG, runX(0.32, 180), ground, scale, true);
-    // Bobbing: slight vertical wobble for dog
-    if (!staticFrame) {
-      // already drawn; fine as-is for pixel look
-    }
+    // bob for panicked flail
+    const bob = (seed: number) => (staticFrame ? 0 : Math.sin((t / 120) + seed) * 1.5);
+
+    // Order drawn back→front doesn't matter; positions spaced by ~0.12–0.14 phase (~1+ body widths)
+    drawSprite(ctx, CARROT, runX(0.00), ground + bob(0) - 2, scale, true);
+    drawSprite(ctx, PIG,    runX(0.14), ground + bob(1.2) + 2, scale, true);
+    drawSprite(ctx, SNAKE,  runX(0.28), ground + bob(2.1) + 4, scale, true);
+    drawSprite(ctx, RABBIT, runX(0.42), ground + bob(0.7), scale, true);
+    drawSprite(ctx, DOG,    runX(0.58), ground + bob(1.7), scale, true);
   }, []);
 
   useEffect(() => {
@@ -214,14 +249,13 @@ export function PixelChase({ className = '' }: { className?: string }) {
     const el = canvasRef.current?.parentElement;
     const ro = el && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
     if (el && ro) ro.observe(el);
-    // Paint once after layout so height:100% has resolved.
     requestAnimationFrame(onResize);
     return () => { window.removeEventListener('resize', onResize); ro?.disconnect(); };
   }, [paint, reduced]);
 
   const onClick = () => {
     bark();
-    setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
+    setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]!);
     window.setTimeout(() => setQuip(null), 2200);
   };
 

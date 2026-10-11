@@ -71,6 +71,13 @@
       "when": 1791705351429,
       "tag": "0009_demote_zhangxuehang",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791710000000,
+      "tag": "0010_user_theme",
+      "breakpoints": true
     }
   ]
 }

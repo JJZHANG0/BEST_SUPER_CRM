@@ -3,7 +3,7 @@ import {ProgramOfferSummary,TeamOfferSummary,TeamRoster,CohortGrid,Poster} from 
 import {programOffers,cohortAvailability} from '@/lib/nexus/recruitment';
 import {assetUrl} from '@/lib/nexus/assets';
 import {useState,useEffect} from 'react';
-import {Star,Plus,Search,SlidersHorizontal,ChevronLeft,ChevronRight,Users,CalendarDays,FileText,Download,ExternalLink,Eye,Upload,Clock,Check,ShieldCheck,LogOut,KeyRound,Camera,FolderOpen,BookOpen,ArrowUpRight,MessageSquare,WifiOff} from 'lucide-react';
+import {Star,Plus,Search,SlidersHorizontal,ChevronLeft,ChevronRight,Users,CalendarDays,FileText,Download,ExternalLink,Eye,Upload,Clock,Check,ShieldCheck,LogOut,KeyRound,Camera,Palette,FolderOpen,BookOpen,ArrowUpRight,MessageSquare,WifiOff} from 'lucide-react';
 import {Tabs,TabsList,TabsTrigger,TabsContent} from '@/components/ui/tabs';
 import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '@/components/ui/sheet';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
@@ -15,6 +15,7 @@ import {TimetableExportDialog} from './timetable';
 import {occurrences,buildSessions,weekdayLabels,isoWeekday,type Occurrence} from '@/lib/nexus/schedule';
 import type {Course} from '@/lib/nexus/data';
 import {toast} from 'sonner';
+import {THEMES, type ThemeId} from '@/lib/nexus/themes';
 import {useNexus,useVisible, type FileRecord} from '@/lib/nexus/store';
 import {ProgramHub,ArticleReader,ArticleEditor} from './articles';
 import {PostsPage,PostReader,PostEditor} from './posts';
@@ -123,6 +124,7 @@ return <><PageTitle title="个人设置" en="PROFILE & ACCOUNT" description="你
 <div className="settings-identity"><h2>{name||'未登录'}</h2><div className="settings-badges"><span className="role-pill">{roleLabels[s.role]}</span>{s.leader&&<span className="role-pill leader">部门负责人</span>}</div><p>{s.user?.username&&<span>@{s.user.username}</span>}<span className="mono">{s.user?.email}</span></p></div>
 <div className="settings-hero-actions"><label className="secondary compact">更换头像<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pick}/></label>{avatar&&<button type="button" className="text-button" onClick={async()=>{const err=await s.updateAvatar(null);if(err)toast.error(err);else toast.success('已恢复默认头像')}}>移除头像</button>}</div></section>
 <section className="glass panel settings-section"><h3>账号信息</h3><dl className="settings-rows"><div><dt>姓名</dt><dd>{name||'—'}</dd></div><div><dt>用户名</dt><dd>{s.user?.username||'—'}<small>{s.user?.username?'登录时可使用用户名或邮箱':'使用邮箱登录'}</small></dd></div><div><dt>邮箱</dt><dd className="mono">{s.user?.email||'—'}</dd></div><div><dt>角色</dt><dd>{s.leader?'部门负责人 · ':''}{roleLabels[s.role]}<small>{scope}</small></dd></div></dl></section>
+<section className="glass panel settings-section"><h3><span className="settings-section-title"><Palette size={16}/>主题配色</span></h3><p className="settings-theme-hint">选择一组强调色，侧栏高亮、按钮、徽章与图表会立即跟随。偏好按账号保存。</p><div className="theme-swatches" role="listbox" aria-label="主题配色">{THEMES.map(t=>{const active=(s.user?.theme||'amethyst')===t.id;return <button key={t.id} type="button" role="option" aria-selected={active} className={'theme-swatch'+(active?' active':'')} style={{['--swatch' as string]:t.swatch} as Record<string,string>} onClick={async()=>{const err=await s.updateTheme(t.id as ThemeId);if(err)toast.error(err);else toast.success('已切换为'+t.label)}}><i style={{background:t.swatch}}/><span>{t.label}{t.id==='amethyst'?' / 默认':''}</span>{active&&<Check size={14}/>}</button>})}</div></section>
 <section className="glass panel settings-section"><h3>安全</h3><div className="settings-rows"><button type="button" className="settings-row" disabled={demo} onClick={()=>setPw(true)}><span className="settings-row-icon"><KeyRound size={16}/></span><span className="settings-row-text"><strong>修改密码</strong><small>{demo?'公开示例账号不支持修改密码':'建议定期更换，至少 10 位并包含字母和数字'}</small></span>{!demo&&<ChevronRight size={16}/>}</button><button type="button" className="settings-row" onClick={()=>{s.logout();s.go('login')}}><span className="settings-row-icon"><LogOut size={16}/></span><span className="settings-row-text"><strong>退出登录</strong><small>切换到其他账号</small></span><ChevronRight size={16}/></button></div></section>
 {!s.apiMode&&<p className="settings-note"><ShieldCheck size={13}/>预览站：数据与改密只保存在当前浏览器。</p>}</div>
 <Dialog open={pw} onOpenChange={setPw}><DialogContent className="password-dialog"><DialogTitle>修改密码</DialogTitle><DialogDescription>建议定期更换，至少 10 位并包含字母和数字。</DialogDescription><ChangePasswordForm onDone={()=>setPw(false)}/></DialogContent></Dialog></>}

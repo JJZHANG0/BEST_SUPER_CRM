@@ -29,6 +29,8 @@ export const users = pgTable('users', {
   leader: boolean('leader').notNull().default(false),
   /** Own avatar as a data URL (Pages + API). */
   avatar: text('avatar'),
+  /** Accent theme id (see lib/nexus/themes.ts). */
+  theme: text('theme').notNull().default('amethyst'),
   ...stamps,
 }, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
 
