@@ -12,11 +12,11 @@ import type { Role } from './roles';
 // Inlined (not imported) so this file stays runtime-import free for tests.
 const unameKey = (v: unknown) => typeof v === 'string' ? v.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase() : '';
 
-export type DirectoryUser = { email: string; username: string | null; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean;
+export type DirectoryUser = { email: string; username: string | null; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean; avatar?: string | null;
   /** 部门负责人: fixed in the built-in account list (never settable from 系统管理 / overrides). */ leader: boolean };
 type StaffAccount = { name: string; username: string; email: string; role: Role; salt: string; hash: string; leader?: boolean };
 /** Per-browser changes made through 系统管理 / 修改密码 on the Pages preview. */
-export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null };
+export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null };
 export type Overrides = Record<string, UserOverride>;
 
 /** Public sales demo account (intentionally advertised on the login page). */
@@ -79,6 +79,7 @@ function pick(o: UserOverride) {
   if (typeof o.active === 'boolean') r.active = o.active;
   if (typeof o.mustChange === 'boolean') r.mustChange = o.mustChange;
   if (o.salesName !== undefined) r.salesName = o.salesName;
+  if (o.avatar !== undefined) r.avatar = o.avatar;
   return r;
 }
 /** Finds an account by email (contains '@') or by username (case/whitespace-insensitive). */

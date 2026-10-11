@@ -27,6 +27,8 @@ export const users = pgTable('users', {
   mustChangePassword: boolean('must_change_password').notNull().default(false),
   /** 部门负责人 (department head): all teachers' 课时/津贴, 绩效考核, 任务指派; does not fill 当月绩效. Only 张捷嘉. */
   leader: boolean('leader').notNull().default(false),
+  /** Own avatar as a data URL (Pages + API). */
+  avatar: text('avatar'),
   ...stamps,
 }, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
 
@@ -78,6 +80,8 @@ export const students = pgTable('students', {
   healthBy: text('health_by').notNull().default(''),
   healthChangedAt: timestamp('health_changed_at', { withTimezone: true }),
   healthChangedBy: integer('health_changed_by').references(() => users.id),
+  /** Extra 花名册 fields (union schema across projects). */
+  profile: jsonb('profile').$type<Record<string, string>>(),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('students_sales_idx').on(t.sales)]);

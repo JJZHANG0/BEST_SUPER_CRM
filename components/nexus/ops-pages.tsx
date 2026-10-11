@@ -282,6 +282,7 @@ export function LessonFeedbackPage() {
   const { s, all, month, matches, toolbar, course, teacher, setTeacher } = useOpsFilters();
   const params = new URLSearchParams(s.route.split('?')[1]);
   const [editing, setEditing] = useState<LessonFeedback | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [open, setOpen] = useState(params.has('new'));
   const [lessonId] = useState(params.get('lesson'));
   const me = s.user?.email || '';
@@ -295,12 +296,14 @@ export function LessonFeedbackPage() {
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
         <div className="results-meta">{rows.length} 条反馈<span>{month ? monthLabel(month) : '全部月份'} · {all ? '全部老师' : '仅显示你的反馈'}</span></div>
-        {rows.length ? <div className="lesson-feedback-list">{rows.map(f => { const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; return <article key={f.id} className="lesson-feedback-card">
+        {rows.length ? <div className="lesson-feedback-list">{rows.map(f => { const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; const preview = f.content || f.performance || f.nextSteps || ''; return <article key={f.id} className={"lesson-feedback-card"+(expanded===f.id?'':' collapsed')} onClick={e=>{if((e.target as HTMLElement).closest('button,a'))return; setExpanded(x=>x===f.id?null:f.id)}}>
           <header><div><strong>{c?.name || '已删除的课程'}</strong><small>{c?.code} · {f.date} · {s.staffName(f.opsTeacher)}</small></div>
             <div className="lf-tags">{f.attendance && <Badge tone="neutral">{f.attendance}</Badge>}{l && <Badge tone="violet"><Link2 size={11} />课时 {l.hours} 小时</Badge>}</div>
-            <div className="row-actions"><button className="icon-button" aria-label="编辑" title="编辑" onClick={() => { setEditing(f); setOpen(true); }}><Pencil size={15} /></button><button className="icon-button" aria-label="删除" title="删除" onClick={() => remove(f)}><Trash2 size={15} /></button></div>
+            <div className="row-actions"><button className="icon-button" aria-label="编辑" title="编辑" onClick={e => { e.stopPropagation(); setEditing(f); setOpen(true); }}><Pencil size={15} /></button><button className="icon-button" aria-label="删除" title="删除" onClick={e => { e.stopPropagation(); remove(f); }}><Trash2 size={15} /></button></div>
           </header>
-          <dl>{([['本次内容', f.content], ['学生表现', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+          <p className="lf-preview">{preview}</p>
+          <dl className="lf-body">{([['本次内容', f.content], ['学生表现', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+          <span className="lf-expand">{expanded===f.id?'收起详情':'展开阅读'}</span>
         </article>; })}</div>
           : <EmptyState icon={MessageSquareText} title={month ? `${monthLabel(month)}还没有课情反馈` : '还没有课情反馈'} description="课后花一分钟记录到课、内容与表现，也可以从课时记录一键生成。" action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />}
       </>}

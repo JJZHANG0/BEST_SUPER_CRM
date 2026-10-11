@@ -50,6 +50,13 @@
       "when": 1791705351426,
       "tag": "0006_leader_sessions_lesson_teacher",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791705351427,
+      "tag": "0007_avatar_student_profile",
+      "breakpoints": true
     }
   ]
 }

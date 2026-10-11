@@ -1,9 +1,19 @@
 export type { Role } from './roles';
 export type Program = {id:string;name:string;en:string;short:string;type:string;color:string;description:string;date:string;status:string;curriculum:string;draft?:string;published:boolean};
 import type { StudentHealth } from './students';
+/** Optional roster fields (union across Excel imports). Missing keys stay empty / omitted. */
+export type StudentProfile = {
+  gender?:string; school?:string; phone?:string; email?:string;
+  guardianName?:string; guardianPhone?:string; role?:string;
+  idType?:string; idNumber?:string; toeflIelts?:string; mbti?:string;
+  awardsA?:string; awardsB?:string; inviter?:string; region?:string;
+  filledAt?:string; source?:string;
+};
 export type Student = {id:string;name:string;program:string;team:string;status:string;sales:string;updated:string;grade:string;
   /** 学生状态 — set by ops, drives the sales list order (worst first). */
-  health:StudentHealth;healthNote:string;healthUpdated:string;healthBy:string};
+  health:StudentHealth;healthNote:string;healthUpdated:string;healthBy:string;
+  /** Extra fields from 花名册 import (union schema). */
+  profile?:StudentProfile};
 export type Enrollment = {id:string;student:string;program:string;team:string;status:string};
 export type Team = {id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string};
 /** A course (课程安排). date/time are its first meeting; repeated meetings live in course_sessions (lib/nexus/schedule.ts). */

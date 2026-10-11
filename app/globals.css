@@ -1225,3 +1225,28 @@ html[data-workspace=public] body{background:#f4f2f7}
 .timetable-meta{font-size:.75rem;color:#8d7f9b;margin:10px 0 8px}
 .timetable-preview{border:1px solid #e6dff1;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 6px 24px #2b1b5714;line-height:0}
 @media(max-width:760px){.timetable-options{grid-template-columns:1fr 1fr}}
+
+/* ---------- Pixel chase (workbench easter egg) ---------- */
+.pixel-chase{position:relative;display:block;width:100%;min-height:160px;height:100%;border:0;padding:0;border-radius:14px;overflow:hidden;background:linear-gradient(120deg,#ebe4f9bb,#eee9f9a6);border:1px solid #ffffffb0;cursor:pointer;text-align:left}
+.pixel-chase-canvas{display:block;width:100%;height:160px;image-rendering:pixelated}
+.pixel-chase-hint,.pixel-chase-quip{position:absolute;left:12px;right:12px;bottom:10px;font-size:.6875rem;color:#9076aa;background:#ffffffb8;backdrop-filter:blur(6px);border-radius:8px;padding:6px 10px;pointer-events:none}
+.pixel-chase-quip{color:#6b4f8c;font-weight:550}
+@media(prefers-reduced-motion:reduce){.pixel-chase-canvas{/* static frame painted by JS */}}
+.dashboard-grid>.dg-note{min-height:160px}
+@media(max-width:900px){.dashboard-grid{grid-template-areas:"todo" "quick" "schedule" "note"}.dashboard-grid>.dg-note{display:block}}
+
+/* Compact equal-height lesson feedback cards */
+.lesson-feedback-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:stretch}
+.lesson-feedback-card{display:flex;flex-direction:column;min-height:132px;cursor:pointer;transition:box-shadow .18s,border-color .18s}
+.lesson-feedback-card.collapsed .lf-body{display:none}
+.lesson-feedback-card.collapsed .lf-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:10px;font-size:.8125rem;color:#7a6c8c;line-height:1.6}
+.lesson-feedback-card:not(.collapsed) .lf-preview{display:none}
+.lesson-feedback-card .lf-expand{margin-top:auto;padding-top:8px;font-size:.6875rem;color:#9a7daf;display:flex;align-items:center;gap:4px}
+.avatar.has-img{padding:0;overflow:hidden;background:#ddd}
+.avatar.has-img>img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+.avatar-upload{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.avatar-upload .avatar{width:72px;height:72px;font-size:1.5rem}
+.crumb-link{background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer;min-height:auto}
+.crumb-link:hover{color:#7746c3;text-decoration:underline}
+.crumb-back{display:inline-flex;align-items:center;gap:4px;min-height:30px;padding:0 8px;margin-right:4px;border-radius:8px;border:1px solid #e6dfef;background:#fff9;color:#7e748f;font-size:.75rem}
+.crumb-back:hover{background:#eee7f8;color:#7746c3}

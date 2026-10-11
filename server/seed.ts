@@ -20,6 +20,7 @@ import { salesDemo } from '../lib/nexus/auth';
 import { defaultClassTypes } from '../lib/nexus/ops';
 import { staffSeed } from './staff-seed';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from '../lib/nexus/real-seed';
+import { rosterStudents, rosterTeams, rosterEnrollments } from '../lib/nexus/roster-seed';
 import { hashPassword } from './password';
 
 const withOrder = <T extends object>(list: readonly T[]) => list.map((x, i) => ({ ...x, sortOrder: i }));
@@ -95,5 +96,10 @@ export async function seedRealData(db: Db, log: (s: string) => void = console.lo
   const l = lessons.length ? await db.insert(schema.lessonRecords).values(withOrder(lessons)).onConflictDoNothing().returning({ id: schema.lessonRecords.id }) : [];
   const feedbacks = remap(realLessonFeedbacks);
   const f = feedbacks.length ? await db.insert(schema.lessonFeedbacks).values(withOrder(feedbacks)).onConflictDoNothing().returning({ id: schema.lessonFeedbacks.id }) : [];
+
+  const teams = await db.insert(schema.teams).values(withOrder(rosterTeams)).onConflictDoNothing().returning({ id: schema.teams.id });
+  const students = await db.insert(schema.students).values(withOrder(rosterStudents.map(s => ({ ...s, profile: s.profile ?? null })))).onConflictDoNothing().returning({ id: schema.students.id });
+  const enrollments = await db.insert(schema.enrollments).values(withOrder(rosterEnrollments)).onConflictDoNothing().returning({ id: schema.enrollments.id });
+  if (n(teams) + n(students) + n(enrollments)) log(`seed: roster +${n(teams)} teams, +${n(students)} students, +${n(enrollments)} enrollments`);
   if (n(p) + n(t) + n(c) + n(l) + n(f)) log(`seed: real data +${n(p)} projects, +${n(t)} teachers, +${n(c)} courses, +${n(l)} lessons, +${n(f)} feedbacks`);
 }

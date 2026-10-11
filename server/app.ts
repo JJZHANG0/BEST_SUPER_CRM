@@ -24,12 +24,12 @@ import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
-export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean };
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader });
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null });
 const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
 /** Human message for a unique violation on users (username vs email). */
@@ -111,6 +111,21 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   const onlySuperadmin = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅超级管理员可用' }, 403);
 
   app.get('/auth/me', c => c.json({ user: publicUser(c.get('user')) }));
+
+  app.post('/auth/avatar', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { avatar?: unknown } | null;
+    const avatar = body?.avatar === null ? null : typeof body?.avatar === 'string' ? body.avatar : undefined;
+    if (avatar === undefined) return c.json({ error: 'invalid', message: '请提供 avatar（data URL 或 null）' }, 400);
+    if (avatar !== null) {
+      if (!/^data:image\/(png|jpeg|webp);base64,/.test(avatar) || avatar.length > 900_000) {
+        return c.json({ error: 'invalid', message: '头像需为 PNG/JPEG/WebP data URL，且体积适中' }, 400);
+      }
+    }
+    const [row] = await db.update(schema.users).set({ avatar, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
+    return c.json({ user: publicUser(toSession(row)) });
+  });
+
 
   // 推文 authoring (ops / superadmin write; sales read published snapshots). Before the generic /:collection/:id.
   registerPostRoutes(app, posts);
