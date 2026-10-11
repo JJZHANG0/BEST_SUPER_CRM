@@ -288,3 +288,36 @@ export const lessonFeedbacks = pgTable('lesson_feedbacks', {
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('lesson_feedbacks_ops_teacher_idx').on(t.opsTeacher, t.date), index('lesson_feedbacks_course_idx').on(t.course)]);
+
+/**
+ * 推文: many per programme (project_id → programs.id), written by ops like WeChat Official Account
+ * articles. status: draft → published → withdrawn. slug is the public URL key (/a/<slug>, #/p/<slug>).
+ * views / shares / likes are server-owned counters, bumped by the public endpoints only.
+ */
+export const articlePosts = pgTable('article_posts', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  projectId: text('project_id').notNull().references(() => programs.id),
+  status: text('status').notNull().default('draft'),
+  author: text('author').notNull(),
+  authorEmail: text('author_email').notNull().default(''),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  views: integer('views').notNull().default(0),
+  shares: integer('shares').notNull().default(0),
+  likes: integer('likes').notNull().default(0),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  ...stamps,
+}, t => [index('article_posts_project_idx').on(t.projectId), index('article_posts_status_idx').on(t.status)]);
+
+/** Dedupe keys for public metrics: one row per (post, visitor, bucket); a counter moves only when the row is new. */
+export const articlePostEvents = pgTable('article_post_events', {
+  id: serial('id').primaryKey(),
+  postId: text('post_id').notNull().references(() => articlePosts.id, { onDelete: 'cascade' }),
+  visitor: text('visitor').notNull(),
+  kind: text('kind').notNull(),
+  bucket: text('bucket').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('article_post_events_dedupe_idx').on(t.postId, t.visitor, t.bucket), index('article_post_events_post_idx').on(t.postId)]);

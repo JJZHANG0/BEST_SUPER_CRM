@@ -3,7 +3,7 @@
  * It only inserts reference data that the app needs to start empty-but-real:
  *   - the 运营部 staff accounts (scrypt hashes; must change password on first sign-in)
  *   - the public sales demo account (sales@nexus.demo)
- *   - the programme catalogue, one empty unpublished article per programme
+ *   - the programme catalogue, one empty unpublished 项目书 per programme, and the example 推文 (lib/nexus/post-seed.ts)
  *   - 班级类型 / 教务津贴标准
  *   - real 运营部 data from the spreadsheet (lib/nexus/real-seed.ts): 项目编号, 课程, 授课老师,
  *     and 课时记录 / 学情反馈 from 2026-10-01 on (matched by 项目编号 / 课程编号 so existing rows win)
@@ -15,6 +15,7 @@ import type { Db } from './db';
 import { schema } from './db';
 import * as data from '../lib/nexus/data';
 import { seedArticles } from '../lib/nexus/article-seed';
+import { seedPosts } from '../lib/nexus/post-seed';
 import { salesDemo } from '../lib/nexus/auth';
 import { defaultClassTypes } from '../lib/nexus/ops';
 import { staffSeed } from './staff-seed';
@@ -36,6 +37,8 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
     ['programs', () => db.insert(schema.programs).values(withOrder(data.programs).map(p => ({ ...p, draft: p.draft ?? null }))).onConflictDoNothing().returning({ id: schema.programs.id })],
     ['articles', () => db.insert(schema.articles).values(seedArticles.map(a => ({ ...a }))).onConflictDoNothing().returning({ program: schema.articles.program })],
     ['class_types', () => db.insert(schema.classTypes).values(withOrder(defaultClassTypes)).onConflictDoNothing().returning({ id: schema.classTypes.id })],
+    // Example 推文 (same slugs as the Pages preview); never overwrites edited posts.
+    ['article_posts', () => db.insert(schema.articlePosts).values(seedPosts.map(p => ({ id: p.id, slug: p.slug, projectId: p.program, status: p.status, author: p.author, authorEmail: p.authorEmail, draft: p.draft, published: p.published, publishedAt: p.publishedAt ? new Date(p.publishedAt.replace(' ', 'T') + ':00+08:00') : null }))).onConflictDoNothing().returning({ id: schema.articlePosts.id })],
   ];
   for (const [name, run] of steps) {
     const rows = await run();

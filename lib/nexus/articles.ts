@@ -1,6 +1,7 @@
 /**
- * Project showcase articles (项目推文): composed by ops like a WeChat Official Account post,
- * read by sales in 项目中心. Kept free of runtime imports so tests/articles.mjs can load it alone.
+ * 项目书 (project proposal / brochure): one per project, composed by ops with the block editor
+ * and read by sales in 项目中心. The same content model and block editor are reused by 推文
+ * (lib/nexus/posts.ts, many per project). Kept free of runtime imports so tests can load it alone.
  */
 export type HighlightKind = 'price' | 'schedule' | 'eligibility' | 'tip';
 export type HighlightItem = { label: string; value: string };
@@ -40,9 +41,9 @@ export function moveBlock<T>(blocks: readonly T[], index: number, delta: number)
 /** Problems that block publishing. An empty list means the draft can go live. */
 export function articleIssues(c: ArticleContent): string[] {
   const issues: string[] = [];
-  if (!c.title.trim()) issues.push('请填写推文标题');
+  if (!c.title.trim()) issues.push('请填写标题');
   else if (c.title.length > LIMITS.title) issues.push(`标题请控制在 ${LIMITS.title} 字以内`);
-  if (!c.summary.trim()) issues.push('请填写推文摘要');
+  if (!c.summary.trim()) issues.push('请填写摘要');
   else if (c.summary.length > LIMITS.summary) issues.push(`摘要请控制在 ${LIMITS.summary} 字以内`);
   if (!c.cover) issues.push('请选择封面图片');
   if (!c.blocks.length) issues.push('正文至少需要一个内容模块');
@@ -54,7 +55,7 @@ export function articleIssues(c: ArticleContent): string[] {
   });
   return issues;
 }
-const clean = (c: ArticleContent): ArticleContent => ({
+export const cleanContent = (c: ArticleContent): ArticleContent => ({
   ...c, title: c.title.trim(), summary: c.summary.trim(),
   blocks: c.blocks.map(b => b.type === 'highlight' ? { ...b, items: b.items.filter(x => x.label.trim() && x.value.trim()) } : b),
 });
@@ -62,7 +63,7 @@ export function saveDraft(a: ProgramArticle, draft: ArticleContent, now: string)
 export function publishArticle(a: ProgramArticle, draft: ArticleContent, now: string): ProgramArticle {
   const issues = articleIssues(draft);
   if (issues.length) throw new Error(issues[0]);
-  const snapshot = clean(draft);
+  const snapshot = cleanContent(draft);
   return { ...a, draft: snapshot, published: JSON.parse(JSON.stringify(snapshot)), updated: now, publishedAt: now };
 }
 export function unpublishArticle(a: ProgramArticle, now: string): ProgramArticle { return { ...a, published: null, publishedAt: null, updated: now }; }
@@ -75,7 +76,7 @@ export function readingMinutes(c: ArticleContent) {
   const text = c.summary + c.blocks.map(b => b.type === 'highlight' ? b.items.map(i => i.label + i.value).join('') : 'text' in b ? b.text : b.caption).join('');
   return Math.max(1, Math.round(text.length / 350));
 }
-/** Plain text for sales to paste into WeChat / SMS when sharing with parents. */
+/** Plain text for sales to paste into WeChat / SMS when sharing a 项目书 with parents. */
 export function shareText(c: ArticleContent, programName: string) {
   const facts = c.blocks.flatMap(b => b.type === 'highlight' ? b.items.filter(i => i.label && i.value).map(i => `${i.label}：${i.value}`) : []);
   return [`【${programName}】${c.title}`, c.summary, ...facts.slice(0, 6), '以上为演示内容，正式信息以签约报价与项目公告为准。'].join('\n');
@@ -90,7 +91,7 @@ function validBlock(b: unknown): b is ArticleBlock {
   if (b.type === 'highlight') return str(b.title) && highlightKinds.includes(b.kind as HighlightKind) && Array.isArray(b.items) && b.items.every(i => isObj(i) && str(i.label) && str(i.value));
   return false;
 }
-function validContent(c: unknown): c is ArticleContent {
+export function validContent(c: unknown): c is ArticleContent {
   return isObj(c) && str(c.title) && str(c.summary) && str(c.cover) && Array.isArray(c.blocks) && c.blocks.every(validBlock);
 }
 /** Shape check shared by the browser store and the API server. */

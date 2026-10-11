@@ -1,5 +1,7 @@
 /** Runtime configuration, read once from the environment (see .env.example and docs/DEPLOY.md). */
-export type Config = { databaseUrl: string; jwtSecret: string; port: number; host: string; env: string; corsOrigins: string[] };
+export type Config = { databaseUrl: string; jwtSecret: string; port: number; host: string; env: string; corsOrigins: string[];
+  /** Public site origin for share links / og:url (e.g. https://best.example.com). Empty: taken from the request. */
+  publicOrigin: string };
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required');
@@ -15,5 +17,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host: env.HOST || '127.0.0.1',
     env: nodeEnv,
     corsOrigins: (env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
+    publicOrigin: (env.PUBLIC_ORIGIN || '').replace(/\/$/, ''),
   };
 }

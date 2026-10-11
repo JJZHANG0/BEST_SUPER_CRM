@@ -36,6 +36,13 @@
       "when": 1791698972465,
       "tag": "0004_kpi_assign_teachers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791703476294,
+      "tag": "0005_article_posts",
+      "breakpoints": true
     }
   ]
 }

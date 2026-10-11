@@ -20,6 +20,8 @@ import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwn
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
+import { visiblePosts } from '../lib/nexus/posts';
+import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
 
 export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean };
 type Env = { Variables: { user: SessionUser } };
@@ -48,7 +50,11 @@ export function generatePassword(length = 16) {
 const pgCode = (err: unknown) => (err as { cause?: { code?: string } }).cause?.code || (err as { code?: string }).code;
 const issuesOf = (e: { issues: { path: PropertyKey[]; message: string }[] }) => e.issues.map(i => i.path.join('.') + ': ' + i.message);
 
-export function createApp(db: Db, config: Config, startedAt = new Date()) {
+/**
+ * `posts` lets tests inject an in-memory 推文 store; production uses PostgreSQL.
+ * Returns the root app: /api/* (JSON API) plus /a/:slug (Open Graph share shell, proxied by nginx).
+ */
+export function createApp(db: Db, config: Config, startedAt = new Date(), posts: PostRepo = drizzleRepo(db)) {
   const app = new Hono<Env>().basePath('/api');
   if (config.corsOrigins.length) app.use('*', cors({ origin: config.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] }));
   app.onError((err, c) => { console.error(err); return c.json({ error: 'internal_error' }, 500); });
@@ -84,6 +90,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     return c.json({ token, user: publicUser(user), expiresIn: TOKEN_TTL });
   });
 
+  // 推文 public reader + metrics: no login (registered before the auth middleware).
+  registerPublicPostRoutes(app, posts);
+
   // Everything below requires a valid bearer token.
   app.use('*', async (c, next) => {
     const header = c.req.header('authorization') || '';
@@ -101,6 +110,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
   const onlySuperadmin = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅超级管理员可用' }, 403);
 
   app.get('/auth/me', c => c.json({ user: publicUser(c.get('user')) }));
+
+  // 推文 authoring (ops / superadmin write; sales read published snapshots). Before the generic /:collection/:id.
+  registerPostRoutes(app, posts);
 
   app.post('/auth/change-password', async c => {
     const user = c.get('user');
@@ -354,8 +366,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const own = (r: Record<string, unknown>) => canSeeAllLessons(user.role) || String(r.opsTeacher).toLowerCase() === user.email;
     const articleRows = await db.select().from(schema.articles);
     const todos = await todosFor(user);
+    const postList = visiblePosts(await posts.list(), user.role);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -366,7 +379,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       teams, students: mine,
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
-      resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, todos,
+      resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, posts: postList, todos,
       classTypes: [], projects: [], teachers: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
     });
   });
@@ -491,5 +504,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     return c.json({ ok: true as const });
   });
 
-  return app;
+  const root = new Hono();
+  registerShareShell(root, posts, config.publicOrigin);
+  root.route('/', app);
+  return root;
 }
