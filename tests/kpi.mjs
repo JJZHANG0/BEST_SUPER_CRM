@@ -65,12 +65,15 @@ assert.equal(K.isMonth('2026-10'),true);assert.equal(K.isMonth('2026-13'),false)
 assert.equal(K.todoAsKr({title:'BPA 备课',note:'第二阶段 12 课时'}),'BPA 备课：第二阶段 12 课时');
 assert.equal(K.appendLine('a','a'),'a');assert.equal(K.appendLine('a','b'),'a\nb');
 
-// Permissions: assign / review are superadmin capabilities (张捷嘉 is a superadmin); every ops account fills KPI.
-for(const r of ['superadmin'])assert(R.canAssignTodos(r)&&R.canReviewKpi(r));
-for(const r of ['ops','admin','sales',undefined])assert(!R.canAssignTodos(r)&&!R.canReviewKpi(r));
-assert(R.canFillKpi('ops')&&R.canFillKpi('superadmin')&&!R.canFillKpi('sales'));
+// Permissions: assign / review belong to the 部门负责人 flag (only 张捷嘉), not to superadmin. The leader does not fill KPI.
+const leader={role:'superadmin',leader:true};
+assert(R.canAssignTodos(leader)&&R.canReviewKpi(leader)&&!R.canFillKpi(leader));
+for(const r of ['superadmin','ops','admin','sales',undefined,{role:'superadmin'},{role:'superadmin',leader:false},{role:'sales',leader:true}])assert(!R.canAssignTodos(r)&&!R.canReviewKpi(r),JSON.stringify(r));
+assert(R.canFillKpi('ops')&&R.canFillKpi('superadmin')&&R.canFillKpi({role:'superadmin',leader:false})&&!R.canFillKpi('sales'));
 const A=await load('lib/nexus/auth.ts');
 assert.equal(A.staffAccounts.find(a=>a.name==='张捷嘉').role,'superadmin');
+assert.equal(A.staffAccounts.find(a=>a.name==='张捷嘉').leader,true);
+assert.deepEqual(A.staffAccounts.filter(a=>a.leader).map(a=>a.name),['张捷嘉']);
 
 // API + UI gating.
 const app=readFileSync('server/app.ts','utf8');
@@ -78,8 +81,8 @@ assert(/app\.put\('\/kpi-review\/:userId\/:month'[\s\S]{0,200}canReviewKpi/.test
 assert(/app\.get\('\/kpi-review\/:month'[\s\S]{0,200}canReviewKpi/.test(app));
 assert(/app\.post\('\/todos'[\s\S]{0,1200}canAssignTodos/.test(app),'assignment gated');
 assert(app.indexOf("app.put('/kpi/:month'")<app.indexOf("app.put('/:collection/:id'"),'KPI routes registered before the generic collection route');
-assert(readFileSync('app/page.tsx','utf8').includes("canReviewKpi(s.role)?['kpi-review']:[]"));
-assert(readFileSync('components/nexus/kpi.tsx','utf8').includes('if (!canReviewKpi(s.role)) return'));
+assert(readFileSync('app/page.tsx','utf8').includes("canReviewKpi(s.viewer)?['kpi-review']:[]"));
+assert(readFileSync('components/nexus/kpi.tsx','utf8').includes('if (!canReviewKpi(s.viewer)) return'));
 assert(readFileSync('drizzle/0004_kpi_assign_teachers.sql','utf8').includes('CREATE TABLE "kpi_sheets"'));
 assert(readFileSync('drizzle/0004_kpi_assign_teachers.sql','utf8').includes('ADD COLUMN "assigned_by" integer'));
 console.log('KPI: sheet structure, scoring math, edit rules, review workflow, permissions and gating passed.');

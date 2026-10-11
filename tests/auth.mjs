@@ -61,10 +61,17 @@ assert.equal(R.usernameIssue(''),'请填写用户名');assert.equal(R.usernameIs
 assert(R.isOpsLike('superadmin')&&R.isOpsLike('ops')&&!R.isOpsLike('sales'));
 assert(R.canWrite('superadmin')&&R.canWrite('ops')&&!R.canWrite('sales'));
 assert(R.canManageSystem('superadmin')&&!R.canManageSystem('ops')&&!R.canManageSystem('admin')&&!R.canManageSystem('sales'));
-assert(R.canSeeAllLessons('superadmin')&&!R.canSeeAllLessons('ops'));
+// 课时/津贴 visibility follows the explicit 部门负责人 flag, not superadmin.
+const leader={role:'superadmin',leader:true},sa={role:'superadmin',leader:false};
+assert(R.canSeeAllLessons(leader)&&!R.canSeeAllLessons(sa)&&!R.canSeeAllLessons('superadmin')&&!R.canSeeAllLessons('ops'));
+assert(!R.canSeeAllLessons({role:'sales',leader:true}),'leader flag only counts inside the ops workspace');
 assert(R.canEditOwned('ops','xujin@nexus.local','XUJIN@nexus.local'));
 assert(!R.canEditOwned('ops','xujin@nexus.local','fangyanqi@nexus.local'));
-assert(R.canEditOwned('superadmin','zhangjiejia@nexus.local','fangyanqi@nexus.local'));
+assert(R.canEditOwned(leader,'zhangjiejia@nexus.local','fangyanqi@nexus.local'));
+assert(!R.canEditOwned(sa,'chengxueqing@nexus.local','fangyanqi@nexus.local'),'other superadmins cannot edit others’ records');
+assert(R.canEditOwned(sa,'chengxueqing@nexus.local','chengxueqing@nexus.local'));
+// Only 张捷嘉 carries the flag (Pages directory).
+assert.deepEqual(A.directory().filter(u=>u.leader).map(u=>u.name),['张捷嘉']);
 assert(!R.canEditOwned('sales','sales@nexus.demo','sales@nexus.demo'));
 assert.deepEqual(R.passwordIssues('short1'),['至少 10 位']);assert.equal(R.passwordIssues('onlyletters').length,1);
 

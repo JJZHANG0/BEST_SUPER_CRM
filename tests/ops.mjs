@@ -28,9 +28,10 @@ const L=[rec('1','xujin@nexus.local','2026-10-02',30),rec('2','xujin@nexus.local
 assert.deepEqual(O.monthAllowance(L,'xujin@nexus.local','2026-10'),{amount:52.5,hours:3.5,count:2});
 assert.deepEqual(O.monthAllowance(L,'zhangjiejia@nexus.local','2026-10'),{amount:0,hours:0,count:0});
 assert.deepEqual(O.summarizeByTeacher(L.filter(r=>O.monthOf(r.date)==='2026-10')).map(x=>[x.opsTeacher,x.amount,x.count]),[['xujin@nexus.local',52.5,2],['fangyanqi@nexus.local',48,1]]);
-assert.deepEqual(O.visibleLessons(L,'ops','xujin@nexus.local').map(r=>r.id),['1','2','3']);
-assert.equal(O.visibleLessons(L,'superadmin','zhangjiejia@nexus.local').length,4);
-assert.equal(O.visibleLessons(L,'sales','sales@nexus.demo').length,0);
+assert.deepEqual(O.visibleLessons(L,{role:'ops'},'xujin@nexus.local').map(r=>r.id),['1','2','3']);
+assert.equal(O.visibleLessons(L,{role:'superadmin',leader:true},'zhangjiejia@nexus.local').length,4,'部门负责人 sees everyone');
+assert.equal(O.visibleLessons(L,{role:'superadmin',leader:false},'chengxueqing@nexus.local').length,0,'other superadmins only see their own');
+assert.equal(O.visibleLessons(L,{role:'sales'},'sales@nexus.demo').length,0);
 assert.equal(O.currentMonth(new Date('2026-10-31T17:30:00Z')),'2026-11','Shanghai month boundary');
 assert.equal(O.today(new Date('2026-10-11T16:30:00Z')),'2026-10-12');
 
@@ -90,7 +91,7 @@ assert(readFileSync('components/nexus/login.tsx','utf8').includes('用户名（�
 
 // API gating wiring.
 const app=readFileSync('server/app.ts','utf8');
-for(const s of ["app.get('/admin/users'","app.post('/admin/users'","app.patch('/admin/users/:id'","reset-password","app.post('/auth/change-password'","app.delete('/:collection/:id'","canManageSystem(user.role)","canEditOwned(user.role, user.email","computeAllowance(rate, unit"])assert(app.includes(s),s);
+for(const s of ["app.get('/admin/users'","app.post('/admin/users'","app.patch('/admin/users/:id'","reset-password","app.post('/auth/change-password'","app.delete('/:collection/:id'","canManageSystem(user.role)","canEditOwned(user, user.email","computeAllowance(rate, unit"])assert(app.includes(s),s);
 const page=readFileSync('app/page.tsx','utf8');
 assert(page.includes("['lessons','课时记录'")&&page.includes("['lesson-feedback','课情反馈'")&&page.includes("['admin','系统管理'")&&page.includes("canManageSystem(s.role)?['admin']"));
 assert(readFileSync('components/nexus/admin.tsx','utf8').includes("if (!canManageSystem(s.role)) return"));
