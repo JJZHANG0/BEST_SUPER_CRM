@@ -21,4 +21,9 @@ assert(html.includes(prefix+'/brand/bunny.webp'),'Bunny easter-egg image is prel
 assert(html.includes('B.E.S.T · 内部超级管理系统'));
 assert.equal(manifest.short_name,'B.E.S.T');
 
-console.log('Static HTML, repository asset base, manifest, eight posters, article covers/illustrations and PDF references passed.');
+// Link previews: generic Open Graph card with an absolute PNG image (crawlers ignore SVG).
+assert(html.includes('<meta property="og:image" content="https://jjzhang0.github.io/BEST_SUPER_CRM/og-default.png"/>'),'og:image');
+assert(html.includes('property="og:title"')&&html.includes('property="og:description"'));
+assert(existsSync('out/og-default.png'));
+for(const p of ['bpa','ctb','conrad','prime','ihosa','mvp','winter','summer'])assert(existsSync(`out/materials/cover-${p}.png`),`Missing PNG cover for ${p}`);
+console.log('Static HTML, repository asset base, manifest, eight posters, article covers/illustrations PNG link-preview images, OG tags and PDF references passed.');

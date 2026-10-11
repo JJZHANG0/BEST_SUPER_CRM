@@ -89,3 +89,48 @@ automatically).
 The demo accounts from the README are seeded in both environments. Production is publicly reachable, so
 replace them (or change their passwords in `users`) before storing real data. Real students' data should not
 be entered until HTTPS (a domain + certificate) is in place.
+
+## 推文 public links and link previews
+
+Published 推文 (article posts) have a public, login-free reader:
+
+| Build | Public URL | Link-preview tags |
+| --- | --- | --- |
+| GitHub Pages (static demo) | `https://jjzhang0.github.io/BEST_SUPER_CRM/#/p/<slug>` (e.g. `…/#/p/bpa-autumn-kickoff`) | Generic site card only (`og-default.png`). Crawlers never see the `#/p/…` hash, so per-article tags are impossible on a static SPA. Posts written on Pages live in that browser only; the bundled example posts open anywhere. |
+| Server (nginx + API) | `https://<host>/a/<slug>` | Per-article `og:title`, `og:description`, `og:image` (cover PNG), `og:url`, served by the API (`server/posts.ts`, `GET /a/:slug`), which then redirects to `/#/p/<slug>`. Drafts / withdrawn posts get a generic 404 card. |
+
+nginx must forward `/a/` to the API (already in `deploy/nginx-nexus.conf`):
+
+```nginx
+location /a/ {
+    proxy_pass http://127.0.0.1:3001;   # 3002 on the dev server
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Optionally set `PUBLIC_ORIGIN=https://<host>` in the API env so `og:url` / `og:image` use the canonical
+host instead of the request's `Host` header.
+
+Public API (no auth; registered before the auth middleware):
+
+- `GET  /api/public/articles/:slug?visitor=<id>` — published posts only (404 otherwise); no draft, no author email.
+- `POST /api/public/articles/:slug/view|share|like` with `{ "visitor": "<8–64 chars [A-Za-z0-9_-]>" }`.
+  Deduped in `article_post_events` (unique post+visitor+bucket): like once per visitor, view once per visitor per
+  30 min, share once per visitor per minute; plus an in-memory per-IP throttle (120 writes/min). Counters live on
+  `article_posts.views|shares|likes` and cannot be set by clients. The Pages build keeps the same rules in
+  localStorage and labels the numbers 「预览站仅统计本机数据」.
+
+Migration `drizzle/0005_article_posts.sql` adds `article_posts` and `article_post_events`; `seed` inserts the
+example posts if missing. Regenerate the PNG covers / `og-default.png` with `scripts/render-og-images.cjs`.
+
+### WeChat share cards (future step)
+
+WeChat does not reliably use Open Graph tags. A custom share card (title, description, thumbnail) inside WeChat
+requires the WeChat JS-SDK (`wx.updateAppMessageShareData` / `updateTimelineShareData`), which needs:
+a **verified 公众号 (service account)**, the site on an **ICP-filed (备案) domain** configured as a JS-safe domain,
+and a server endpoint that signs `jsapi_ticket` with the 公众号 AppSecret. None of that exists yet, so this build
+does not attempt it. Until then WeChat shows the page title / link (sometimes the first large image); the public
+page sets `document.title` to the article title and offers 「分享」 (copy link; Web Share API on phones outside WeChat).

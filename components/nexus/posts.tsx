@@ -202,7 +202,13 @@ export function PublicArticle({ slug }: { slug: string }) {
     viewed.current = true;
     s.trackPost(slug, 'view').then(r => { if (r) { setMetrics(r.metrics); setLiked(r.liked); } });
   }, [ready, slug, s]);
-  useEffect(() => { if (title) document.title = title + ' · B.E.S.T'; return () => { document.title = 'B.E.S.T · 内部超级管理系统'; }; }, [title]);
+  useEffect(() => {
+    if (!title) return;
+    // The framework may re-apply the site <title> right after hydration; set it again shortly after.
+    const set = () => { document.title = title + ' · B.E.S.T'; };
+    set(); const t = [setTimeout(set, 300), setTimeout(set, 1500)];
+    return () => { t.forEach(clearTimeout); document.title = 'B.E.S.T · 内部超级管理系统'; };
+  }, [title]);
   useEffect(() => { document.documentElement.dataset.workspace = 'public'; }, []);
   if (s.apiMode && remote === null) return <div className="pub-shell"><div className="pub-loading">正在打开推文…</div></div>;
   if (!ready) return <div className="pub-shell"><div className="pub-missing"><Newspaper size={30} /><h1>推文不存在或已撤回</h1><p>请向分享给你的老师确认链接。{!s.apiMode && ' 预览站只能打开内置示例推文和本浏览器创建的推文。'}</p></div></div>;

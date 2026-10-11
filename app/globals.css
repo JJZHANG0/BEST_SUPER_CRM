@@ -1073,7 +1073,7 @@ html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-
 .project-card-title:disabled{cursor:default;opacity:1}
 .project-card-title h2{font-size:.9rem;line-height:1.45;font-weight:650;color:var(--art-ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.9em}
 .project-card-body>p{font-size:.75rem;line-height:1.65;color:var(--art-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:3.3em}
-.project-card-foot{margin-top:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-top:9px;border-top:1px solid var(--art-line)}
+.project-card-foot{margin-top:auto;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;min-width:0;padding-top:9px;border-top:1px solid var(--art-line)}
 .project-card-posts{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-size:.7rem;color:var(--art-muted);font-variant-numeric:tabular-nums}
 .icon-button.compact-icon{min-height:30px;min-width:30px;border-radius:8px}
 .full-width{width:100%;margin-top:10px}
@@ -1098,7 +1098,7 @@ html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-
 @media(max-width:767px){.post-row{grid-template-columns:104px minmax(0,1fr);gap:12px}.post-thumb img{width:104px}.post-side{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center}.post-filters .choice{max-width:none;flex:1}}
 
 /* 推文 editor sidebar */
-.post-sidebar{display:flex;flex-direction:column;gap:12px}
+.post-sidebar{display:flex;flex-direction:column;gap:12px;position:static}
 .metric-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 8px}
 .metric-tiles>div{background:var(--art-page);border:1px solid var(--art-line);border-radius:10px;padding:10px 11px}
 .metric-tiles dt{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;color:var(--art-muted)}

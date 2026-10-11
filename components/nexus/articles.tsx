@@ -79,7 +79,7 @@ export function ProgramHub() {
           <p>{c?.summary || p.description}</p>
           <div className="project-card-foot">
             <Badge tone={p.status === '筹备中' ? 'neutral' : 'green'}>{p.status}</Badge>
-            {ops && <Badge tone={stateTone(state)}>{state === '已发布' ? '项目书已发布' : state === '未发布' ? '项目书未发布' : '有未发布修改'}</Badge>}
+            {ops && <span title={'项目书' + state}><Badge tone={stateTone(state)}>{state === '已发布' ? '书·已发布' : state === '未发布' ? '书·草稿' : '书·待更新'}</Badge></span>}
             <span className="project-card-posts" title="推文数量"><Newspaper size={13} />{n}</span>
             {ops && <button className="icon-button compact-icon" aria-label={`编辑${p.name}项目书`} onClick={() => s.go('programs/' + p.id + '/compose')}><PenLine size={15} /></button>}
           </div>

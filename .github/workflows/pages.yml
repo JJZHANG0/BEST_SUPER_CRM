@@ -27,6 +27,8 @@ jobs:
         run: node tests/student-status.mjs
       - name: Validate project articles
         run: node tests/articles.mjs
+      - name: Validate 推文 (public API without login, publish gating, counters, roles, OG shell)
+        run: node tests/posts.mjs
       - name: Validate ops todos
         run: node tests/todos.mjs
       - name: Validate ops lessons, allowance and system management
