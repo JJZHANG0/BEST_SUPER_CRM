@@ -871,3 +871,26 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
   .ops-filters .search-box{min-width:100%}
   .push-right{margin-left:0}
 }
+
+/* 工作台 v2: 待办 | 快捷操作 same row & equal height; 今日课程 below 待办. */
+.dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);grid-template-areas:"todo quick" "schedule note";gap:20px;align-items:stretch}
+.dashboard-grid>.dg-todo{grid-area:todo;display:flex;min-width:0}
+.dashboard-grid>.dg-todo>.todo-home-panel{flex:1;min-width:0}
+.dashboard-grid>.dg-quick{grid-area:quick;display:flex;flex-direction:column;padding-bottom:20px}
+.dashboard-grid>.dg-quick .quick-grid{flex:1;grid-template-columns:repeat(2,1fr);grid-auto-rows:1fr;gap:12px;align-content:stretch}
+.dashboard-grid>.dg-quick .quick-grid button{justify-content:center;border:1px solid #efe9f7;border-radius:13px;background:#fbf9fe;min-height:84px;font-size:.75rem}
+.dashboard-grid>.dg-quick .quick-grid button:hover{background:#f4effb;border-color:#e3d7f3}
+.dashboard-grid>.dg-schedule{grid-area:schedule;min-width:0}
+.dashboard-grid>.dg-note{grid-area:note;align-self:start}
+@media(max-width:900px){.dashboard-grid{grid-template-columns:1fr;grid-template-areas:"todo" "quick" "schedule"}.dashboard-grid>.dg-note{display:none}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(4,1fr);grid-auto-rows:auto}.dashboard-grid>.dg-quick .quick-grid button{min-height:76px}}
+@media(max-width:767px){.dashboard-grid{gap:18px;grid-template-areas:"quick" "todo" "schedule"}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(2,1fr)}}
+/* 期望DDL picker in the todo add row. */
+.todo-ddl{display:inline-flex;align-items:center;gap:6px;border:1px solid #e3d9ee;border-radius:10px;padding:0 8px 0 10px;background:#fffd;min-height:40px;color:#8a7b9c;font-size:.75rem;white-space:nowrap;flex-shrink:0}
+.todo-ddl:focus-within{border-color:#ae8dcf;box-shadow:0 0 0 3px #d6c5ed44}
+.todo-ddl>span{font-weight:550;color:#7d6e92}
+.todo-ddl>input{border:0;background:transparent;color:#594368;font-size:.8125rem;min-height:36px;outline:none;padding:0;width:128px}
+.todo-add-extra.single,.todo-add-extra.compact-extra.single{grid-template-columns:1fr}
+.todo-meta .todo-due.overdue{color:#c2547a}
+.todo-tabs{margin-bottom:16px}
+.todo-tabs button em{font-style:normal;font-size:.6875rem;margin-left:6px;padding:0 6px;border-radius:999px;background:#0000000d}
+@media(max-width:600px){.todo-add-row{flex-wrap:wrap}.todo-add-row>input{flex-basis:100%}.todo-ddl{flex:1}.todo-ddl>input{width:100%}}

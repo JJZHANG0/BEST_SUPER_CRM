@@ -1,12 +1,12 @@
 'use client';
-import { Users, Layers, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, Sparkles, CircleAlert, ChevronRight, Wallet, Megaphone } from 'lucide-react';
-import { Badge, SectionTitle, EmptyState } from './ui';
+import { Users, Layers, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, Sparkles, ChevronRight, Wallet } from 'lucide-react';
+import { Badge, SectionTitle } from './ui';
 import { TodoHomeCard } from './todos';
 import { useMonthAllowance } from './ops-pages';
 import { greeting } from './recruitment';
 import { useNexus, useMe } from '@/lib/nexus/store';
 import { money2, monthLabel, today as todayIso } from '@/lib/nexus/ops';
-import { announcements, type Program, type Student, type Team, type Course, type Role } from '@/lib/nexus/data';
+import { type Program, type Student, type Team, type Course, type Role } from '@/lib/nexus/data';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -35,20 +35,15 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
   return <>
     <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>星期{weekdays[(now.getDay() + 6) % 7]} · 新的一天，新的可能</span></div></div></div>
     <div className="stats-grid five">{stats.map(x => <button className="stat-card glass" key={x.label} onClick={() => go(x.path)}><div className="stat-top"><span>{x.label}</span><span className={`stat-icon ${x.tone}`}><x.icon size={19} /></span></div><div className="stat-value">{x.value}{x.unit && <span>{x.unit}</span>}</div><div className="stat-foot"><span>{x.sub}</span><ChevronRight size={14} /></div></button>)}</div>
-    <div className="dashboard-columns"><div className="dashboard-main"><TodoHomeCard />
-      <section className="glass panel attention-panel"><SectionTitle title="需要关注的队伍" sub="及时跟进，让协作更从容" action="查看全部" onClick={() => go('teams?attention')} />
-        {attention.map(t => <button className="attention-row" key={t.id} onClick={() => go(`teams/${t.id}`)}><span className="attention-icon orange"><CircleAlert size={18} /></span><div><strong>{t.name} <span>{programs.find(p => p.id === t.program)?.short}</span></strong><p>{t.note || '暂无备注'}</p></div><Badge tone="orange">{t.status}</Badge><ChevronRight size={16} /></button>)}
-        {!attention.length && <EmptyState icon={UsersRound} title={teams.length ? '所有队伍进展正常' : '还没有队伍'} description={teams.length ? '队伍状态标记为材料待补充、进度延期等时会显示在这里。' : '新建队伍后，可在这里跟进需要协调的事项。'} action={teams.length ? undefined : '新建队伍'} onAction={() => go('teams/new')} />}
-      </section>
-      <section className="glass panel"><SectionTitle title="最新项目公告" action={announcements.length ? '全部公告' : undefined} onClick={() => go('announcements')} />
-        {announcements.length ? <div className="announcement-grid">{announcements.slice(0, 2).map((a, i) => <button className="announcement" key={a.title} onClick={() => go(`programs/${a.program}`)}><Badge tone={i ? 'orange' : 'violet'}>{a.tag}</Badge><strong>{a.title}</strong><p>{a.text}</p><small>{a.date}</small></button>)}</div>
-          : <EmptyState icon={Megaphone} title="暂无公告" description="项目公告发布后会显示在这里。" />}
-      </section></div>
-      <div className="dashboard-side"><section className="glass panel quick-panel"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>
-        <section className="glass panel schedule-panel"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
-          <div className="today-courses">{todays.map((c, i) => <button key={c.id} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{c.time}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name} <span>·</span> {c.teacher}</p></button>)}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
-          <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>
-        <div className="workspace-note"><Sparkles size={22} /><div><strong>让创新，发生在每一天。</strong><p>连接学生、老师与每一种可能。</p></div></div></div></div>
+    {/* Row 1: 待办事项 | 快捷操作 (equal height). Row 2: 今日课程 under 待办 | note. */}
+    <div className="dashboard-grid">
+      <div className="dg-todo"><TodoHomeCard /></div>
+      <section className="glass panel quick-panel dg-quick"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>
+      <section className="glass panel schedule-panel dg-schedule"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
+        <div className="today-courses">{todays.map((c, i) => <button key={c.id} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{c.time}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name} <span>·</span> {c.teacher}</p></button>)}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
+        <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>
+      <div className="workspace-note dg-note"><Sparkles size={22} /><div><strong>让创新，发生在每一天。</strong><p>连接学生、老师与每一种可能。</p></div></div>
+    </div>
     <footer className="page-footer"><span>PROJECT NEXUS <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
   </>;
 }

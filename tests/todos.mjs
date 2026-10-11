@@ -17,9 +17,19 @@ assert.deepEqual(T.storedTodos(null),[]);assert.deepEqual(T.storedTodos([{id:'X'
 assert.equal(T.isDone({completedAt:'2026-10-01T00:00:00Z'}),true);assert.equal(T.isOpen({completedAt:null}),true);
 
 const page=readFileSync('app/page.tsx','utf8');
-assert(page.includes("['todos','待办事项'"));assert(page.includes("['todos-done','已完成'"));
+assert(page.includes("['todos','待办事项'"));assert(!page.includes("['todos-done'"),'已完成 is a tab, not a sidebar item');
+const mod=readFileSync('components/nexus/modules.tsx','utf8');
+assert(mod.includes("if(path==='todos-done')return <TodosDoneRedirect/>")&&mod.includes("if(path==='todos')return <TodosPage/>"));
+const tsx=readFileSync('components/nexus/todos.tsx','utf8');
+assert(tsx.includes("s.go('todos?tab=done')")&&tsx.includes('role="tablist"')&&tsx.includes('>待办<')&&tsx.includes('>已完成<'),'待办/已完成 tabs + redirect');
+assert(tsx.includes('aria-label="期望DDL"')&&tsx.includes('type="date"'),'explicit 期望DDL date picker on the add form');
+assert(tsx.includes('DDL {formatDue(todo.dueAt)}'),'DDL shown on each item');
 const dash=readFileSync('components/nexus/dashboard.tsx','utf8');
 assert(dash.includes('TodoHomeCard'));
+assert(!dash.includes('需要关注的队伍')&&!dash.includes('最新项目公告'),'dashboard sections removed');
+assert(dash.includes('dg-todo')&&dash.includes('dg-quick')&&dash.includes('dg-schedule'));
+assert(/grid-template-areas:"todo quick" "schedule note"/.test(readFileSync('app/globals.css','utf8')),'快捷操作 beside 待办, 今日课程 below');
+assert(!/14|18/.test((dash.match(/const stats = \[[\s\S]*?\];/)||[''])[0].replace(/\d+px/g,'')),'no hardcoded KPI numbers');
 // Date line: icon + date are one flex item aligned to the note's first line.
 const row=readFileSync('components/nexus/todos.tsx','utf8');
 assert(row.includes('className="todo-meta"')&&row.includes('className="todo-note"'));
