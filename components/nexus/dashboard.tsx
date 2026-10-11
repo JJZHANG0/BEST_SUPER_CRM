@@ -46,7 +46,7 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
       <section className="glass panel schedule-panel dg-schedule"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
         <div className="today-courses">{todays.map((o, i) => { const c = o.course; return <button key={o.key} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{o.start && o.end ? `${o.start}–${o.end}` : c.time}{c.code && <Badge tone="violet">{c.code}</Badge>}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name || '—'} <span>·</span> {c.teacher}{o.location && <><span>·</span> {o.location}</>}</p></button>; })}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
         <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>
-      <div className="dg-note"><PixelChase className="pixel-chase-fill" /></div>
+      <div className="dg-note"><div className="pixel-chase-shell"><PixelChase /></div></div>
     </div>
     <footer className="page-footer"><span>B.E.S.T <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
   </>;
