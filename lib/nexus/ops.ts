@@ -55,6 +55,8 @@ export function durationLabel(start: string, end: string): string {
 export type LessonRecord = {
   id: string; course: string; date: string; hours: number; students: number | null; opsTeacher: string;
   rate: number; unit: AllowanceUnit; amount: number; note: string; createdBy: string;
+  /** 授课老师 of this lesson (prefilled from the course; older records fall back to the course's teacher). */
+  teacher?: string;
 };
 /** One 课情反馈, optionally linked to a 课时记录. */
 export type LessonFeedback = {
@@ -106,9 +108,9 @@ export function today(now = new Date(), timeZone = 'Asia/Shanghai') {
 }
 export const monthLabel = (ym: string) => { const [y, m] = ym.split('-'); return y && m ? `${y}年${Number(m)}月` : ym; };
 
-/** Records the given role may see: superadmin all, others only their own. */
-export function visibleLessons<T extends { opsTeacher: string }>(list: readonly T[], role: unknown, email: string): T[] {
-  if (role === 'superadmin') return list.slice();
+/** Records the viewer may see: the 部门负责人 (leader flag) sees all, everyone else only their own. */
+export function visibleLessons<T extends { opsTeacher: string }>(list: readonly T[], viewer: { role: unknown; leader?: boolean | null }, email: string): T[] {
+  if (viewer && viewer.leader === true && (viewer.role === 'ops' || viewer.role === 'superadmin' || viewer.role === 'admin')) return list.slice();
   const me = (email || '').toLowerCase();
   return list.filter(r => r.opsTeacher.toLowerCase() === me);
 }
@@ -127,6 +129,44 @@ export function summarizeByTeacher(records: readonly LessonRecord[]) {
     map.set(k, v);
   }
   return [...map.values()].sort((a, b) => b.amount - a.amount || a.opsTeacher.localeCompare(b.opsTeacher));
+}
+
+/** 授课老师 of a record: its own field, else the course's 授课老师, else 「未填写」. */
+export function lessonTeacher(r: { teacher?: string; course: string }, courses: readonly { id: string; teacher: string }[]) {
+  return (r.teacher || '').trim() || (courses.find(c => c.id === r.course)?.teacher || '').trim() || '未填写';
+}
+/** Hours per 授课老师 for one month (YYYY-MM; '' = all months), most hours first. */
+export function hoursByLessonTeacher(records: readonly LessonRecord[], courses: readonly { id: string; teacher: string }[], month = '') {
+  const map = new Map<string, { teacher: string; hours: number; count: number; amount: number }>();
+  for (const r of records) {
+    if (month && monthOf(r.date) !== month) continue;
+    const t = lessonTeacher(r, courses);
+    const v = map.get(t) ?? { teacher: t, hours: 0, count: 0, amount: 0 };
+    v.hours = round2(v.hours + r.hours); v.count++; v.amount = round2(v.amount + r.amount);
+    map.set(t, v);
+  }
+  return [...map.values()].sort((a, b) => b.hours - a.hours || a.teacher.localeCompare(b.teacher, 'zh-CN'));
+}
+/** 学情反馈 fields captured together with a 课时记录. */
+export type FeedbackDraft = { attendance: string; content: string; performance: string; issues: string; nextSteps: string };
+export const feedbackDraftEmpty = (d: FeedbackDraft) => !Object.values(d).some(v => (v || '').trim());
+/**
+ * 记录课时 + 学情反馈 in one form: returns the lesson record and, when any feedback field is filled
+ * (and `withFeedback`), the linked 课情反馈 (same course / date / 教务老师, lesson = record id).
+ * When editing a lesson that already has a linked feedback, pass it as `existing` to update it in place.
+ */
+export function lessonWithFeedback(input: {
+  lesson: LessonRecord; feedback: FeedbackDraft; withFeedback: boolean; existing?: LessonFeedback | null; newId: () => string;
+}): { lesson: LessonRecord; feedback: LessonFeedback | null; issue: string | null } {
+  const { lesson, feedback: d, withFeedback, existing } = input;
+  if (!withFeedback || feedbackDraftEmpty(d)) return { lesson, feedback: null, issue: null };
+  if (!d.content.trim()) return { lesson, feedback: null, issue: '请填写学情反馈中的「本次课程内容」，或取消勾选「同时记录学情反馈」' };
+  const feedback: LessonFeedback = {
+    id: existing?.id || input.newId(), course: lesson.course, lesson: lesson.id, date: lesson.date,
+    attendance: d.attendance.trim().slice(0, 200), content: d.content.trim(), performance: d.performance.trim(), issues: d.issues.trim(), nextSteps: d.nextSteps.trim(),
+    opsTeacher: lesson.opsTeacher, createdBy: existing?.createdBy || lesson.createdBy,
+  };
+  return { lesson, feedback, issue: null };
 }
 
 /** Suggested course status from its dates. */

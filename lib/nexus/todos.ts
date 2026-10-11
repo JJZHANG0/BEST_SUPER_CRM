@@ -94,6 +94,10 @@ export function newTodoId() {
 export const ownedBy = (list: readonly Todo[], key: string) => list.filter(t => String(t.userId).toLowerCase() === key.toLowerCase());
 /** Todos the user identified by `key` assigned to someone else (「我指派的」). */
 export const assignedByKey = (list: readonly Todo[], key: string) => list.filter(t => t.assignedBy != null && String(t.assignedBy).toLowerCase() === key.toLowerCase() && String(t.userId).toLowerCase() !== key.toLowerCase());
+/** Todos in `key`'s own list that someone else (the 部门负责人) assigned to them (「领导万岁」). */
+export const assignedToKey = (list: readonly Todo[], key: string) => list.filter(t => String(t.userId).toLowerCase() === key.toLowerCase() && t.assignedBy != null && String(t.assignedBy).toLowerCase() !== key.toLowerCase());
+/** Tag shown on leader-assigned todos instead of 「由 张捷嘉 指派」 (assigner kept in the tooltip). */
+export const CAPITALIST_TAG = '【万恶的资本家】';
 /** Assignment summary for 「我指派的」. */
 export function assignmentStats(list: readonly Todo[]) {
   const done = list.filter(isDone).length;

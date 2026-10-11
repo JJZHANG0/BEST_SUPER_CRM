@@ -1127,3 +1127,101 @@ html[data-workspace=public] body{background:#f4f2f7}
 .pub-loading,.pub-missing{padding:90px 24px;text-align:center;color:var(--art-muted);line-height:1.8}
 .pub-missing h1{font-size:1.1rem;color:var(--art-ink);margin:14px 0 6px;letter-spacing:0}
 @media(min-width:700px){.pub-shell{margin:24px auto;border-radius:16px;box-shadow:0 6px 30px rgba(67,50,106,.06);min-height:calc(100dvh - 48px)}.pub-article{padding:34px 40px 8px}.pub-bar{bottom:24px;border-radius:0 0 16px 16px}}
+
+/* 「领导万岁」: dissolve the label, a husky pops up and wobbles twice (components/nexus/brand.tsx HuskyLabel). */
+.husky-label{position:relative;display:inline-flex;align-items:center}
+.husky-text{display:inline-flex}
+.husky-text>span{display:inline-block;transition:opacity .42s cubic-bezier(.2,.7,.2,1),filter .42s cubic-bezier(.2,.7,.2,1),transform .48s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--i)*30ms);will-change:transform,opacity,filter}
+.husky-label[data-active] .husky-text>span{opacity:0;filter:blur(6px);transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.55)}
+.husky-pop{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;height:var(--husky-h,150px);aspect-ratio:444/600;translate:-50% -100%;transform-origin:50% 100%;opacity:0;scale:.25;transition:opacity .2s ease .04s,scale .3s cubic-bezier(.5,0,.75,0)}
+.husky-pop[data-active]{opacity:1;scale:1;transition:opacity .18s ease .08s,scale .6s cubic-bezier(.34,1.56,.64,1) .08s}
+.husky-wobble{width:100%;height:100%;transform-origin:50% 92%}
+.husky-pop[data-active] .husky-wobble{animation:husky-wobble 1.05s cubic-bezier(.34,1.56,.64,1) .5s both}
+.husky-wobble img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 12px 16px rgb(40 30 70 / .24)) drop-shadow(0 2px 4px rgb(40 30 70 / .14));user-select:none}
+/* Two cheeky left-right swings (±11° then ±8°), settling back upright. */
+@keyframes husky-wobble{0%{rotate:0deg}16%{rotate:-11deg}36%{rotate:10deg}56%{rotate:-8deg}76%{rotate:7deg}100%{rotate:0deg}}
+@media (prefers-reduced-motion:reduce){
+  .husky-text>span{transition:opacity .2s linear!important;transform:none!important;filter:none!important}
+  .husky-pop,.husky-pop[data-active]{scale:1;transition:opacity .2s linear!important}
+  .husky-pop[data-active] .husky-wobble{animation:none}
+}
+/* 【万恶的资本家】 tag on todos assigned by the 部门负责人 */
+.todo-capitalist-tag{display:inline-flex;align-items:center;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:.6875rem;font-weight:700;letter-spacing:.02em;color:#a3241f;background:linear-gradient(135deg,#fff1ef,#ffe3df);border:1px solid #f6c3bd;vertical-align:2px;cursor:help;white-space:nowrap}
+.leader-tab-intro{display:flex;align-items:center;gap:10px;margin-bottom:6px;color:#6f6585;font-size:.8125rem}
+.leader-tab-intro b{color:#a3241f}
+
+/* 工作台: share the KPI cards' 5-column grid (same 14px gutter) so 待办 / 今日课程 end at card 4 and
+   快捷操作 matches card 5 (当月教务津贴). Below 1181px the KPI row wraps, so the two-column layout returns. */
+@media(min-width:1181px){
+  .dashboard-grid{grid-template-columns:repeat(5,minmax(0,1fr));grid-template-areas:"todo todo todo todo quick" "schedule schedule schedule schedule note";column-gap:14px;row-gap:18px}
+  .dashboard-grid>.dg-quick{padding-left:16px;padding-right:16px}
+  .dashboard-grid>.dg-quick .quick-grid{gap:10px}
+  .dashboard-grid>.dg-quick .quick-grid button{min-height:78px;padding:10px 6px}
+  .dashboard-grid>.dg-note{padding:16px 14px}
+}
+
+/* 课时记录: per-teacher tabs (部门负责人), 授课老师 hours, lesson + 学情反馈 form */
+.person-tabs .tiny-avatar{width:20px;height:20px;font-size:.625rem;border-width:1px}
+.person-tabs button em{font-style:normal;font-size:.6875rem;padding:0 6px;border-radius:999px;background:#f1ecf8;color:#7b6c90}
+.person-tabs button.selected em{background:#ffffff2e;color:#fff}
+.teacher-summary>button{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid #eee8f4;border-radius:12px;background:#fff;text-align:left}
+.teacher-summary>button:hover{border-color:#d9cdef;background:#fbf9fe}
+.teacher-summary>button>div{flex:1;min-width:0}
+.teacher-hours{border:1px solid #ece6f4;border-radius:14px;background:linear-gradient(180deg,#fdfcff,#f8f5fd);padding:12px 14px;margin:2px 0 12px}
+.teacher-hours-head{display:flex;align-items:center;gap:8px;color:#5d4f73;margin-bottom:10px}
+.teacher-hours-head strong{font-size:.8125rem;color:#3f354c}
+.teacher-hours-head small{margin-left:auto;color:#9a8aae;font-size:.6875rem}
+.teacher-hours-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.teacher-hour-chip{position:relative;display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;padding:9px 11px 12px;border-radius:11px;background:#fff;border:1px solid #eee8f4;overflow:hidden}
+.teacher-hour-chip .th-name{font-size:.8125rem;font-weight:600;color:#3f354c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-hour-chip b{font-size:1rem;color:#5b3bb0;font-variant-numeric:tabular-nums}
+.teacher-hour-chip b small{font-size:.6875rem;color:#9a8aae;font-weight:500}
+.teacher-hour-chip .th-count{grid-column:1/-1;font-size:.6875rem;color:#9a8aae}
+.teacher-hour-chip i{position:absolute;left:0;bottom:0;height:3px;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#b597ef,#7c4ddb)}
+.icon-button.has-feedback{color:#7c4ddb}
+.icon-button.has-feedback::after{content:'';position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:#1f9d6b;border:1px solid #fff}
+.lesson-dialog .form-stack{gap:14px}
+.lesson-fb{margin:0;border:1px solid #e7def4;border-radius:14px;padding:6px 14px 14px;background:#fbf9fe;display:flex;flex-direction:column;gap:12px}
+.lesson-fb.off{padding-bottom:6px;background:#fff}
+.lesson-fb legend{padding:0 6px;font-size:.8125rem;color:#5d4f73}
+.lesson-fb legend .checkbox-label span{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+@media(max-width:640px){.form-columns.three{grid-template-columns:1fr}}
+
+/* 新建课程 · 排课 */
+.schedule-fields{display:flex;flex-direction:column;gap:14px;border:1px solid #e7def4;border-radius:14px;padding:14px;background:#fcfbff}
+.schedule-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:4px;border-radius:12px;background:#f2edf9}
+.schedule-modes button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;border-radius:9px;color:#6d6080;font-size:.8125rem}
+.schedule-modes button.selected{background:#fff;color:#5b3bb0;font-weight:600;box-shadow:0 1px 4px #4b2f8a1f}
+.weekday-picks{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.weekday-picks button{min-height:40px;border-radius:10px;border:1px solid #e6dfef;background:#fff;color:#6d6080;font-size:.8125rem}
+.weekday-picks button.selected{background:linear-gradient(135deg,#9b71e5,#8150ce);border-color:#8150ce;color:#fff;font-weight:600}
+.end-by{display:flex;flex-direction:column;gap:6px}
+.end-by label{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border-radius:10px;border:1px solid #e6dfef;background:#fff;color:#6d6080;font-size:.8125rem}
+.end-by label.selected{border-color:#b597ef;background:#f8f4fe;color:#3f354c}
+.end-by input[type=number]{width:72px;min-height:32px}
+.end-by input[type=date]{flex:1;min-height:32px}
+.manual-slots{display:flex;flex-direction:column;gap:8px}
+.manual-slot{display:grid;grid-template-columns:24px minmax(0,1.4fr) minmax(0,1fr) auto minmax(0,1fr) 44px;align-items:center;gap:8px}
+.manual-slot em{font-style:normal;font-size:.75rem;color:#9a8aae;text-align:center}
+.manual-slot span{color:#9a8aae}
+.manual-slot .icon-button{min-height:38px;min-width:38px}
+.add-slot{align-self:flex-start}
+.schedule-preview{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:10px 12px;border-radius:11px;background:#f1ecfb;color:#5b3bb0;font-size:.8125rem}
+.schedule-preview.bad{background:#fdeceb;color:#b42318}
+.slot-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px}
+.slot-chips i{font-style:normal;font-size:.6875rem;padding:2px 7px;border-radius:999px;background:#fff;border:1px solid #e3d8f6;color:#5d4f73;font-variant-numeric:tabular-nums}
+.slot-chips i.more{background:#5b3bb0;color:#fff;border-color:#5b3bb0}
+.session-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.session-list span{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;background:#f4effc;color:#4a3d61;font-size:.75rem;font-variant-numeric:tabular-nums}
+.session-list span.past{opacity:.55}
+.session-list em{font-style:normal;font-size:.625rem;color:#9a8aae}
+.course-row h3 .course-code{font-style:normal;margin-left:8px;font-size:.625rem;font-weight:700;letter-spacing:.03em;padding:2px 6px;border-radius:5px;background:#efe8fc;color:#6a43c9;vertical-align:2px}
+.calendar-toolbar .export-timetable{margin-left:8px;min-height:38px}
+
+/* 导出课表 */
+.ops-dialog.timetable-dialog{width:min(1040px,calc(100vw - 32px));max-width:min(1040px,calc(100vw - 32px))!important}
+.timetable-dialog [data-slot=dialog-title]{display:flex;align-items:center;gap:8px}
+.timetable-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.timetable-meta{font-size:.75rem;color:#8d7f9b;margin:10px 0 8px}
+.timetable-preview{border:1px solid #e6dff1;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 6px 24px #2b1b5714;line-height:0}
+@media(max-width:760px){.timetable-options{grid-template-columns:1fr 1fr}}

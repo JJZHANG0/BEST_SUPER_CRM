@@ -15,7 +15,7 @@ import { schema } from './db';
 import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
-import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, deletableCollections, type CollectionName } from './collections';
+import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, isUnit } from '../lib/nexus/ops';
@@ -23,13 +23,14 @@ import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
 
-export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean };
+/** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword });
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword });
-const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true });
+const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
 /** Human message for a unique violation on users (username vs email). */
 function conflictMessage(err: unknown) {
@@ -231,7 +232,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     let ownerId = user.id, assignedBy: number | null = null, assignedByName: string | null = null;
     const assignee = typeof body?.assignee === 'string' ? body.assignee.trim().toLowerCase() : '';
     if (assignee && assignee !== user.email) {
-      if (!canAssignTodos(user.role)) return c.json({ error: 'forbidden', message: '只有超级管理员可以指派任务' }, 403);
+      if (!canAssignTodos(user)) return c.json({ error: 'forbidden', message: '只有部门负责人可以指派任务' }, 403);
       const [target] = await db.select().from(schema.users).where(eq(schema.users.email, assignee)).limit(1);
       if (!target || !target.active || !isOpsLike(target.role)) return c.json({ error: 'invalid', message: '请选择在职的运营老师' }, 400);
       ownerId = target.id; assignedBy = user.id; assignedByName = user.name;
@@ -302,7 +303,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
 
   app.get('/kpi/:month', async c => {
     const user = c.get('user'), month = c.req.param('month');
-    if (!canFillKpi(user.role)) return forbidden(c);
+    if (!canFillKpi(user)) return c.json({ error: 'forbidden', message: '部门负责人不填写当月绩效' }, 403);
     if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
     const row = await kpiOf(user.id, month);
     return c.json({ sheet: row ? ownerView(kpiRow(row, user.name)) : null });
@@ -311,7 +312,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   /** Save own draft (and optionally submit). Only drafts can be edited by the teacher (rules: lib/nexus/kpi.ts teacherSave). */
   app.put('/kpi/:month', async c => {
     const user = c.get('user'), month = c.req.param('month');
-    if (!canFillKpi(user.role)) return forbidden(c);
+    if (!canFillKpi(user)) return c.json({ error: 'forbidden', message: '部门负责人不填写当月绩效' }, 403);
     if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
     const body = await c.req.json().catch(() => null) as { items?: unknown; submit?: unknown } | null;
     const current = await kpiOf(user.id, month);
@@ -328,20 +329,20 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   /** Reviewer: every ops teacher (plus anyone who filled a sheet) for one month. */
   app.get('/kpi-review/:month', async c => {
     const user = c.get('user'), month = c.req.param('month');
-    if (!canReviewKpi(user.role)) return c.json({ error: 'forbidden', message: '此操作仅绩效审核人可用' }, 403);
+    if (!canReviewKpi(user)) return c.json({ error: 'forbidden', message: '此操作仅部门负责人可用' }, 403);
     if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
     const sheets = await db.select().from(schema.kpiSheets).where(eq(schema.kpiSheets.month, month));
     const ids = sheets.map(r => r.userId);
-    // Every active ops-workspace teacher (superadmins also fill 当月绩效) except the reviewer, plus anyone with a sheet.
-    const teachers = and(inArray(schema.users.role, ['ops', 'superadmin', 'admin']), eq(schema.users.active, true));
-    const people = (await db.select().from(schema.users).where(ids.length ? or(teachers, inArray(schema.users.id, ids)) : teachers).orderBy(asc(schema.users.id))).filter(p => p.id !== user.id);
+    // Every active ops-workspace teacher who fills 当月绩效 (not the 部门负责人), plus anyone with a sheet.
+    const teachers = and(inArray(schema.users.role, ['ops', 'superadmin', 'admin']), eq(schema.users.active, true), eq(schema.users.leader, false));
+    const people = (await db.select().from(schema.users).where(ids.length ? or(teachers, inArray(schema.users.id, ids)) : teachers).orderBy(asc(schema.users.id))).filter(p => p.id !== user.id && !p.leader);
     return c.json({ rows: people.map(p => { const r = sheets.find(x => x.userId === p.id); return { user: { key: String(p.id), name: p.name, email: p.email, role: p.role }, sheet: r ? kpiRow(r, p.name) : null }; }) });
   });
 
   /** Reviewer: score / finalize / return to draft / reopen a finalized sheet (rules: lib/nexus/kpi.ts reviewSheet). */
   app.put('/kpi-review/:userId/:month', async c => {
     const user = c.get('user'), month = c.req.param('month'), userId = Number(c.req.param('userId'));
-    if (!canReviewKpi(user.role)) return c.json({ error: 'forbidden', message: '此操作仅绩效审核人可用' }, 403);
+    if (!canReviewKpi(user)) return c.json({ error: 'forbidden', message: '此操作仅部门负责人可用' }, 403);
     if (!isMonth(month) || !Number.isInteger(userId)) return c.json({ error: 'invalid' }, 400);
     const body = await c.req.json().catch(() => null) as { items?: unknown; reviewNote?: unknown; action?: unknown } | null;
     const current = await kpiOf(userId, month);
@@ -360,15 +361,16 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
-    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers'] as const).map(list));
+    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
-    const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active }));
-    const own = (r: Record<string, unknown>) => canSeeAllLessons(user.role) || String(r.opsTeacher).toLowerCase() === user.email;
+    const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
+    // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
+    const own = (r: Record<string, unknown>) => canSeeAllLessons(user) || String(r.opsTeacher).toLowerCase() === user.email;
     const articleRows = await db.select().from(schema.articles);
     const todos = await todosFor(user);
     const postList = visiblePosts(await posts.list(), user.role);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -381,6 +383,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
       resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, posts: postList, todos,
       classTypes: [], projects: [], teachers: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
+      courseSessions: courseSessions.filter(x => courses.some(c => c.id === x.course)),
     });
   });
 
@@ -448,7 +451,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (systemCollections.includes(name) && !canManageSystem(user.role)) return onlySuperadmin(c);
     if (ownedCollections.includes(name)) {
       const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
-      if (!canEditOwned(user.role, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user.role, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
+      if (!canEditOwned(user, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
       data.opsTeacher = String(data.opsTeacher).toLowerCase();
       data.createdBy = current ? current.createdBy : user.email;
       const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(data.course))).limit(1);
@@ -493,7 +496,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const t = tables[name] as typeof schema.teams;
     const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
     if (!current) return c.json({ error: 'not_found' }, 404);
-    if (systemCollections.includes(name) ? !canManageSystem(user.role) : !canEditOwned(user.role, user.email, String(current.opsTeacher))) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
+    const allowed = systemCollections.includes(name) ? canManageSystem(user.role) : scheduleCollections.includes(name) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
+    if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
       await db.delete(t).where(eq(t.id, id));

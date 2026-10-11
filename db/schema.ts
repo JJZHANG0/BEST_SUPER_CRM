@@ -25,6 +25,8 @@ export const users = pgTable('users', {
   active: boolean('active').notNull().default(true),
   /** Set for seeded / admin-created / reset accounts; cleared when the user changes the password. */
   mustChangePassword: boolean('must_change_password').notNull().default(false),
+  /** 部门负责人 (department head): all teachers' 课时/津贴, 绩效考核, 任务指派; does not fill 当月绩效. Only 张捷嘉. */
+  leader: boolean('leader').notNull().default(false),
   ...stamps,
 }, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
 
@@ -111,9 +113,27 @@ export const courses = pgTable('courses', {
   date: text('date').notNull(),
   time: text('time').notNull(),
   status: text('status').notNull(),
+  /** 课程编号 / 教室或线上 (optional; shown on the exported timetable). */
+  code: text('code'),
+  location: text('location'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
+
+/**
+ * 课程排课: each meeting of a course (weekly recurrence or manual dates). course_id is not a foreign key on
+ * purpose: the browser writes a new course and its sessions in parallel.
+ */
+export const courseSessions = pgTable('course_sessions', {
+  id: text('id').primaryKey(),
+  course: text('course_id').notNull(),
+  date: text('date').notNull(),
+  start: text('start_time').notNull(),
+  end: text('end_time').notNull(),
+  location: text('location'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [index('course_sessions_course_idx').on(t.course), index('course_sessions_date_idx').on(t.date)]);
 
 /** 教学反馈 */
 export const feedbacks = pgTable('feedbacks', {
@@ -268,6 +288,8 @@ export const lessonRecords = pgTable('lesson_records', {
   amount: doublePrecision('amount').notNull(),
   note: text('note').notNull().default(''),
   createdBy: text('created_by').notNull().default(''),
+  /** 授课老师 (prefilled from the course). NULL on older rows: the course's teacher is shown. */
+  teacher: text('teacher'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('lesson_records_ops_teacher_idx').on(t.opsTeacher, t.date), index('lesson_records_course_idx').on(t.course)]);

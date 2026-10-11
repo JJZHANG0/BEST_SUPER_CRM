@@ -9,12 +9,13 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/$/, 
 export const API_ENABLED = API_BASE.length > 0;
 /** 'production' | 'development' | '' (demo) — shown as a small badge outside production. */
 export const APP_ENV = process.env.NEXT_PUBLIC_NEXUS_ENV || '';
-export type ApiUser = { id: number; email: string; username?: string | null; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean };
+export type ApiUser = { id: number; email: string; username?: string | null; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean;
+  /** 部门负责人 (only 张捷嘉): sees all teachers' 课时/津贴, reviews 绩效, assigns tasks. */ leader?: boolean };
 /** Ops teachers listed for 教务老师 pickers and name lookups. */
-export type StaffMember = { email: string; name: string; role: Role; active: boolean };
+export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
 /** Row of 系统管理 · 用户管理. */
-export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null };
-export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks';
+export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null; leader?: boolean };
+export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions';
 export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | 'posts' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }

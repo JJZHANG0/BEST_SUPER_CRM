@@ -79,7 +79,7 @@ function UsersTab() {
         <TableCell><span className="user-cell"><span className="avatar small-avatar">{u.name.slice(0, 1)}</span><strong className="cell-title">{u.name}</strong>{self && <Badge tone="neutral">我</Badge>}</span></TableCell>
         <TableCell>{u.username ? <strong>{u.username}</strong> : <span className="muted">—</span>}</TableCell>
         <TableCell className="mono">{u.email}</TableCell>
-        <TableCell><Badge tone={u.role === 'superadmin' ? 'violet' : u.role === 'sales' ? 'neutral' : 'green'}>{roleLabels[u.role] || u.role}</Badge></TableCell>
+        <TableCell><Badge tone={u.role === 'superadmin' ? 'violet' : u.role === 'sales' ? 'neutral' : 'green'}>{roleLabels[u.role] || u.role}</Badge>{u.leader && <Badge tone="orange">部门负责人</Badge>}</TableCell>
         <TableCell>{u.active ? (u.mustChangePassword ? <Badge tone="orange">待首次改密</Badge> : <Badge tone="green">已启用</Badge>) : <Badge tone="neutral">已停用</Badge>}</TableCell>
         <TableCell className="row-actions">
           <button className="icon-button" title="编辑" aria-label={`编辑${u.name}`} onClick={() => setEditing(u)}><Pencil size={15} /></button>

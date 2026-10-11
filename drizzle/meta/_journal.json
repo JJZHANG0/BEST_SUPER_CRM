@@ -43,6 +43,13 @@
       "when": 1791703476294,
       "tag": "0005_article_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791705351426,
+      "tag": "0006_leader_sessions_lesson_teacher",
+      "breakpoints": true
     }
   ]
 }

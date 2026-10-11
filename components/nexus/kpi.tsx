@@ -173,8 +173,8 @@ export function KpiReviewPage() {
   const [rows, setRows] = useState<KpiReviewRow[] | null>(null);
   const reload = useCallback(() => { setRows(null); s.kpi.reviewList(month).then(setRows); }, [month]); // eslint-disable-line react-hooks/exhaustive-deps
   // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch the review list for the selected month
-  useEffect(() => { if (canReviewKpi(s.role)) reload(); }, [reload, s.role]);
-  if (!canReviewKpi(s.role)) return <><PageTitle title="绩效考核" en="PERFORMANCE REVIEW" description="按月审核运营老师的绩效评分。" /><section className="glass panel"><EmptyState icon={Lock} title="仅绩效审核人可访问" description="绩效考核由超级管理员负责，如需权限请联系张捷嘉。" /></section></>;
+  useEffect(() => { if (canReviewKpi(s.viewer)) reload(); }, [reload, s.viewer]);
+  if (!canReviewKpi(s.viewer)) return <><PageTitle title="绩效考核" en="PERFORMANCE REVIEW" description="按月审核运营老师的绩效评分。" /><section className="glass panel"><EmptyState icon={Lock} title="仅部门负责人可访问" description="绩效考核由部门负责人（张捷嘉）负责；你可以在「待办事项 · 当月绩效」填写并提交自己的绩效。" /></section></>;
   const go = (m: string, u?: string) => s.go(`kpi-review?month=${m}${u ? '&user=' + encodeURIComponent(u) : ''}`);
   if (userKey) {
     const row = rows?.find(r => r.user.key === userKey);

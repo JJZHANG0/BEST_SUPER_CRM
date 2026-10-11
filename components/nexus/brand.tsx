@@ -73,3 +73,49 @@ export function BrandMark({ href, label, subtitle = true, className = '' }: Prop
     ? <a ref={ref as React.Ref<HTMLAnchorElement>} href={href} {...common}>{body}{bunny}</a>
     : <div ref={ref as React.Ref<HTMLDivElement>} tabIndex={0} role="img" {...common}>{body}{bunny}</div>;
 }
+
+export const HUSKY_WEBP = assetUrl('brand/husky.webp');
+export const HUSKY_PNG = assetUrl('brand/husky.png');
+
+/**
+ * 「领导万岁」 label: on hover / focus the characters dissolve (same scatter as the B.E.S.T wordmark) and a
+ * husky pops up above the label, then wobbles left-right twice. Portalled + fixed so tab bars and glass
+ * panels never clip it; pointer-events: none so it never steals the hover. Reduced motion: fade only.
+ */
+export function HuskyLabel({ text, hostRef }: { text: string; hostRef: React.RefObject<HTMLElement | null> }) {
+  preload(HUSKY_WEBP, { as: 'image', type: 'image/webp', fetchPriority: 'low' });
+  const [active, setActive] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const place = useCallback(() => {
+    const el = hostRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const h = Math.round(Math.min(170, Math.max(120, window.innerHeight * 0.2)));
+    // Paws rest on the label's top edge; keep the ears inside the viewport.
+    setPos({ x: r.left + r.width / 2, y: Math.max(r.top + 12, h + 8), h });
+  }, [hostRef]);
+  useEffect(() => {
+    const el = hostRef.current; if (!el) return;
+    const on = () => { place(); setActive(true); }, off = () => setActive(false);
+    el.addEventListener('pointerenter', on); el.addEventListener('pointerleave', off);
+    el.addEventListener('focus', on); el.addEventListener('blur', off);
+    return () => { el.removeEventListener('pointerenter', on); el.removeEventListener('pointerleave', off); el.removeEventListener('focus', on); el.removeEventListener('blur', off); };
+  }, [hostRef, place]);
+  useEffect(() => {
+    if (!active) return;
+    window.addEventListener('scroll', place, true); window.addEventListener('resize', place);
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+  }, [active, place]);
+  return <span className="husky-label" data-active={active || undefined}>
+    <span className="husky-text" aria-hidden="true">{text.split('').map((ch, i) => {
+      const [dx, dy, rot] = SCATTER[(i + 2) % SCATTER.length];
+      return <span key={i} style={{ '--i': i, '--dx': `${dx}px`, '--dy': `${dy}px`, '--rot': `${rot}deg` } as CSSProperties}>{ch}</span>;
+    })}</span>
+    <span className="sr-only">{text}</span>
+    {mounted && createPortal(
+      <div className="husky-pop" aria-hidden="true" data-active={active || undefined}
+        style={pos ? { left: pos.x, top: pos.y, '--husky-h': `${pos.h}px` } as CSSProperties : undefined}>
+        <div className="husky-wobble"><picture><source srcSet={HUSKY_WEBP} type="image/webp" /><img src={HUSKY_PNG} alt="" draggable={false} decoding="async" /></picture></div>
+      </div>, document.body)}
+  </span>;
+}

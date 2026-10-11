@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2 } from 'lucide-react';
+import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2, Crown } from 'lucide-react';
+import { HuskyLabel } from './brand';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
-import { openTodos, groupDoneByMonth, formatDue, ownedBy, assignedByKey, assignmentStats, exportDoneText, monthKeyLabel, isDone, type Todo } from '@/lib/nexus/todos';
+import { openTodos, groupDoneByMonth, formatDue, ownedBy, assignedByKey, assignedToKey, assignmentStats, exportDoneText, monthKeyLabel, isDone, CAPITALIST_TAG, type Todo } from '@/lib/nexus/todos';
 import { SectionTitle, PageTitle, FormField, EmptyState, Picker } from './ui';
 import { today as todayIso, currentMonth } from '@/lib/nexus/ops';
-import { canAssignTodos } from '@/lib/nexus/roles';
+import { canAssignTodos, canFillKpi } from '@/lib/nexus/roles';
 import { copyText } from '@/lib/nexus/clipboard';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -85,7 +86,7 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
         {mode === 'open' ? <Circle size={18} /> : <Check size={18} />}
       </button>
       <div className="todo-main">
-        <strong>{todo.title}{assignedToMe && <span className="todo-assigned-chip" title="指派的任务"><UserRoundCheck size={11} aria-hidden="true" />由 {todo.assignedByName} 指派</span>}</strong>
+        <strong>{todo.title}{assignedToMe && <span className="todo-capitalist-tag" title={`由 ${todo.assignedByName} 指派 · ${formatDue(todo.createdAt)}`} aria-label={`${CAPITALIST_TAG}（由 ${todo.assignedByName} 指派）`}>{CAPITALIST_TAG}</span>}</strong>
         {(todo.note || todo.dueAt) && (
           <p className="todo-meta">
             {todo.dueAt && <span className={'todo-due' + (mode === 'open' && todo.dueAt.slice(0, 10) < todayIso() ? ' overdue' : '')} title="期望DDL"><CalendarDays size={12} aria-hidden="true" /><span>DDL {formatDue(todo.dueAt)}</span></span>}
@@ -142,7 +143,7 @@ export function ExportDoneDialog({ open, onClose, todos, initialMonth }: { open:
 function AssignDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useNexus();
   const me = String(s.user?.email || '').toLowerCase();
-  const people = s.staff.filter(u => u.active && u.email.toLowerCase() !== me).sort((a, b) => (a.role === 'ops' ? 0 : 1) - (b.role === 'ops' ? 0 : 1));
+  const people = s.staff.filter(u => u.active && !u.leader && u.email.toLowerCase() !== me).sort((a, b) => (a.role === 'ops' ? 0 : 1) - (b.role === 'ops' ? 0 : 1));
   const [assignee, setAssignee] = useState(people[0]?.email || '');
   const [title, setTitle] = useState(''), [note, setNote] = useState(''), [dueAt, setDueAt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -161,7 +162,7 @@ function AssignDialog({ open, onClose }: { open: boolean; onClose: () => void })
   };
   return <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
     <DialogTitle>指派任务</DialogTitle>
-    <DialogDescription>任务会出现在负责老师的待办列表中，并标注「由 {s.user?.name || '我'} 指派」；完成后你可以在「我指派的」中看到。</DialogDescription>
+    <DialogDescription>任务会直接出现在负责老师的待办列表中，并带上 {CAPITALIST_TAG} 标签（悬停可见指派人 {s.user?.name || '我'}）；完成后你可以在「我指派的」中看到。</DialogDescription>
     {!people.length ? <EmptyState icon={UserRoundCheck} title="还没有可指派的运营老师" description="先在系统管理中添加运营老师账号。" /> : <form className="form-stack" onSubmit={submit}>
       <FormField label="负责老师"><Picker label="负责老师" value={assignee} onChange={setAssignee} options={people.map(u => ({ value: u.email, label: u.name + (u.role === 'ops' ? '' : '（超级管理员）') }))} /></FormField>
       <FormField label="任务标题"><input autoFocus required maxLength={200} value={title} onChange={e => setTitle(e.target.value)} placeholder="例如：完成 BPA 香港站参赛学生出行信息核对" /></FormField>
@@ -231,6 +232,20 @@ function AssignedPanel() {
   </section>;
 }
 
+/** 「领导万岁」: tasks the 部门负责人 assigned to me (they also sit in my normal todo list with the tag). */
+function LeaderPanel({ list }: { list: Todo[] }) {
+  const open = openTodos(list), done = list.filter(isDone).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+  return <section className="glass panel" role="tabpanel" aria-label="领导万岁">
+    <p className="leader-tab-intro"><Crown size={15} />部门负责人指派给你的任务，已同步到你的待办，带 <b>{CAPITALIST_TAG}</b> 标签。</p>
+    <div className="results-meta">{open.length} 项进行中 · {done.length} 项已完成<span>按期望DDL排序</span></div>
+    <div className="todo-list">
+      {open.map(t => <TodoRow key={t.id} todo={t} mode="open" />)}
+      {done.map(t => <TodoRow key={t.id} todo={t} mode="done" />)}
+      {!list.length && <EmptyState icon={UserRoundCheck} title="领导暂时没有给你派活" description="部门负责人指派的任务会直接出现在你的待办里，也会汇总在这里。" />}
+    </div>
+  </section>;
+}
+
 /** Compact homepage card: open todos + add input. Checked items leave this list. */
 export function TodoHomeCard() {
   const s = useNexus();
@@ -259,15 +274,18 @@ export function TodoHomeCard() {
   );
 }
 
-type TodoTab = 'open' | 'done' | 'kpi' | 'assigned';
-const tabOf = (route: string): TodoTab => { const t = new URLSearchParams(route.split('?')[1] || '').get('tab'); return t === 'done' || t === 'kpi' || t === 'assigned' ? t : 'open'; };
+type TodoTab = 'open' | 'done' | 'kpi' | 'assigned' | 'leader';
+const tabOf = (route: string): TodoTab => { const t = new URLSearchParams(route.split('?')[1] || '').get('tab'); return t === 'done' || t === 'kpi' || t === 'assigned' || t === 'leader' ? t : 'open'; };
 
 /** 待办事项 with 「待办」/「已完成」/「当月绩效」(+「我指派的」 for superadmins) tabs (#/todos?tab=…). */
 export function TodosPage() {
   const s = useNexus();
-  const assigner = canAssignTodos(s.role);
+  const assigner = canAssignTodos(s.viewer), fillsKpi = canFillKpi(s.viewer);
   const routeTab = tabOf(s.route);
-  const tab: TodoTab = routeTab === 'assigned' && !assigner ? 'open' : routeTab;
+  // 部门负责人: 「我指派的」, no 当月绩效. Everyone else: 「领导万岁」 (tasks from the leader).
+  const tab: TodoTab = (routeTab === 'assigned' && !assigner) || (routeTab === 'leader' && assigner) || (routeTab === 'kpi' && !fillsKpi) ? 'open' : routeTab;
+  const leaderRef = useRef<HTMLButtonElement>(null);
+  const fromLeader = useMemo(() => assigner ? [] : assignedToKey(s.todos, s.meKey), [assigner, s.todos, s.meKey]);
   const own = useMemo(() => mine(s.todos, s.meKey), [s.todos, s.meKey]);
   const open = useMemo(() => openTodos(own), [own]);
   const groups = useMemo(() => groupDoneByMonth(own), [own]);
@@ -277,12 +295,13 @@ export function TodosPage() {
   const setTab = (t: TodoTab) => s.go(t === 'open' ? 'todos' : t === 'done' ? 'todos?tab=done' : 'todos?tab=' + t);
   return (
     <>
-      <PageTitle title="待办事项" en="TODOS" description="记录运营节奏；勾选完成即归档到「已完成」，按月回顾写周报与月报，月底填写当月绩效。" />
+      <PageTitle title="待办事项" en="TODOS" description={fillsKpi ? '记录运营节奏；勾选完成即归档到「已完成」，按月回顾写周报与月报，月底填写当月绩效。' : '记录运营节奏；在「我指派的」给老师派任务，绩效评分请到「绩效考核」。'} />
       <div className="admin-tabs todo-tabs" role="tablist" aria-label="待办分类">
         <button role="tab" aria-selected={tab === 'open'} className={tab === 'open' ? 'selected' : ''} onClick={() => setTab('open')}><ListTodo size={16} />待办<em>{open.length}</em></button>
         <button role="tab" aria-selected={tab === 'done'} className={tab === 'done' ? 'selected' : ''} onClick={() => setTab('done')}><Check size={16} />已完成<em>{done}</em></button>
-        <button role="tab" aria-selected={tab === 'kpi'} className={tab === 'kpi' ? 'selected' : ''} onClick={() => setTab('kpi')}><Target size={16} />当月绩效</button>
+        {fillsKpi && <button role="tab" aria-selected={tab === 'kpi'} className={tab === 'kpi' ? 'selected' : ''} onClick={() => setTab('kpi')}><Target size={16} />当月绩效</button>}
         {assigner && <button role="tab" aria-selected={tab === 'assigned'} className={tab === 'assigned' ? 'selected' : ''} onClick={() => setTab('assigned')}><Send size={16} />我指派的<em>{assignedOpen}</em></button>}
+        {!assigner && <button ref={leaderRef} role="tab" aria-selected={tab === 'leader'} className={'leader-tab' + (tab === 'leader' ? ' selected' : '')} onClick={() => setTab('leader')}><Crown size={16} /><HuskyLabel text="领导万岁" hostRef={leaderRef} /><em>{fromLeader.filter(t => !isDone(t)).length}</em></button>}
       </div>
       {tab === 'open' && (
         <section className="glass panel" role="tabpanel" aria-label="待办">
@@ -309,8 +328,9 @@ export function TodosPage() {
           {exporting && <ExportDoneDialog open={exporting} onClose={() => setExporting(false)} todos={own} initialMonth={currentMonth()} />}
         </div>
       )}
-      {tab === 'kpi' && <KpiSelfPanel />}
+      {tab === 'kpi' && fillsKpi && <KpiSelfPanel />}
       {tab === 'assigned' && assigner && <AssignedPanel />}
+      {tab === 'leader' && !assigner && <LeaderPanel list={fromLeader} />}
     </>
   );
 }

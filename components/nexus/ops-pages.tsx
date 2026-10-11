@@ -1,15 +1,18 @@
 'use client';
 /** 课时记录 (lesson hours + 教务津贴) and 课情反馈 (lesson feedback) for ops teachers. */
 import { useMemo, useState, type FormEvent } from 'react';
-import { Clock, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays } from 'lucide-react';
+import { Clock, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { TeacherPicker } from './teacher-picker';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
 import { useNexus } from '@/lib/nexus/store';
-import { canSeeAllLessons, canManageSystem } from '@/lib/nexus/roles';
+import { canSeeAllLessons, canManageSystem, type Viewer } from '@/lib/nexus/roles';
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
-  visibleLessons, monthAllowance, toCsv, newRecordId, type LessonRecord, type LessonFeedback, type OpsCourse,
+  visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback,
+  type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
 } from '@/lib/nexus/ops';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState } from './ui';
 
@@ -24,7 +27,7 @@ const confirmDelete = (what: string) => window.confirm(`确定删除这条${what
 /** Shared filter state + helpers for both pages. */
 function useOpsFilters() {
   const s = useNexus();
-  const all = canSeeAllLessons(s.role);
+  const all = canSeeAllLessons(s.viewer);
   const params = new URLSearchParams(s.route.split('?')[1]);
   const [month, setMonth] = useState(params.get('month') || currentMonth());
   const [project, setProject] = useState(ALL);
@@ -36,7 +39,7 @@ function useOpsFilters() {
     if (month && monthOf(r.date) !== month) return false;
     if (project !== ALL && c?.project !== project) return false;
     if (all && teacher !== ALL && r.opsTeacher.toLowerCase() !== teacher.toLowerCase()) return false;
-    const hay = ((c?.code || '') + (c?.name || '') + (c?.teacher || '')).toLowerCase();
+    const hay = ((c?.code || '') + (c?.name || '') + (c?.teacher || '') + ((r as { teacher?: string }).teacher || '')).toLowerCase();
     return !q.trim() || hay.includes(q.trim().toLowerCase());
   };
   const toolbar = (
@@ -44,15 +47,14 @@ function useOpsFilters() {
       <SearchBox value={q} onChange={setQ} placeholder="搜索课程编号、名称或授课老师" />
       <label className="month-field"><CalendarDays size={15} /><input type="month" aria-label="月份" value={month} onChange={e => setMonth(e.target.value)} /></label>
       <Picker label="项目" value={project} onChange={setProject} options={[{ value: ALL, label: '全部项目' }, ...s.projects.map(p => ({ value: p.id, label: p.code + ' ' + (p.name !== p.code ? p.name : '') }))]} />
-      {all && <Picker label="教务老师" value={teacher} onChange={setTeacher} options={[{ value: ALL, label: '全部教务老师' }, ...s.staff.map(u => ({ value: u.email, label: u.name }))]} />}
     </div>
   );
-  return { s, all, month, matches, toolbar, course };
+  return { s, all, month, matches, toolbar, course, teacher, setTeacher };
 }
 
 /** Courses the signed-in user may log against: own + unassigned (superadmin: all). */
-function loggableCourses(courses: OpsCourse[], role: unknown, email: string) {
-  if (canSeeAllLessons(role)) return courses;
+function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string) {
+  if (canSeeAllLessons(viewer)) return courses;
   const me = email.toLowerCase();
   return courses.filter(c => !c.opsTeacher || c.opsTeacher.toLowerCase() === me);
 }
@@ -68,14 +70,20 @@ function NoCourses() {
 function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; open: boolean; onClose: () => void }) {
   const s = useNexus();
   const me = s.user?.email || '';
-  const all = canSeeAllLessons(s.role);
-  const options = loggableCourses(s.opsCourses, s.role, me);
+  const all = canSeeAllLessons(s.viewer);
+  const options = loggableCourses(s.opsCourses, s.viewer, me);
+  const linked = record ? s.lessonFeedbacks.find(f => f.lesson === record.id) ?? null : null;
   const [courseId, setCourseId] = useState(record?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || today());
   const [hours, setHours] = useState(String(record?.hours ?? 2));
   const [students, setStudents] = useState(record?.students != null ? String(record.students) : '');
   const [ops, setOps] = useState(record?.opsTeacher || options[0]?.opsTeacher || me);
+  const [teacher, setTeacher] = useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : options[0]?.teacher || '');
   const [note, setNote] = useState(record?.note || '');
+  // 学情反馈 captured in the same form (creates / updates the linked 课情反馈).
+  const [withFb, setWithFb] = useState(!record || !!linked);
+  const [fb, setFb] = useState<FeedbackDraft>({ attendance: linked?.attendance || '', content: linked?.content || '', performance: linked?.performance || '', issues: linked?.issues || '', nextSteps: linked?.nextSteps || '' });
+  const setF = (k: keyof FeedbackDraft) => (e: { target: { value: string } }) => setFb(v => ({ ...v, [k]: e.target.value }));
   const course = s.opsCourses.find(c => c.id === courseId);
   const fresh = !record || record.course !== courseId;
   const type = s.classTypes.find(t => t.id === course?.classType);
@@ -88,54 +96,104 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     if (!(h > 0 && h <= 24)) return toast.error('课时需在 0–24 小时之间');
     if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写学生人数');
     const owner = all ? (ops || me) : me;
-    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, students: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me };
+    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, students: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim() };
+    const r = lessonWithFeedback({ lesson: rec, feedback: { ...fb, attendance: fb.attendance || (n ? `${n} 人到课` : '') }, withFeedback: withFb, existing: linked, newId: () => newRecordId('LF') });
+    if (r.issue) return toast.error(r.issue);
     s.setLessons(l => record ? l.map(x => x.id === rec.id ? rec : x) : [rec, ...l]);
-    s.log((record ? '修改课时记录：' : '记录课时：') + course.code + ' ' + date);
-    toast.success(record ? '课时记录已更新' : `已记录课时，津贴 ${money2(amount)}`);
+    if (r.feedback) { const f = r.feedback; s.setLessonFeedbacks(l => l.some(x => x.id === f.id) ? l.map(x => x.id === f.id ? f : x) : [f, ...l]); }
+    s.log((record ? '修改课时记录：' : '记录课时：') + course.code + ' ' + date + (r.feedback ? '（含学情反馈）' : ''));
+    toast.success(record ? '课时记录已更新' : `已记录课时，津贴 ${money2(amount)}${r.feedback ? '，学情反馈已同步到课情反馈' : ''}`);
     onClose();
   };
-  return <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
+  return <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog wide lesson-dialog">
     <DialogTitle>{record ? '编辑课时记录' : '记录课时'}</DialogTitle>
-    <DialogDescription>津贴按课程的班级类型自动计算，记录时锁定当时的津贴标准。</DialogDescription>
+    <DialogDescription>津贴按课程的班级类型自动计算，记录时锁定当时的津贴标准；下方的学情反馈会自动生成关联的课情反馈。</DialogDescription>
     {!options.length ? <NoCourses /> : <form className="form-stack" onSubmit={submit}>
-      <FormField label="课程"><Picker label="课程" value={courseId} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); }} options={options.map(c => ({ value: c.id, label: courseLabel(c) }))} /></FormField>
-      <div className="form-columns">
+      <FormField label="课程"><Picker label="课程" value={courseId} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} options={options.map(c => ({ value: c.id, label: courseLabel(c) }))} /></FormField>
+      <div className="form-columns three">
         <FormField label="上课日期"><input type="date" required value={date} onChange={e => setDate(e.target.value)} /></FormField>
         <FormField label="课时（小时）"><input type="number" required min="0.25" max="24" step="0.25" value={hours} onChange={e => setHours(e.target.value)} /></FormField>
+        <FormField label={needsStudents(unit) ? '学生人数（按人计费，必填）' : '学生人数（可选）'}><input type="number" min="0" max="1000" step="1" value={students} required={needsStudents(unit)} onChange={e => setStudents(e.target.value)} placeholder="例如 6" /></FormField>
       </div>
       <div className="form-columns">
-        <FormField label={needsStudents(unit) ? '学生人数（按人计费，必填）' : '学生人数（可选）'}><input type="number" min="0" max="1000" step="1" value={students} required={needsStudents(unit)} onChange={e => setStudents(e.target.value)} placeholder="例如 6" /></FormField>
+        <FormField label="授课老师（默认取课程的授课老师）"><TeacherPicker value={teacher} onChange={setTeacher} /></FormField>
         <FormField label="教务老师">{all ? <Picker label="教务老师" value={ops} onChange={setOps} options={s.staff.filter(u => u.active || u.email === ops).map(u => ({ value: u.email, label: u.name }))} /> : <input value={s.staffName(me)} disabled />}</FormField>
       </div>
-      <FormField label="备注（可选）"><textarea rows={2} maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="例如：补课、调课说明" /></FormField>
+      <FormField label="备注（可选）"><input maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="例如：补课、调课说明" /></FormField>
       <div className="allowance-preview" aria-live="polite">
         <span>{type ? `${type.name} · ¥${rate} ${unitLabel(unit)}` : '未选择课程'}</span>
         <span>{unit === 'person_hour' ? `¥${rate} × ${n || 0} 人 × ${h || 0} 小时` : unit === 'session' ? `¥${rate} × 1 次` : `¥${rate} × ${h || 0} 小时`}</span>
         <b>{money2(amount)}</b>
       </div>
-      <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">{record ? '保存修改' : '保存课时'}</button></div>
+      <fieldset className={'lesson-fb' + (withFb ? '' : ' off')}>
+        <legend><label className="checkbox-label"><Checkbox checked={withFb} onCheckedChange={v => setWithFb(v === true)} /><span><MessageSquareText size={15} />同时记录学情反馈{linked ? '（已关联，保存时一并更新）' : '（自动生成课情反馈）'}</span></label></legend>
+        {withFb && <>
+          <div className="form-columns">
+            <FormField label="到课情况"><input maxLength={200} value={fb.attendance} onChange={setF('attendance')} placeholder={n ? `${n} 人到课（默认）` : '例如：6/6 全勤；李同学请假'} /></FormField>
+            <FormField label="本次课程内容"><input maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" /></FormField>
+          </div>
+          <FormField label="学生表现"><textarea rows={2} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" /></FormField>
+          <div className="form-columns">
+            <FormField label="问题与风险"><textarea rows={2} maxLength={4000} value={fb.issues} onChange={setF('issues')} placeholder="需要协调或关注的问题" /></FormField>
+            <FormField label="下一步安排"><textarea rows={2} maxLength={2000} value={fb.nextSteps} onChange={setF('nextSteps')} placeholder="下次课前要完成的事项" /></FormField>
+          </div>
+        </>}
+      </fieldset>
+      <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">{record ? '保存修改' : withFb && fb.content.trim() ? '保存课时与反馈' : '保存课时'}</button></div>
     </form>}
   </DialogContent></Dialog>;
 }
 
+/** Per-person tabs for the 部门负责人: 全部 + every ops teacher (with their counts for the month). */
+function PersonTabs({ value, onChange, counts }: { value: string; onChange: (v: string) => void; counts: Map<string, number> }) {
+  const s = useNexus();
+  const people = s.staff.filter(u => (u.active && !u.leader) || counts.get(u.email.toLowerCase()));
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  return <div className="admin-tabs person-tabs" role="tablist" aria-label="按老师查看">
+    <button role="tab" aria-selected={value === ALL} className={value === ALL ? 'selected' : ''} onClick={() => onChange(ALL)}><Users size={15} />全部老师<em>{total}</em></button>
+    {people.map(u => <button key={u.email} role="tab" aria-selected={value === u.email} className={value === u.email ? 'selected' : ''} onClick={() => onChange(u.email)}><span className="avatar tiny-avatar" aria-hidden="true">{u.name.slice(0, 1)}</span>{u.name}<em>{counts.get(u.email.toLowerCase()) || 0}</em></button>)}
+  </div>;
+}
+
+/** 授课老师 hours for the selected month (within the records this viewer may see). */
+function TeacherHours({ rows, month }: { rows: LessonRecord[]; month: string }) {
+  const s = useNexus();
+  const list = hoursByLessonTeacher(rows, s.opsCourses, month);
+  if (!list.length) return null;
+  const max = Math.max(...list.map(x => x.hours));
+  return <div className="teacher-hours" aria-label="授课老师课时">
+    <div className="teacher-hours-head"><GraduationCap size={15} /><strong>{month ? monthLabel(month) : '全部月份'} · 授课老师课时</strong><small>{list.length} 位老师 · 共 {Math.round(list.reduce((n, x) => n + x.hours, 0) * 100) / 100} 小时</small></div>
+    <div className="teacher-hours-list">{list.map(t => <div key={t.teacher} className="teacher-hour-chip" title={`${t.teacher}：${t.count} 节 · ${t.hours} 小时`}>
+      <span className="th-name">{t.teacher}</span><b>{t.hours}<small> 小时</small></b><small className="th-count">{t.count} 节</small>
+      <i style={{ width: `${Math.max(6, (t.hours / max) * 100)}%` }} aria-hidden="true" />
+    </div>)}</div>
+  </div>;
+}
+
 export function LessonsPage() {
-  const { s, all, month, matches, toolbar, course } = useOpsFilters();
+  const { s, all, month, matches, toolbar, course, teacher, setTeacher } = useOpsFilters();
   const [editing, setEditing] = useState<LessonRecord | null>(null);
   const [open, setOpen] = useState(new URLSearchParams(s.route.split('?')[1]).has('new'));
   const me = s.user?.email || '';
-  const rows = useMemo(() => visibleLessons(s.lessons, s.role, me).filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [s.lessons, s.role, me, matches]);
+  const visible = useMemo(() => visibleLessons(s.lessons, s.viewer, me), [s.lessons, s.viewer, me]);
+  // Leader tabs count the month's records per 教务老师 (before the person filter).
+  const counts = useMemo(() => { const m = new Map<string, number>(); for (const r of visible) if (!month || monthOf(r.date) === month) m.set(r.opsTeacher.toLowerCase(), (m.get(r.opsTeacher.toLowerCase()) || 0) + 1); return m; }, [visible, month]);
+  const rows = useMemo(() => visible.filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [visible, matches]);
   const total = rows.reduce((n, r) => n + r.amount, 0), hours = rows.reduce((n, r) => n + r.hours, 0);
   const summary = summarizeByTeacher(rows);
   const typeName = (c?: OpsCourse) => s.classTypes.find(t => t.id === c?.classType)?.name || '—';
+  const person = all && teacher !== ALL ? s.staffName(teacher) : '';
   const exportCsv = () => {
-    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '学生人数', '津贴标准', '津贴(元)', '教务老师', '备注'];
-    download(`课时记录-${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.students ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, s.staffName(r.opsTeacher), r.note]; })]));
+    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '学生人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注'];
+    download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.students ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note]; })]));
   };
   const remove = async (r: LessonRecord) => { if (!confirmDelete('课时记录')) return; if (await s.removeRecord('lessons', r.id)) { s.setLessonFeedbacks(l => l.map(f => f.lesson === r.id ? { ...f, lesson: null } : f)); toast.success('已删除'); } };
+  const hasFb = (r: LessonRecord) => s.lessonFeedbacks.some(f => f.lesson === r.id);
   return <>
-    <PageTitle title="课时记录" en="LESSON HOURS" description={all ? '查看全部教务老师的课时与当月教务津贴，按月份、项目与老师筛选。' : '记录你负责课程的课时，津贴按班级类型自动计算。'} action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />
+    <PageTitle title="课时记录" en="LESSON HOURS" description={all ? '部门负责人：按老师分开查看每个人的课时与当月教务津贴，可按月份、项目筛选。' : '记录你负责课程的课时与学情反馈，津贴按班级类型自动计算；只有你和部门负责人能看到你的记录。'} action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />
+    {all && <PersonTabs value={teacher} onChange={setTeacher} counts={counts} />}
     <div className="mini-stats ops-stats">
-      <div className="glass"><span>{month ? monthLabel(month) : '全部月份'} · 津贴合计</span><b>{money2(total)}</b></div>
+      <div className="glass"><span>{month ? monthLabel(month) : '全部月份'} · {person ? person + ' · ' : all ? '全部老师 · ' : '我的'}津贴合计</span><b>{money2(total)}</b></div>
       <div className="glass"><span>课时合计</span><b>{Math.round(hours * 100) / 100}<small> 小时</small></b></div>
       <div className="glass"><span>记录条数</span><b>{rows.length}<small> 条</small></b></div>
       <div className="glass"><span>涉及课程</span><b>{new Set(rows.map(r => r.course)).size}<small> 门</small></b></div>
@@ -143,9 +201,10 @@ export function LessonsPage() {
     <section className="glass panel">
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
-        {all && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <div key={t.opsTeacher}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></div>)}</div>}
-        <div className="results-meta">{rows.length} 条记录<span>{all ? '超级管理员可查看全部老师' : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
-        {rows.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '人数', '津贴标准', '津贴', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
+        <TeacherHours rows={rows} month={month} />
+        {all && teacher === ALL && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <button type="button" key={t.opsTeacher} onClick={() => setTeacher(s.staff.find(u => u.email.toLowerCase() === t.opsTeacher.toLowerCase())?.email || t.opsTeacher)} title={'只看 ' + s.staffName(t.opsTeacher)}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></button>)}</div>}
+        <div className="results-meta">{rows.length} 条记录<span>{all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
+        {rows.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '人数', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{rows.map(r => { const c = course(r.course); return <TableRow key={r.id}>
             <TableCell className="nowrap">{r.date}</TableCell>
             <TableCell><strong className="cell-title">{c?.name || '已删除的课程'}</strong><small className="cell-sub">{c?.code}</small></TableCell>
@@ -154,14 +213,15 @@ export function LessonsPage() {
             <TableCell className="num">{r.students ?? '—'}</TableCell>
             <TableCell className="nowrap">¥{r.rate} {unitLabel(r.unit)}</TableCell>
             <TableCell className="num"><b>{money2(r.amount)}</b></TableCell>
-            <TableCell>{s.staffName(r.opsTeacher)}</TableCell>
+            <TableCell className="nowrap">{lessonTeacher(r, s.opsCourses)}</TableCell>
+            <TableCell className="nowrap">{s.staffName(r.opsTeacher)}</TableCell>
             <TableCell className="row-actions">
-              <button className="icon-button" aria-label="写课情反馈" title="写课情反馈" onClick={() => s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={15} /></button>
+              <button className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} title={hasFb(r) ? '已有学情反馈' : '写课情反馈'} onClick={() => hasFb(r) ? (setEditing(r), setOpen(true)) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={15} /></button>
               <button className="icon-button" aria-label="编辑" title="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={15} /></button>
               <button className="icon-button" aria-label="删除" title="删除" onClick={() => remove(r)}><Trash2 size={15} /></button>
             </TableCell>
           </TableRow>; })}</TableBody></Table></div>
-          : <EmptyState icon={Clock} title={month ? `${monthLabel(month)}还没有课时记录` : '还没有课时记录'} description="每上完一节课记录一次，月底即可直接核对教务津贴。" action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />}
+          : <EmptyState icon={Clock} title={month ? `${monthLabel(month)}${person ? ' · ' + person : ''}还没有课时记录` : '还没有课时记录'} description="每上完一节课记录一次（可同时填写学情反馈），月底即可直接核对教务津贴。" action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />}
       </>}
     </section>
     {open && <LessonDialog key={editing?.id || 'new'} record={editing} open={open} onClose={() => { setOpen(false); setEditing(null); if (s.route.includes('new')) s.go('lessons'); }} />}
@@ -171,8 +231,8 @@ export function LessonsPage() {
 function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFeedback | null; lessonId?: string | null; open: boolean; onClose: () => void }) {
   const s = useNexus();
   const me = s.user?.email || '';
-  const all = canSeeAllLessons(s.role);
-  const options = loggableCourses(s.opsCourses, s.role, me);
+  const all = canSeeAllLessons(s.viewer);
+  const options = loggableCourses(s.opsCourses, s.viewer, me);
   const fromLesson = lessonId ? s.lessons.find(l => l.id === lessonId) : undefined;
   const [courseId, setCourseId] = useState(record?.course || fromLesson?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || fromLesson?.date || today());
@@ -183,7 +243,7 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
   const [issues, setIssues] = useState(record?.issues || '');
   const [nextSteps, setNextSteps] = useState(record?.nextSteps || '');
   const [ops, setOps] = useState(record?.opsTeacher || fromLesson?.opsTeacher || me);
-  const lessonOptions = visibleLessons(s.lessons, s.role, me).filter(l => l.course === courseId).sort((a, b) => b.date.localeCompare(a.date));
+  const lessonOptions = visibleLessons(s.lessons, s.viewer, me).filter(l => l.course === courseId).sort((a, b) => b.date.localeCompare(a.date));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!courseId) return toast.error('请选择课程');
@@ -219,17 +279,18 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
 }
 
 export function LessonFeedbackPage() {
-  const { s, all, month, matches, toolbar, course } = useOpsFilters();
+  const { s, all, month, matches, toolbar, course, teacher, setTeacher } = useOpsFilters();
   const params = new URLSearchParams(s.route.split('?')[1]);
   const [editing, setEditing] = useState<LessonFeedback | null>(null);
   const [open, setOpen] = useState(params.has('new'));
   const [lessonId] = useState(params.get('lesson'));
   const me = s.user?.email || '';
-  const rows = useMemo(() => visibleLessons(s.lessonFeedbacks, s.role, me).filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [s.lessonFeedbacks, s.role, me, matches]);
+  const rows = useMemo(() => visibleLessons(s.lessonFeedbacks, s.viewer, me).filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [s.lessonFeedbacks, s.viewer, me, matches]);
   const remove = async (f: LessonFeedback) => { if (!confirmDelete('课情反馈')) return; if (await s.removeRecord('lessonFeedbacks', f.id)) toast.success('已删除'); };
   const close = () => { setOpen(false); setEditing(null); if (s.route.includes('new')) s.go('lesson-feedback'); };
   return <>
-    <PageTitle title="课情反馈" en="LESSON FEEDBACK" description={all ? '全部教务老师的课情反馈，按月份、项目与老师筛选。' : '每节课后记录到课、内容与学生表现，方便跟进与复盘。'} action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />
+    <PageTitle title="课情反馈" en="LESSON FEEDBACK" description={all ? '部门负责人：按老师查看全部课情反馈，按月份与项目筛选。' : '每节课后记录到课、内容与学生表现（记录课时时也可一并填写）；只有你和部门负责人能看到。'} action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />
+    {all && <PersonTabs value={teacher} onChange={setTeacher} counts={new Map(s.staff.map(u => [u.email.toLowerCase(), visibleLessons(s.lessonFeedbacks, s.viewer, me).filter(f => f.opsTeacher.toLowerCase() === u.email.toLowerCase() && (!month || monthOf(f.date) === month)).length]))} />}
     <section className="glass panel">
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
@@ -248,9 +309,13 @@ export function LessonFeedbackPage() {
   </>;
 }
 
-/** 当月教务津贴 for the signed-in teacher (dashboard KPI). */
+/** 当月教务津贴 for the dashboard KPI: own records; the 部门负责人 sees the whole team's total. */
 export function useMonthAllowance() {
   const s = useNexus();
   const month = currentMonth();
-  return { month, ...monthAllowance(s.lessons, s.user?.email || '', month) };
+  if (canSeeAllLessons(s.viewer)) {
+    const list = s.lessons.filter(r => monthOf(r.date) === month);
+    return { month, team: true, amount: Math.round(list.reduce((n, r) => n + r.amount, 0) * 100) / 100, hours: Math.round(list.reduce((n, r) => n + r.hours, 0) * 100) / 100, count: list.length };
+  }
+  return { month, team: false, ...monthAllowance(s.lessons, s.user?.email || '', month) };
 }
