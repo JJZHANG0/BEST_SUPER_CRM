@@ -3,7 +3,8 @@ import "./globals.css";
 import { assetUrl } from "@/lib/nexus/assets";
 
 export const metadata: Metadata = {
-  title: "PROJECT NEXUS · 创新项目协同管理平台",
+  title: "B.E.S.T · 内部超级管理系统",
+  applicationName: "B.E.S.T",
   description: "连接教育创新项目、学生与教学团队的协同工作空间。",
   manifest: assetUrl("manifest.webmanifest"),
   icons: {

@@ -16,4 +16,9 @@ assert.equal(manifest.start_url,prefix+'/');assert.equal(manifest.icons[0].src,p
 for(const p of ['bpa','ctb','conrad','prime','ihosa','mvp','winter','summer']){assert(existsSync(`out/materials/poster-${p}.svg`));assert(existsSync(`out/materials/cover-${p}.svg`),`Missing article cover for ${p}`)}
 for(const s of ['workshop','research','showcase'])assert(existsSync(`out/materials/scene-${s}.svg`),`Missing article illustration ${s}`);
 assert(existsSync('out/materials/R1.pdf'));
+for(const f of ['bunny.webp','bunny.png'])assert(existsSync(`out/brand/${f}`),`Missing brand asset ${f}`);
+assert(html.includes(prefix+'/brand/bunny.webp'),'Bunny easter-egg image is preloaded under the Pages base');
+assert(html.includes('B.E.S.T · 内部超级管理系统'));
+assert.equal(manifest.short_name,'B.E.S.T');
+
 console.log('Static HTML, repository asset base, manifest, eight posters, article covers/illustrations and PDF references passed.');

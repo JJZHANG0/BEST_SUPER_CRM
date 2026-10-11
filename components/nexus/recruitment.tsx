@@ -115,6 +115,6 @@ export default function SalesHome() {
   return <><div className="welcome sales-welcome"><div><div className="eyebrow">SALES WORKSPACE</div><h1>{greeting()}，{s.user?.name||'Alex'} <span className="hello-spark">✧</span></h1></div><Badge tone="neutral">销售工作台</Badge></div>
     <div className="stats-grid sales-stats">{[{label:'项目库',value:s.programs.length,unit:'个',icon:FolderOpen,to:'programs'},{label:'我的学生',value:v.students.length,unit:'位',icon:ClipboardList,to:'students'},{label:'我的当前营收',value:revenueText,unit:'',icon:CircleDollarSign,to:'students'},{label:'进行中学生',value:activeStudents,unit:'位',icon:UserRoundCheck,to:'students'}].map(x=><button key={x.label} className="glass stat-card" onClick={()=>s.go(x.to)}><div className="stat-top"><span>{x.label}</span><span className="stat-icon violet"><x.icon size={16}/></span></div><div className="stat-value">{x.value}<span>{x.unit}</span></div><div className="stat-foot">查看详情<ChevronRight size={13}/></div></button>)}</div>
     <SalesPipeline/>
-    <footer className="page-footer"><span>PROJECT NEXUS · Innovation, connected.</span><span>{s.apiMode?'实时数据':'预览站 · 数据保存在本浏览器'}</span></footer>
+    <footer className="page-footer"><span>B.E.S.T · Innovation, connected.</span><span>{s.apiMode?'实时数据':'预览站 · 数据保存在本浏览器'}</span></footer>
   </>;
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { KeyRound, LogOut, Hexagon } from 'lucide-react';
+import { KeyRound, LogOut } from 'lucide-react';
+import { BrandMark } from '@/components/nexus/brand';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
 import { passwordIssues } from '@/lib/nexus/roles';
@@ -38,7 +39,7 @@ export function PasswordGate() {
   const s = useNexus();
   return <main className="password-gate">
     <section className="glass panel">
-      <div className="brand"><span className="brand-icon"><Hexagon size={22} /></span><div>PROJECT <b>NEXUS</b></div></div>
+      <BrandMark />
       <div className="password-gate-head"><span className="empty-state-icon"><KeyRound size={22} /></span><div><h1>请先修改初始密码</h1><p>{s.user?.name}，欢迎加入。初始密码由管理员发放，为了账号安全，请设置只有你知道的新密码。</p></div></div>
       <ChangePasswordForm />
       <button className="text-button" onClick={() => { s.logout(); s.go('login'); }}><LogOut size={15} />退出登录</button>

@@ -1,4 +1,4 @@
-name: Deploy PROJECT NEXUS to GitHub Pages
+name: Deploy B.E.S.T to GitHub Pages
 on:
   push:
     branches: [main]

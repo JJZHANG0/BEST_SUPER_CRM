@@ -2,6 +2,7 @@
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, UserRound, Sparkles, UsersRound, Layers3} from 'lucide-react';
 import {useNexus} from '@/lib/nexus/store';
+import {BrandMark} from '@/components/nexus/brand';
 import {salesDemo} from '@/lib/nexus/auth';
 const workspaces=[{role:'sales',label:'销售顾问'},{role:'ops',label:'运营老师'}] as const;
 
@@ -20,7 +21,7 @@ export default function Login() {
   };
   return <main className="access-page">
     <div className="access-aura" aria-hidden="true"/>
-    <header className="access-header"><a className="access-brand" href="#/login" aria-label="PROJECT NEXUS 登录页"><span><Hexagon size={24}/></span><div>PROJECT <b>NEXUS</b></div></a><span className="access-internal"><LockKeyhole size={14}/>内部协作空间</span></header>
+    <header className="access-header"><BrandMark href="#/login" className="access-brand" label="B.E.S.T 内部超级管理系统 · 登录页"/><span className="access-internal"><LockKeyhole size={14}/>内部协作空间</span></header>
     <div className="access-layout">
       <section className="access-story" aria-label="平台介绍">
         <div className="access-kicker"><span/> CONNECT PEOPLE. INSPIRE POSSIBILITIES.</div>
@@ -56,6 +57,6 @@ export default function Login() {
         {!s.apiMode&&<p className="access-demo-note">当前为预览站：数据只保存在本浏览器，不与他人同步。</p>}
       </section>
     </div>
-    <footer className="access-footer"><span>© 2026 PROJECT NEXUS</span><span>Innovation, connected.<i/>教育创新 · 协作共生</span></footer>
+    <footer className="access-footer"><span>© 2026 B.E.S.T</span><span>Innovation, connected.<i/>教育创新 · 协作共生</span></footer>
   </main>;
 }

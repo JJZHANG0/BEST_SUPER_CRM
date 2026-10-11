@@ -1,4 +1,4 @@
-# BEST_SUPER_CRM · PROJECT NEXUS
+# BEST_SUPER_CRM · B.E.S.T 内部超级管理系统
 
 教育创新项目 CRM 前端 V1.1。React 19 + TypeScript + Vinext（Next.js API）+ Tailwind 4 + shadcn/Radix，统一 Crystal Purple / Liquid Glass 设计。
 

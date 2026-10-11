@@ -894,3 +894,32 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .todo-tabs{margin-bottom:16px}
 .todo-tabs button em{font-style:normal;font-size:.6875rem;margin-left:6px;padding:0 6px;border-radius:999px;background:#0000000d}
 @media(max-width:600px){.todo-add-row{flex-wrap:wrap}.todo-add-row>input{flex-basis:100%}.todo-ddl{flex:1}.todo-ddl>input{width:100%}}
+
+/* ---------- B.E.S.T wordmark + bunny easter egg (components/nexus/brand.tsx) ---------- */
+.best-brand{--best-ink:#2a2140;--best-accent:#8756db;--best-ease:cubic-bezier(.2,.7,.2,1);position:relative;display:flex;align-items:center;gap:10px;color:var(--best-ink);text-decoration:none;cursor:default;border-radius:12px;outline:none;-webkit-tap-highlight-color:transparent}
+html[data-workspace=sales] .best-brand{--best-accent:var(--nx-blue)}
+.best-brand:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--best-accent) 35%,transparent)}
+a.best-brand{cursor:pointer}
+.best-brand .best-word{display:flex;flex-direction:column;gap:3px;min-width:0}
+.best-brand .best-wordmark{display:flex;align-items:baseline;font-size:1.5rem;font-weight:800;line-height:1.05;letter-spacing:.07em;font-feature-settings:"ss01","cv11"}
+.best-brand .best-wordmark span{display:inline-block;background:linear-gradient(160deg,var(--best-ink) 30%,color-mix(in srgb,var(--best-accent) 78%,var(--best-ink)));-webkit-background-clip:text;background-clip:text;color:transparent;transition:opacity .48s var(--best-ease),filter .48s var(--best-ease),transform .52s var(--best-ease);transition-delay:calc(var(--i)*28ms);will-change:transform,opacity,filter}
+.best-brand .best-wordmark .dot{background:none;color:var(--best-accent);margin:0 .015em}
+.best-brand small{display:block;font-size:.625rem;font-weight:500;letter-spacing:.34em;color:#8a829b;white-space:nowrap;transition:opacity .42s var(--best-ease) .1s,filter .42s var(--best-ease) .1s,transform .42s var(--best-ease) .1s}
+.best-brand .best-mono{display:none;place-items:center;width:40px;height:40px;flex:none;border-radius:12px;color:#fff;font-size:1.125rem;font-weight:800;letter-spacing:0;background:linear-gradient(145deg,#a47ff0,#7647d1);box-shadow:0 3px 9px #9c77dd33;transition:opacity .4s var(--best-ease),filter .4s var(--best-ease),transform .45s var(--best-ease)}
+html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-shadow:none}
+.nexus-sidebar[data-collapsible=icon] .best-brand .best-mono{display:grid}
+@media(min-width:768px) and (max-width:1100px){.nexus-sidebar .best-brand .best-mono{display:grid}}
+.nexus-sidebar .best-brand{padding:2px 4px}
+.access-brand.best-brand .best-wordmark{font-size:1.375rem}
+/* Dissolve: letters scatter, blur and fade, staggered left-to-right. */
+.best-brand[data-active] .best-wordmark span{opacity:0;filter:blur(7px);transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.55)}
+.best-brand[data-active] small{opacity:0;filter:blur(4px);transform:translateY(5px);transition-delay:0s}
+.best-brand[data-active] .best-mono{opacity:0;filter:blur(6px);transform:scale(.7)}
+/* Bunny: fixed + portalled to <body>, so it is never clipped and never moves layout. */
+.best-bunny{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;height:var(--bunny-h,190px);aspect-ratio:542/640;translate:-50% -100%;transform-origin:50% 100%;opacity:0;scale:.2;rotate:-10deg;transition:opacity .22s ease .06s,scale .34s cubic-bezier(.5,0,.75,0),rotate .34s ease-in}
+.best-bunny img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 18px rgb(58 34 104 / .22)) drop-shadow(0 2px 4px rgb(58 34 104 / .12));user-select:none}
+.best-bunny[data-active]{opacity:1;scale:1;rotate:0deg;transition:opacity .2s ease .1s,scale .62s cubic-bezier(.34,1.56,.64,1) .1s,rotate .7s cubic-bezier(.34,1.8,.5,1) .1s}
+@media(prefers-reduced-motion:reduce){
+  .best-brand .best-wordmark span,.best-brand small,.best-brand .best-mono{transition:opacity .2s linear!important;transform:none!important;filter:none!important}
+  .best-bunny,.best-bunny[data-active]{scale:1;rotate:0deg;transition:opacity .2s linear!important}
+}

@@ -44,6 +44,6 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
         <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>
       <div className="workspace-note dg-note"><Sparkles size={22} /><div><strong>让创新，发生在每一天。</strong><p>连接学生、老师与每一种可能。</p></div></div>
     </div>
-    <footer className="page-footer"><span>PROJECT NEXUS <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
+    <footer className="page-footer"><span>B.E.S.T <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
   </>;
 }
