@@ -203,30 +203,32 @@ export function PixelChase({ className = '' }: { className?: string }) {
       ctx.fillRect(x, y, 1.5, 1.5);
     }
 
-    // High-res: ~1–2 CSS px per texel. Sprites are ~14–18px tall in texel space.
+    // High-res: lock texels to ~1–2 CSS px (detailed pixel art, not chunky upscale).
     const spriteH = 14;
-    // Cap scale so texels stay fine; prefer 1.5–2.5 px.
-    const scale = Math.max(1.5, Math.min(2.5, (cssH * 0.42) / spriteH));
-    const ground = Math.max(8, cssH - 14 - spriteH * scale);
+    const scale = Math.max(1, Math.min(1.5, Math.round(((Math.min(cssH, 180) * 0.32) / spriteH) * 2) / 2));
+    const ground = Math.max(12, Math.min(cssH - 18 - spriteH * scale, cssH * 0.58));
 
-    const period = 9000;
-    const phase = staticFrame ? 0.28 : ((t % period) / period);
-    // One-by-one: large phase gaps so characters don't blob together.
-    // Leading (leftmost when mid-chase) = carrot; dog furthest right (chasing).
-    const track = cssW + 220;
-    const runX = (offset: number) => {
-      const p = (phase + offset) % 1;
-      return cssW + 80 - p * track;
-    };
-    // bob for panicked flail
-    const bob = (seed: number) => (staticFrame ? 0 : Math.sin((t / 120) + seed) * 1.5);
+    // Fit all five in the (often narrow) chase column with clear gaps.
+    const sprW = 18 * scale;
+    const gap = Math.max(sprW + 6, Math.min(sprW + 16, (cssW - sprW) / 4.4));
+    const parade = gap * 4;
 
-    // Order drawn back→front doesn't matter; positions spaced by ~0.12–0.14 phase (~1+ body widths)
-    drawSprite(ctx, CARROT, runX(0.00), ground + bob(0) - 2, scale, true);
-    drawSprite(ctx, PIG,    runX(0.14), ground + bob(1.2) + 2, scale, true);
-    drawSprite(ctx, SNAKE,  runX(0.28), ground + bob(2.1) + 4, scale, true);
-    drawSprite(ctx, RABBIT, runX(0.42), ground + bob(0.7), scale, true);
-    drawSprite(ctx, DOG,    runX(0.58), ground + bob(1.7), scale, true);
+    const period = 11000;
+    const start = cssW + sprW + 8;
+    const travel = cssW + parade + sprW * 2 + 16;
+    // Centered pack for reduced-motion / first paint; otherwise sweep right→left.
+    const centerDogX = (cssW + parade) / 2;
+    const dogX = staticFrame
+      ? centerDogX
+      : start - ((t % period) / period) * travel;
+    const bob = (seed: number) => (staticFrame ? 0 : Math.sin((t / 110) + seed) * 1.6);
+
+    // Left→right: carrot → pig → snake → rabbit, dog chasing from the right
+    drawSprite(ctx, CARROT, dogX - gap * 4, ground + bob(0) - 2, scale, true);
+    drawSprite(ctx, PIG,    dogX - gap * 3, ground + bob(1.1) + 2, scale, true);
+    drawSprite(ctx, SNAKE,  dogX - gap * 2, ground + bob(2.0) + 3, scale, true);
+    drawSprite(ctx, RABBIT, dogX - gap * 1, ground + bob(0.6), scale, true);
+    drawSprite(ctx, DOG,    dogX,           ground + bob(1.7), scale, true);
   }, []);
 
   useEffect(() => {
