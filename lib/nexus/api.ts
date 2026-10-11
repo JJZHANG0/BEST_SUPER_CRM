@@ -15,7 +15,7 @@ export type StaffMember = { email: string; name: string; role: Role; active: boo
 /** Row of 系统管理 · 用户管理. */
 export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null };
 export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks';
-export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | OpsCollection;
+export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | 'posts' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }
 
@@ -73,6 +73,31 @@ export const api = {
   updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   resetPassword: (id: number) => request<{ password: string }>(`/admin/users/${id}/reset-password`, { method: 'POST' }),
 };
+
+/** Published 推文 as served to anyone (no login): GET /api/public/articles/:slug. */
+export type PublicArticle = { slug: string; title: string; summary: string; cover: string; blocks: import('./articles').ArticleBlock[]; author: string; publishedAt: string | null;
+  metrics: import('./posts').PostMetrics; program: { id: string; name: string; short: string; type: string; color: string } | null };
+/** Public reader endpoints: never send the staff token, so the page behaves the same signed in or out. */
+async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(API_BASE + path, { ...init, headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, credentials: 'omit' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || 'http_' + res.status, (data as { message?: string }).message);
+  return data as T;
+}
+export const publicApi = {
+  article: (slug: string, visitor: string) => publicRequest<{ article: PublicArticle; liked: boolean }>(`/public/articles/${encodeURIComponent(slug)}?visitor=${encodeURIComponent(visitor)}`),
+  track: (slug: string, kind: 'view' | 'share' | 'like', visitor: string) => publicRequest<{ counted: boolean; metrics: import('./posts').PostMetrics; liked: boolean }>(`/public/articles/${encodeURIComponent(slug)}/${kind}`, { method: 'POST', body: JSON.stringify({ visitor }) }),
+};
+/** Anonymous per-browser id for like / view / share dedupe (no personal data). */
+export function visitorId(): string {
+  const KEY = 'nexus.visitor.v1';
+  try { const v = localStorage.getItem(KEY); if (v && /^[A-Za-z0-9_-]{8,64}$/.test(v)) return v; } catch { /* storage blocked */ }
+  const bytes = new Uint8Array(12);
+  try { crypto.getRandomValues(bytes); } catch { bytes.forEach((_, i) => { bytes[i] = Math.floor(Math.random() * 256); }); }
+  const id = 'v' + Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+  try { localStorage.setItem(KEY, id); } catch { /* session-only id */ }
+  return id;
+}
 
 /** Key-order independent JSON for change detection; drops undefined values and browser-only fields. */
 export function stableJson(value: unknown, omit: readonly string[] = []): string {

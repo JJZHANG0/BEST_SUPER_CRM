@@ -4,9 +4,11 @@ import { toast } from 'sonner';
 import * as seed from './data';
 import { seedArticles } from './article-seed';
 import { mergeStoredArticles, type ProgramArticle } from './articles';
+import { seedPosts } from './post-seed';
+import { addMetrics, likedLocally, mergeStoredPosts, newPost, newSlug, readLocalMetrics, recordLocal, type ArticlePost, type LocalMetrics, type MetricKind, type PostMetrics } from './posts';
 import { isHealth, type Assignment } from './students';
 import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, type Overrides, type DirectoryUser } from './auth';
-import { api, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
+import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
 import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher } from './ops';
@@ -20,6 +22,16 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   assignments:Assignment[];setAssignments:St<Assignment[]>;
   /** 项目推文: ops edit drafts and publish; sales read the published snapshot. */
   articles:ProgramArticle[];updateArticles:(fn:(list:ProgramArticle[])=>ProgramArticle[])=>boolean;
+  /** 推文: many per project (draft → published → withdrawn). Sales only receive published snapshots. */
+  posts:ArticlePost[];updatePosts:(fn:(list:ArticlePost[])=>ArticlePost[])=>boolean;
+  /** New draft 推文 for a project, authored by the signed-in teacher; returns its id. */
+  createPost:(program:string)=>string;
+  /** Counters shown for a post (API: server counts; Pages preview: seed + this browser). */
+  postMetrics:(p:ArticlePost)=>PostMetrics;
+  /** Count a view / share / like (deduped per visitor). Resolves to the new counts, or null when it failed. */
+  trackPost:(slug:string,kind:MetricKind)=>Promise<{counted:boolean;metrics:PostMetrics;liked:boolean}|null>;
+  /** Pages preview: whether this browser already liked the post. */
+  likedLocal:(slug:string)=>boolean;
   /** Personal todos for the signed-in user (ops homepage + 待办/已完成 pages). */
   todos:Todo[];
   /** Personal todo, or with `assignee` (an ops teacher's email) a task assigned by a superadmin. */
@@ -65,7 +77,7 @@ const Context=createContext<Store>(null!);
  * API mode: data is loaded from /api/bootstrap after login and every record the UI changes is
  * written back with PUT /api/<collection>/<id>; the server is the source of truth.
  */
-export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v2',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v2',students:'nexus.demo.students.v2',enrollments:'nexus.demo.enrollments.v2',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',kpi:'nexus.demo.kpi.v1'} as const;
+export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v2',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v2',students:'nexus.demo.students.v2',enrollments:'nexus.demo.enrollments.v2',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',kpi:'nexus.demo.kpi.v1'} as const;
 /** v2 → v3 of 项目/课程/课时/课情反馈 loads the real data imported from the 运营部 spreadsheet (lib/nexus/real-seed.ts). */
 export const LEGACY_KEYS=['nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2'];
 const PW_LATER_KEY='nexus.password-later.v1';
@@ -73,7 +85,7 @@ function read(key:string){if(API_ENABLED||typeof window==='undefined')return nul
 function readList<T>(key:string,fallback:readonly T[]):T[]{const v=read(key);return Array.isArray(v)?v as T[]:fallback.slice()}
 function write(key:string,value:unknown){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
 if(typeof window!=='undefined'&&!API_ENABLED){try{LEGACY_KEYS.forEach(k=>localStorage.removeItem(k))}catch{/* storage unavailable */}}
-type Bootstrap={user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[]};
+type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[]};
 /** Browser-only fields that never go to the API. */
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
@@ -95,6 +107,8 @@ export function Provider({children}:{children:ReactNode}){
  const [route,setRoute]=useState('dashboard'),[favorites,setFavorites]=useState<string[]>([]),[recent,setRecent]=useState<string[]>([]),[logs,setLogs]=useState<string[]>(['工作空间已就绪']);
  const [assignments,setAssignments]=useState<Assignment[]>(()=>readList(STORAGE_KEYS.assignments,[]));
  const [articles,setArticles]=useState<ProgramArticle[]>(()=>{const saved=read(STORAGE_KEYS.articles);return saved?mergeStoredArticles(seedArticles,saved):seedArticles});
+ const [posts,setPosts]=useState<ArticlePost[]>(()=>API_ENABLED?[]:mergeStoredPosts(seedPosts,read(STORAGE_KEYS.posts)));
+ const [localMetrics,setLocalMetrics]=useState<LocalMetrics>(()=>readLocalMetrics(read(STORAGE_KEYS.postMetrics)));
  const [todos,setTodos]=useState<Todo[]>(()=>storedTodos(read(STORAGE_KEYS.todos)));
  const [kpiSheets,setKpiSheets]=useState<KpiSheet[]>(()=>readList<KpiSheet>(STORAGE_KEYS.kpi,[]).filter(x=>x&&typeof x==='object'&&typeof x.userKey==='string'&&typeof x.month==='string'&&Array.isArray(x.items)));
  const [classTypes,setClassTypes]=useState<ClassType[]>(()=>readList(STORAGE_KEYS.classTypes,defaultClassTypes));
@@ -112,11 +126,11 @@ export function Provider({children}:{children:ReactNode}){
  /** Last server-confirmed JSON per collection and record id (API mode only). */
  const synced=useRef<Partial<Record<Collection,Map<string,string>>>>({});
  const inflight=useRef(new Map<string,string>());
- const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks} as never).current;
+ const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,posts:setPosts,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks} as never).current;
  const applyServer=useCallback((data:Bootstrap)=>{
-  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:data.lessons??[],lessonFeedbacks:data.lessonFeedbacks??[]};
+  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,posts:data.posts??[],classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:data.lessons??[],lessonFeedbacks:data.lessonFeedbacks??[]};
   for(const [name,list] of Object.entries(sets) as [Collection,{id?:string;program?:string}[]][]){synced.current[name]=new Map(list.map(x=>[idOf(x),stableJson(x,OMIT[name])]));}
-  setPrograms(data.programs);setTeams(data.teams);setStudents(data.students);setEnrollments(data.enrollments);setCourses(data.courses);setFeedbacks(data.feedbacks);setAssignments(data.assignments);setArticles(data.articles);
+  setPrograms(data.programs);setTeams(data.teams);setStudents(data.students);setEnrollments(data.enrollments);setCourses(data.courses);setFeedbacks(data.feedbacks);setAssignments(data.assignments);setArticles(data.articles);setPosts(data.posts??[]);
   setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons(data.lessons??[]);setLessonFeedbacks(data.lessonFeedbacks??[]);setApiStaff(data.staff??[]);
   // Keep blob URLs of files uploaded in this tab.
   setFiles(prev=>data.resources.map(r=>({...r,url:prev.find(p=>p.id===r.id)?.url})));
@@ -141,7 +155,7 @@ export function Provider({children}:{children:ReactNode}){
    }).catch(e=>{setPersisted(false);toast.error(e instanceof ApiError&&e.status===403?'没有权限执行此操作，修改未保存':e instanceof ApiError&&e.status===400&&e.message&&e.message!==e.code?e.message:'保存到服务器失败，请稍后重试');if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}).finally(()=>{if(inflight.current.get(key)===body)inflight.current.delete(key);if(!inflight.current.size)setTimeout(()=>{if(!inflight.current.size)void refresh()},50)});
   }
  },[refresh,setters]);
- const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks]];
+ const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['posts',posts],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks]];
  for(const [name,list] of collections){
   // eslint-disable-next-line react-hooks/rules-of-hooks -- fixed-length list, same order every render
   useEffect(()=>{if(authenticated)push(name,list)},[list,authenticated,push,name]);
@@ -156,6 +170,23 @@ export function Provider({children}:{children:ReactNode}){
  useEffect(()=>{first.current=false},[]);
  /** Article changes come from ops actions; persist right away so a quota error can be reported in the editor. */
  const updateArticles=(fn:(list:ProgramArticle[])=>ProgramArticle[])=>{const next=fn(articles);setArticles(next);if(API_ENABLED)return true;const ok=write(STORAGE_KEYS.articles,next);setPersisted(ok);return ok};
+ const updatePosts=(fn:(list:ArticlePost[])=>ArticlePost[])=>{const next=fn(posts);setPosts(next);if(API_ENABLED)return true;const ok=write(STORAGE_KEYS.posts,next);setPersisted(ok);return ok};
+ const createPost=(program:string)=>{
+  const now=(()=>{const d=new Date(),pad=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`})();
+  const id='POST-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6);
+  const name=user?.name||'';
+  const p=newPost({id,slug:newSlug(program,posts.map(x=>x.slug)),program,author:name?name+'老师':'',authorEmail:user?.email||'',now});
+  updatePosts(l=>[p,...l]);return id;
+ };
+ const postMetrics=(p:ArticlePost)=>API_ENABLED?p.metrics:addMetrics(p.metrics,localMetrics.counts[p.slug]);
+ const likedLocal=(slug:string)=>likedLocally(localMetrics,slug);
+ const trackPost=async(slug:string,kind:MetricKind)=>{
+  if(API_ENABLED){try{const r=await publicApi.track(slug,kind,visitorId());setPosts(l=>l.map(p=>p.slug===slug?{...p,metrics:r.metrics}:p));return r}catch{return null}}
+  const p=posts.find(x=>x.slug===slug);if(!p)return null;
+  const r=recordLocal(localMetrics,slug,kind,Date.now());
+  if(r.counted){setLocalMetrics(r.state);write(STORAGE_KEYS.postMetrics,r.state)}
+  return {counted:r.counted,metrics:addMetrics(p.metrics,r.state.counts[slug]),liked:likedLocally(r.state,slug)};
+ };
  const login=async(identifier:string,password:string):Promise<LoginResult>=>{
   const email=identifier.trim();
   if(!API_ENABLED){
@@ -286,7 +317,7 @@ export function Provider({children}:{children:ReactNode}){
    const password=randomPassword();const h=await makeHash(password);setOverrides(o=>({...o,[u.email]:{...o[u.email],...h,mustChange:true}}));return {ok:true,password};
   },
  };
- return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,removeRecord,staff,staffName,changePassword,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+ return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,removeRecord,staff,staffName,changePassword,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){const s=useNexus();const salesName=s.user?.salesName||'';const students=s.students.filter(x=>s.role!=='sales'||x.sales===salesName);const teams=s.teams;return {students,teams,courses:s.courses.filter(c=>s.role!=='sales'||(teams.some(t=>t.id===c.team)&&s.programs.find(p=>p.id===c.program)?.published)),files:s.files.filter(f=>s.role!=='sales'||f.public),feedbacks:s.feedbacks.filter(f=>s.role!=='sales'||(f.visible&&students.some(x=>x.id===f.student)))};}
 /** Display name of the signed-in user. */
