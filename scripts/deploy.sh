@@ -27,7 +27,9 @@ RELEASE=$(date +%Y%m%d%H%M%S)-$SHA
 
 if [ "${SKIP_BUILD:-}" != 1 ]; then
   echo "== build frontend ($APP_ENV, API at /api)"
-  NEXT_PUBLIC_BASE_PATH= NEXT_PUBLIC_API_BASE=/api NEXT_PUBLIC_NEXUS_ENV=$APP_ENV node scripts/build-static.mjs
+  SITE_ORIGIN=${NEXT_PUBLIC_SITE_ORIGIN:-}
+  if [ "$ENV_NAME" = prod ] && [ -z "$SITE_ORIGIN" ]; then SITE_ORIGIN=https://bestcrm.cc; fi
+  NEXT_PUBLIC_BASE_PATH= NEXT_PUBLIC_API_BASE=/api NEXT_PUBLIC_NEXUS_ENV=$APP_ENV NEXT_PUBLIC_SITE_ORIGIN="$SITE_ORIGIN" node scripts/build-static.mjs
   echo "== build API bundle"
   node server/build.mjs
 fi

@@ -75,6 +75,6 @@ PWA 预留不代表已实现完整安装条件、离线 CRM 或推送。所有�
 ## Backend & server environments
 
 The app can also run against a real API + PostgreSQL database (shared data across users and devices):
-production http://1.13.182.30/ and development http://1.13.182.30:8080/. Without `NEXT_PUBLIC_API_BASE`
+production https://bestcrm.cc/ (also http://1.13.182.30/) and development http://1.13.182.30:8080/. Without `NEXT_PUBLIC_API_BASE`
 (e.g. the GitHub Pages build) it keeps working as the offline demo. See [docs/DEPLOY.md](docs/DEPLOY.md)
 for the architecture, environment layout and `scripts/deploy.sh <dev|prod>`.

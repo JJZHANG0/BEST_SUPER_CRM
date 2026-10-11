@@ -7,13 +7,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 const QUIPS = [
-  '汪！今天也要让创新发生～',
-  '胡萝卜快跑，狗狗更快！',
-  '小猪：我只是来凑热闹的…',
-  '蛇：嘶——别踩尾巴！',
-  '兔子：这才不是奥运会！',
-  'B.E.S.T · 每一次追赶都算数',
-  '汪汪！点我还有彩蛋哦',
+  '又是被 PPT 支配的一天，牛马续命中…',
+  '需求改第三版了？没事，工资没改。',
+  '下班？那是下个季度的 OKR。',
+  '会议纪要写完，会议又开一轮。',
+  '周一立 flag，周五改需求，周末修 bug。',
+  '咖啡续杯，牛马续命，创新继续。',
+  '老板说「很快就好」，已经很快了三周。',
 ];
 
 type Sprite = { pixels: string[]; colors: Record<string, string> };
@@ -172,8 +172,9 @@ export function PixelChase({ className = '' }: { className?: string }) {
       const y = ((i * 31 + 9) % Math.max(20, cssH - 50));
       ctx.fillRect(x, y, 2, 2);
     }
-    const scale = Math.max(3, Math.floor(Math.min(cssW, cssH) / 55));
-    const ground = cssH - 8 - 9 * scale;
+    // Sprite stack ~9px tall; target ≥2/3 of card height for the dog/pack.
+    const scale = Math.max(4, Math.floor((cssH * 0.72) / 9));
+    const ground = Math.max(4, cssH - 10 - 9 * scale);
     // Loop period ~7s; entities run right→left
     const period = 7000;
     const phase = staticFrame ? 0.35 : ((t % period) / period);
@@ -220,10 +221,10 @@ export function PixelChase({ className = '' }: { className?: string }) {
   };
 
   return (
-    <button type="button" className={`pixel-chase ${className}`.trim()} onClick={onClick} aria-label="像素追逐彩蛋：点击听狗叫">
+    <button type="button" className={`pixel-chase ${className}`.trim()} onClick={onClick} aria-label="像素追逐彩蛋：点击听狗叫，看牛马冷笑话">
       <canvas ref={canvasRef} className="pixel-chase-canvas" />
       {quip && <span className="pixel-chase-quip" role="status">{quip}</span>}
-      {!quip && <span className="pixel-chase-hint">点击 · 汪！</span>}
+      {!quip && <span className="pixel-chase-hint">点击 · 牛马续命</span>}
     </button>
   );
 }

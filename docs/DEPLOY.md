@@ -5,7 +5,7 @@ There are three ways the frontend runs:
 | Build | Data | How |
 |---|---|---|
 | GitHub Pages demo (`npm run build:pages`) | Local demo store (seed data + localStorage) | No `NEXT_PUBLIC_API_BASE` → API code stays inert |
-| Server **production** — http://1.13.182.30/ | PostgreSQL `nexus_prod` via `/api` | `scripts/deploy.sh prod` |
+| Server **production** — https://bestcrm.cc/ (HTTP IP http://1.13.182.30/ still works) | PostgreSQL `nexus_prod` via `/api` | `scripts/deploy.sh prod` |
 | Server **development** — http://1.13.182.30:8080/ | PostgreSQL `nexus_dev` via `/api` | `scripts/deploy.sh dev` (shows a DEV badge) |
 
 ## Architecture
@@ -33,8 +33,8 @@ There are three ways the frontend runs:
 
 | | production | development |
 |---|---|---|
-| URL | http://1.13.182.30/ | http://1.13.182.30:8080/ |
-| nginx | `:80` (default server) | `:8080` |
+| URL | https://bestcrm.cc/ (also http://1.13.182.30/) | http://1.13.182.30:8080/ (HTTP-only DEV) |
+| nginx | `:80` + `:443` (HTTPS after certbot) | `:8080` (never TLS) |
 | API service | `nexus-api-prod` → 127.0.0.1:3001 | `nexus-api-dev` → 127.0.0.1:3002 |
 | Database / DB user | `nexus_prod` / `nexus_prod` | `nexus_dev` / `nexus_dev` |
 | Secrets (mode 600, root) | `/opt/nexus/prod/.env` | `/opt/nexus/dev/.env` |
@@ -46,7 +46,7 @@ There are three ways the frontend runs:
 - nginx config: `/etc/nginx/conf.d/nexus.conf` (source `deploy/nginx-nexus.conf`); main config replaced, original
   kept as `/etc/nginx/nginx.conf.orig`.
 - Services run as the unprivileged `nexus` user with systemd sandboxing. Logs: `journalctl -u nexus-api-prod -f`.
-- 2 GiB swap file at `/swapfile`. firewalld is inactive; the Tencent security group must allow TCP 80 and 8080.
+- 2 GiB swap file at `/swapfile`. firewalld is inactive; the Tencent security group must allow TCP **80, 443** (prod HTTPS) and **8080** (dev).
 
 ## Deploying
 
@@ -59,8 +59,8 @@ ssh root@1.13.182.30 'bash /root/nexus-setup/server-setup.sh'
 
 # every release (Node 22 locally; SSH key ~/.ssh/nexus_deploy or NEXUS_SSH_KEY)
 git checkout develop && scripts/deploy.sh dev     # → http://1.13.182.30:8080/
-git checkout main    && scripts/deploy.sh prod    # → http://1.13.182.30/ (refuses a dirty tree)
-scripts/api-smoke.sh http://1.13.182.30           # login + ops status change visible to sales
+git checkout main    && scripts/deploy.sh prod    # → https://bestcrm.cc/ (refuses a dirty tree)
+scripts/api-smoke.sh https://bestcrm.cc           # login + ops status change visible to sales
 ```
 
 The script builds the static frontend with `NEXT_PUBLIC_API_BASE=/api`, bundles the API, uploads a release,
@@ -155,4 +155,42 @@ page sets `document.title` to the article title and offers 「分享」 (copy li
 - `drizzle/0006_leader_sessions_lesson_teacher.sql` 新增 `users.leader`（默认 false，并把 `zhangjiejia@nexus.local` 设为 true）、`course_sessions` 表、`courses.code/location`、`lesson_records.teacher`。部署服务器时照常 `npm run db:migrate`（或启动时自动迁移），再 `npm run db:seed`（seed 只会给 staff 列表中标记 leader 的账号设置该标志，不会提升其他账号）。
 - 权限只看 `leader` 标志，不再看 superadmin：部门负责人可查看全部老师的课时记录 / 课情反馈 / 教务津贴（按老师分开）、审核绩效、指派任务，且不填写当月绩效；其他超级管理员（程雪晴）与运营老师（张雪航、许瑾、方彦淇）只能看到并修改自己的记录与津贴。API（`/bootstrap`、`PUT/DELETE /:collection/:id`、`/kpi*`、`POST /todos`）与 Pages 预览两条路径同一套规则（`lib/nexus/roles.ts`）。
 - 课程排课：新建课程可选「单次 / 每周重复（选上课日、开始日期、共 N 节或截止日期、开始/结束时间）/ 逐次添加」；每节课写入 `course_sessions`，今日课程 / 本周课程 / 课程日历按节显示。
-- 导出课表：课程管理 →「导出课表」，按「我的课程 / 某位授课老师 / 某个项目」与起始周、周数生成周一至周日 × 时间段的课表，浏览器端用 canvas 绘制并下载 PNG 或 PDF（A4 横版，每周一页，无第三方依赖）。
+- 导出课表：课程管理 →「导出课表 · 学生/家长」，按「我的课程 / 某位授课老师 / 某个项目」与起始周、周数生成**给学生 / 家长 / 销售**的友好一周课表（日期、时间、课程名、老师、线上/教室），浏览器端用 canvas 绘制并下载 PNG 或 PDF（每周一页，无第三方依赖）。
+
+
+## Domain and HTTPS (bestcrm.cc)
+
+Public production URL: **https://bestcrm.cc** (and `https://www.bestcrm.cc`). Dev stays **http://1.13.182.30:8080/** (HTTP only).
+
+### DNS (Aliyun / hichina — user action)
+
+In the Aliyun console for `bestcrm.cc` → **域名解析 (DNS)**, add:
+
+| Type | Host | Value | TTL |
+|---|---|---|---|
+| A | `@` | `1.13.182.30` | 10 minutes |
+| A | `www` | `1.13.182.30` | 10 minutes |
+
+(Alternatively `www` can be a CNAME to `bestcrm.cc`.) Nameservers should remain `dns23.hichina.com` / `dns24.hichina.com`.
+
+Verify from any public resolver (not a local VPN fake-IP):
+
+```bash
+dig +short bestcrm.cc A    # expect 1.13.182.30
+dig +short www.bestcrm.cc A
+```
+
+### Enable HTTPS on the CVM
+
+After DNS points here (and the Tencent security group allows **TCP 443**):
+
+```bash
+# from a machine with the deploy key (~/.ssh/nexus_deploy or Host nexus)
+scp deploy/nginx-nexus.conf deploy/nexus-ssl.conf.inc.empty root@1.13.182.30:/tmp/
+ssh root@1.13.182.30 'cp /tmp/nginx-nexus.conf /etc/nginx/conf.d/nexus.conf; cp /tmp/nexus-ssl.conf.inc.empty /etc/nginx/conf.d/nexus-ssl.conf.inc; mkdir -p /var/www/certbot; nginx -t && systemctl reload nginx'
+ssh root@1.13.182.30 'bash -s' < scripts/enable-https.sh
+```
+
+`scripts/enable-https.sh` installs certbot if needed, obtains a Let's Encrypt cert for `bestcrm.cc` + `www`, writes the TLS nginx include, forces HTTPS redirect for those hostnames, sets `PUBLIC_ORIGIN` / `CORS_ORIGINS` on the API env files, and smokes `https://bestcrm.cc/api/health`.
+
+Prod frontend builds set `NEXT_PUBLIC_SITE_ORIGIN=https://bestcrm.cc` (see `scripts/deploy.sh`) so Open Graph images / article share cards use absolute HTTPS URLs.
