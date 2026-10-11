@@ -211,7 +211,12 @@ export function PixelChase({ className = '' }: { className?: string }) {
   useEffect(() => {
     const onResize = () => paint(performance.now() - start.current, reduced);
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const el = canvasRef.current?.parentElement;
+    const ro = el && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
+    if (el && ro) ro.observe(el);
+    // Paint once after layout so height:100% has resolved.
+    requestAnimationFrame(onResize);
+    return () => { window.removeEventListener('resize', onResize); ro?.disconnect(); };
   }, [paint, reduced]);
 
   const onClick = () => {
