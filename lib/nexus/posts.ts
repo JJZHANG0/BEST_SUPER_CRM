@@ -50,7 +50,7 @@ export function randomToken(length = 6, rand: () => number = Math.random) {
 export function newSlug(program: string, taken: ReadonlySet<string> | readonly string[] = [], rand: () => number = Math.random) {
   const set = taken instanceof Set ? taken : new Set(taken as readonly string[]);
   const prefix = program.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'post';
-  for (;;) { const s = `${prefix}-${randomToken(6, rand)}`; if (!set.has(s)) return s; }
+  for (let i = 0; ; i++) { const s = `${prefix}-${randomToken(i < 20 ? 6 : 10, i < 40 ? rand : Math.random)}`; if (!set.has(s)) return s; }
 }
 export function newPost(input: { id: string; slug: string; program: string; author: string; authorEmail: string; now: string; draft?: ArticleContent }): ArticlePost {
   return { id: input.id, slug: input.slug, program: input.program, status: 'draft', author: input.author, authorEmail: input.authorEmail.toLowerCase(),
