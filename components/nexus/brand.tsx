@@ -79,20 +79,25 @@ export const HUSKY_PNG = assetUrl('brand/husky.png');
 
 /**
  * 「领导万岁」 label: on hover / focus the characters dissolve (same scatter as the B.E.S.T wordmark) and a
- * husky pops up above the label, then wobbles left-right twice. Portalled + fixed so tab bars and glass
- * panels never clip it; pointer-events: none so it never steals the hover. Reduced motion: fade only.
+ * husky pops up from BEHIND the tab button, then wobbles left-right twice. Portalled + fixed so tab bars
+ * and glass panels never clip it; its lower part is clipped at the button's top edge (clip-path, see
+ * --husky-clip) so the tab always stays on top and the husky peeks out from behind it.
+ * pointer-events: none so it never steals the hover. Reduced motion: fade only.
  */
 export function HuskyLabel({ text, hostRef }: { text: string; hostRef: React.RefObject<HTMLElement | null> }) {
   preload(HUSKY_WEBP, { as: 'image', type: 'image/webp', fetchPriority: 'low' });
   const [active, setActive] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; h: number; clip: number } | null>(null);
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const place = useCallback(() => {
     const el = hostRef.current; if (!el) return;
     const r = el.getBoundingClientRect();
-    const h = Math.round(Math.min(170, Math.max(120, window.innerHeight * 0.2)));
-    // Paws rest on the label's top edge; keep the ears inside the viewport.
-    setPos({ x: r.left + r.width / 2, y: Math.max(r.top + 12, h + 8), h });
+    let h = Math.round(Math.min(170, Math.max(120, window.innerHeight * 0.2)));
+    // The husky stands behind the button: its bottom ~30% is hidden below the button's top edge.
+    // Near the top of the viewport it shrinks (ears stay visible) instead of sliding down over the tab.
+    h = Math.max(60, Math.min(h, Math.round((r.top - 8) / 0.7)));
+    const clip = Math.round(h * 0.3);
+    setPos({ x: r.left + r.width / 2, y: r.top + clip, h, clip });
   }, [hostRef]);
   useEffect(() => {
     const el = hostRef.current; if (!el) return;
@@ -114,7 +119,7 @@ export function HuskyLabel({ text, hostRef }: { text: string; hostRef: React.Ref
     <span className="sr-only">{text}</span>
     {mounted && createPortal(
       <div className="husky-pop" aria-hidden="true" data-active={active || undefined}
-        style={pos ? { left: pos.x, top: pos.y, '--husky-h': `${pos.h}px` } as CSSProperties : undefined}>
+        style={pos ? { left: pos.x, top: pos.y, '--husky-h': `${pos.h}px`, '--husky-clip': `${pos.clip}px` } as CSSProperties : undefined}>
         <div className="husky-wobble"><picture><source srcSet={HUSKY_WEBP} type="image/webp" /><img src={HUSKY_PNG} alt="" draggable={false} decoding="async" /></picture></div>
       </div>, document.body)}
   </span>;

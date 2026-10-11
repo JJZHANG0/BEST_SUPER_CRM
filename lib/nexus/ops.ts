@@ -53,11 +53,116 @@ export function durationLabel(start: string, end: string): string {
 }
 /** One 课时记录. rate/unit are a snapshot of the class type when the record was created. */
 export type LessonRecord = {
-  id: string; course: string; date: string; hours: number; students: number | null; opsTeacher: string;
+  id: string; course: string; date: string; hours: number;
+  /** 应到人数: roster size of the course's team when the lesson was logged (see expectedAttendance); null = unknown. */
+  expectedCount: number | null;
+  /** 实到人数 (filled by ops); drives the 元/人/小时 allowance. Replaces the old `students` field. */
+  actualCount: number | null;
+  opsTeacher: string;
   rate: number; unit: AllowanceUnit; amount: number; note: string; createdBy: string;
   /** 授课老师 of this lesson (prefilled from the course; older records fall back to the course's teacher). */
   teacher?: string;
 };
+const countOrNull = (v: unknown): number | null => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n) : null; };
+/**
+ * Migrate a stored / API lesson to the current shape: the legacy `students` head count becomes
+ * `actualCount` (实到人数); `expectedCount` defaults to null. Idempotent.
+ */
+export function normalizeLesson<T extends Partial<LessonRecord> & { students?: unknown }>(r: T): LessonRecord {
+  const { students, ...rest } = r;
+  return { ...rest, expectedCount: countOrNull(rest.expectedCount), actualCount: rest.actualCount !== undefined ? countOrNull(rest.actualCount) : countOrNull(students) } as LessonRecord;
+}
+
+/** Inputs for 应到人数: roster data from the store (schedule courses, teams, enrollments, students, class types). */
+export type RosterContext = {
+  courses?: readonly { code?: string; team: string }[];
+  teams: readonly { id: string; name: string; program: string }[];
+  enrollments: readonly { student: string; team: string; status: string }[];
+  students: readonly { id: string; team: string; status: string }[];
+  classTypes?: readonly { id: string; name: string }[];
+};
+export type ExpectedAttendance = { count: number | null; source: 'schedule' | 'team' | 'classType' | 'unknown'; teams: string[]; hint: string };
+const INACTIVE = /退费|退班|退出|已退|取消|流失/;
+/** Core of a team name: 「TEAM 「云驿」」 → 云驿 (TEAM prefix, brackets and spaces removed). */
+export const teamCore = (name: string) => String(name || '').replace(/team/gi, '').replace(/[「」『』"“”\s]/g, '').trim();
+/** Programme keyword in a course name (康莱德 → conrad …); '' when none. */
+export function programOfCourseName(name: string): string {
+  const n = String(name || '').toLowerCase();
+  if (/康莱德|conrad|cond/.test(n)) return 'conrad';
+  if (/bpa/.test(n)) return 'bpa';
+  if (/ctb/.test(n)) return 'ctb';
+  if (/ihosa/.test(n)) return 'ihosa';
+  if (/mvp/.test(n)) return 'mvp';
+  return '';
+}
+/** Teams a 课时记录 course belongs to: the timetable course with the same 课程编号, else the team named after 「TEAM」 in the course name. */
+export function courseTeams(course: { code: string; name: string }, ctx: RosterContext): { ids: string[]; via: 'schedule' | 'team' | null } {
+  const sched = (ctx.courses || []).filter(c => c.code && c.team && c.code.trim().toLowerCase() === course.code.trim().toLowerCase()).map(c => c.team);
+  const known = sched.filter(id => ctx.teams.some(t => t.id === id));
+  if (known.length) return { ids: [...new Set(known)], via: 'schedule' };
+  const m = /team(.*)$/i.exec(course.name || '');
+  if (!m) return { ids: [], via: null };
+  const tail = teamCore(m[1]);
+  const program = programOfCourseName(course.name);
+  let best = 0; let ids: string[] = [];
+  for (const t of ctx.teams) {
+    if (program && t.program !== program) continue;
+    const core = teamCore(t.name);
+    if (core.length < 1 || !tail.startsWith(core)) continue;
+    if (core.length > best) { best = core.length; ids = [t.id]; } else if (core.length === best) ids.push(t.id);
+  }
+  return { ids, via: ids.length ? 'team' : null };
+}
+/** Fixed class size from a class type name (「线下8人班型」 → 8); ranges / 「及以上」 → null. */
+export function classTypeSize(name: string): number | null {
+  const n = String(name || '');
+  if (/\d+\s*-\s*\d+\s*人|及以上|以上/.test(n)) return null;
+  const m = /(\d+)\s*人班/.exec(n);
+  return m ? Number(m[1]) : null;
+}
+/**
+ * 应到人数 for a 课时记录 course:
+ * 1. the course's team roster — distinct active students enrolled in the team(s) (enrollments ∪ students.team),
+ *    team found via the timetable course with the same 课程编号, else the 「TEAM xx」 in the course name;
+ * 2. else the class type's fixed size (「线下8人班型」 → 8);
+ * 3. else unknown (null) — the form shows 「—」 with a hint.
+ */
+export function expectedAttendance(course: { code: string; name: string; classType: string } | undefined, ctx: RosterContext): ExpectedAttendance {
+  if (!course) return { count: null, source: 'unknown', teams: [], hint: '请先选择课程' };
+  const { ids, via } = courseTeams(course, ctx);
+  if (ids.length) {
+    const set = new Set(ids), seen = new Set<string>();
+    for (const e of ctx.enrollments) if (set.has(e.team) && !INACTIVE.test(e.status || '')) seen.add(e.student);
+    for (const st of ctx.students) if (set.has(st.team) && !INACTIVE.test(st.status || '')) seen.add(st.id);
+    const names = ids.map(id => ctx.teams.find(t => t.id === id)?.name || id);
+    if (seen.size) return { count: seen.size, source: via === 'schedule' ? 'schedule' : 'team', teams: names, hint: `按队伍名单：${names.join('、')}` };
+  }
+  const type = (ctx.classTypes || []).find(t => t.id === course.classType);
+  const size = type ? classTypeSize(type.name) : null;
+  if (size) return { count: size, source: 'classType', teams: [], hint: `按班型人数：${type!.name}` };
+  return { count: null, source: 'unknown', teams: [], hint: '未匹配到队伍名单，请直接填写实到人数' };
+}
+/** 到课情况 text from 实到 / 应到: 「5/6 到课」, 「6/6 全勤」, 「5 人到课」. */
+export function attendanceText(actual: number | null, expected: number | null): string {
+  if (actual == null) return '';
+  if (expected && expected > 0) return actual === expected ? `${actual}/${expected} 全勤` : `${actual}/${expected} 到课`;
+  return `${actual} 人到课`;
+}
+/** Live filter for the course combobox: every whitespace-separated term must match code, name, project or teacher. */
+export function filterCourses<T extends { code: string; name: string; teacher: string; project: string }>(courses: readonly T[], query: string, projectLabel: (id: string) => string = () => ''): T[] {
+  const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return courses.slice();
+  const scored: { c: T; score: number; i: number }[] = [];
+  courses.forEach((c, i) => {
+    const code = c.code.toLowerCase(), hay = [code, c.name, projectLabel(c.project), c.teacher].join(' ').toLowerCase();
+    if (!terms.every(t => hay.includes(t))) return;
+    // Code prefix matches first, then code contains, then anything else; stable otherwise.
+    const q = terms[0];
+    scored.push({ c, i, score: code.startsWith(q) ? 0 : code.includes(q) ? 1 : 2 });
+  });
+  return scored.sort((a, b) => a.score - b.score || a.i - b.i).map(x => x.c);
+}
+
 /** One 课情反馈, optionally linked to a 课时记录. */
 export type LessonFeedback = {
   id: string; course: string; lesson: string | null; date: string; attendance: string; content: string;

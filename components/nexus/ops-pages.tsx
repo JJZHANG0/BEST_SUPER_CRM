@@ -1,9 +1,10 @@
 'use client';
 /** 课时记录 (lesson hours + 教务津贴) and 课情反馈 (lesson feedback) for ops teachers. */
-import { useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import { Clock, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TeacherPicker } from './teacher-picker';
+import { CourseCombobox } from './course-combobox';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
@@ -11,7 +12,7 @@ import { useNexus } from '@/lib/nexus/store';
 import { canSeeAllLessons, canManageSystem, type Viewer } from '@/lib/nexus/roles';
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
-  visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback,
+  visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
 } from '@/lib/nexus/ops';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState } from './ui';
@@ -59,6 +60,8 @@ function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string) {
   return courses.filter(c => !c.opsTeacher || c.opsTeacher.toLowerCase() === me);
 }
 const courseLabel = (c: OpsCourse) => `${c.code} · ${c.name}`;
+/** 「5/6」 (实到/应到), 「5」 or 「—」 for the table. */
+const headcount = (r: LessonRecord) => r.actualCount == null ? (r.expectedCount != null ? `—/${r.expectedCount}` : '—') : r.expectedCount != null ? `${r.actualCount}/${r.expectedCount}` : String(r.actualCount);
 
 function NoCourses() {
   const s = useNexus();
@@ -76,28 +79,40 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const [courseId, setCourseId] = useState(record?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || today());
   const [hours, setHours] = useState(String(record?.hours ?? 2));
-  const [students, setStudents] = useState(record?.students != null ? String(record.students) : '');
+  const [actual, setActual] = useState(record?.actualCount != null ? String(record.actualCount) : '');
   const [ops, setOps] = useState(record?.opsTeacher || options[0]?.opsTeacher || me);
   const [teacher, setTeacher] = useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : options[0]?.teacher || '');
   const [note, setNote] = useState(record?.note || '');
   // 学情反馈 captured in the same form (creates / updates the linked 课情反馈).
   const [withFb, setWithFb] = useState(!record || !!linked);
+  // 到课情况 follows 实到/应到 (「5/6 到课」) until the user types their own text.
+  const [attTouched, setAttTouched] = useState(!!linked?.attendance);
   const [fb, setFb] = useState<FeedbackDraft>({ attendance: linked?.attendance || '', content: linked?.content || '', performance: linked?.performance || '', issues: linked?.issues || '', nextSteps: linked?.nextSteps || '' });
   const setF = (k: keyof FeedbackDraft) => (e: { target: { value: string } }) => setFb(v => ({ ...v, [k]: e.target.value }));
   const course = s.opsCourses.find(c => c.id === courseId);
   const fresh = !record || record.course !== courseId;
   const type = s.classTypes.find(t => t.id === course?.classType);
   const rate = fresh ? type?.rate ?? 0 : record!.rate, unit = fresh ? type?.unit ?? 'hour' : record!.unit;
-  const h = Number(hours), n = students === '' ? null : Number(students);
+  const roster = useMemo(() => ({ courses: s.courses, teams: s.teams, enrollments: s.enrollments, students: s.students, classTypes: s.classTypes }), [s.courses, s.teams, s.enrollments, s.students, s.classTypes]);
+  const exp = useMemo(() => expectedAttendance(course, roster), [course, roster]);
+  // Editing on the same course keeps the 应到人数 saved with the record; a new / moved record uses the roster now.
+  const keepSaved = !!record && record.course === courseId && record.expectedCount != null;
+  const expected = keepSaved ? record!.expectedCount : exp.count;
+  const expectedHint = keepSaved ? '记录时的应到人数' : exp.hint;
+  const h = Number(hours), n = actual === '' ? null : Number(actual);
   const amount = computeAllowance(rate, unit, h, n);
+  const autoAtt = attendanceText(n, expected);
+  const attendance = attTouched ? fb.attendance : autoAtt;
+  const projectLabel = useCallback((id: string) => { const p = s.projects.find(x => x.id === id); return p ? (p.name && p.name !== p.code ? `${p.code} ${p.name}` : p.code) : ''; }, [s.projects]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!course || !type) return toast.error('请选择课程');
     if (!(h > 0 && h <= 24)) return toast.error('课时需在 0–24 小时之间');
-    if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写学生人数');
+    if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 1000)) return toast.error('实到人数需为 0–1000 的整数');
+    if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写实到人数');
     const owner = all ? (ops || me) : me;
-    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, students: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim() };
-    const r = lessonWithFeedback({ lesson: rec, feedback: { ...fb, attendance: fb.attendance || (n ? `${n} 人到课` : '') }, withFeedback: withFb, existing: linked, newId: () => newRecordId('LF') });
+    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, expectedCount: expected ?? null, actualCount: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim() };
+    const r = lessonWithFeedback({ lesson: rec, feedback: { ...fb, attendance }, withFeedback: withFb, existing: linked, newId: () => newRecordId('LF') });
     if (r.issue) return toast.error(r.issue);
     s.setLessons(l => record ? l.map(x => x.id === rec.id ? rec : x) : [rec, ...l]);
     if (r.feedback) { const f = r.feedback; s.setLessonFeedbacks(l => l.some(x => x.id === f.id) ? l.map(x => x.id === f.id ? f : x) : [f, ...l]); }
@@ -109,11 +124,13 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     <DialogTitle>{record ? '编辑课时记录' : '记录课时'}</DialogTitle>
     <DialogDescription>津贴按课程的班级类型自动计算，记录时锁定当时的津贴标准；下方的学情反馈会自动生成关联的课情反馈。</DialogDescription>
     {!options.length ? <NoCourses /> : <form className="form-stack" onSubmit={submit}>
-      <FormField label="课程"><Picker label="课程" value={courseId} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} options={options.map(c => ({ value: c.id, label: courseLabel(c) }))} /></FormField>
-      <div className="form-columns three">
+      {/* div, not <label>: a label would re-click the input when an option is picked. */}
+      <div className="form-field"><span>课程</span><CourseCombobox courses={options} value={courseId} projectLabel={projectLabel} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} /></div>
+      <div className="form-columns four">
         <FormField label="上课日期"><input type="date" required value={date} onChange={e => setDate(e.target.value)} /></FormField>
         <FormField label="课时（小时）"><input type="number" required min="0.25" max="24" step="0.25" value={hours} onChange={e => setHours(e.target.value)} /></FormField>
-        <FormField label={needsStudents(unit) ? '学生人数（按人计费，必填）' : '学生人数（可选）'}><input type="number" min="0" max="1000" step="1" value={students} required={needsStudents(unit)} onChange={e => setStudents(e.target.value)} placeholder="例如 6" /></FormField>
+        <div className="form-field expected-field"><span>应到人数</span><output className={'expected-count' + (expected == null ? ' unknown' : '')} aria-label="应到人数" title={expectedHint}>{expected ?? '—'}<small>{expected == null ? '' : ' 人'}</small></output><small className="field-hint">{expectedHint}</small></div>
+        <FormField label={needsStudents(unit) ? '实到人数（按人计费，必填）' : '实到人数'}><input type="number" min="0" max="1000" step="1" inputMode="numeric" value={actual} required={needsStudents(unit)} onChange={e => setActual(e.target.value)} placeholder={expected != null ? `例如 ${expected}` : '例如 6'} aria-label="实到人数" /></FormField>
       </div>
       <div className="form-columns">
         <FormField label="授课老师（默认取课程的授课老师）"><TeacherPicker value={teacher} onChange={setTeacher} /></FormField>
@@ -128,10 +145,8 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
       <fieldset className={'lesson-fb' + (withFb ? '' : ' off')}>
         <legend><label className="checkbox-label"><Checkbox checked={withFb} onCheckedChange={v => setWithFb(v === true)} /><span><MessageSquareText size={15} />同时记录学情反馈{linked ? '（已关联，保存时一并更新）' : '（自动生成课情反馈）'}</span></label></legend>
         {withFb && <>
-          <div className="form-columns">
-            <FormField label="到课情况"><input maxLength={200} value={fb.attendance} onChange={setF('attendance')} placeholder={n ? `${n} 人到课（默认）` : '例如：6/6 全勤；李同学请假'} /></FormField>
-            <FormField label="本次课程内容"><input maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" /></FormField>
-          </div>
+          <FormField label={attTouched ? '到课情况' : '到课情况（按实到/应到自动填写，可修改）'}><input maxLength={200} value={attendance} onChange={e => { const v = e.target.value; setAttTouched(v !== ''); setFb(x => ({ ...x, attendance: v })); }} placeholder="填写实到人数后自动生成，例如：5/6 到课；李同学请假" /></FormField>
+          <FormField label="本次课程内容"><textarea rows={2} maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" /></FormField>
           <FormField label="学生表现"><textarea rows={2} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" /></FormField>
           <div className="form-columns">
             <FormField label="问题与风险"><textarea rows={2} maxLength={4000} value={fb.issues} onChange={setF('issues')} placeholder="需要协调或关注的问题" /></FormField>
@@ -184,8 +199,8 @@ export function LessonsPage() {
   const typeName = (c?: OpsCourse) => s.classTypes.find(t => t.id === c?.classType)?.name || '—';
   const person = all && teacher !== ALL ? s.staffName(teacher) : '';
   const exportCsv = () => {
-    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '学生人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注'];
-    download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.students ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note]; })]));
+    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '应到人数', '实到人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注'];
+    download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.expectedCount ?? '', r.actualCount ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note]; })]));
   };
   const remove = async (r: LessonRecord) => { if (!confirmDelete('课时记录')) return; if (await s.removeRecord('lessons', r.id)) { s.setLessonFeedbacks(l => l.map(f => f.lesson === r.id ? { ...f, lesson: null } : f)); toast.success('已删除'); } };
   const hasFb = (r: LessonRecord) => s.lessonFeedbacks.some(f => f.lesson === r.id);
@@ -204,13 +219,13 @@ export function LessonsPage() {
         <TeacherHours rows={rows} month={month} />
         {all && teacher === ALL && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <button type="button" key={t.opsTeacher} onClick={() => setTeacher(s.staff.find(u => u.email.toLowerCase() === t.opsTeacher.toLowerCase())?.email || t.opsTeacher)} title={'只看 ' + s.staffName(t.opsTeacher)}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></button>)}</div>}
         <div className="results-meta">{rows.length} 条记录<span>{all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
-        {rows.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '人数', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
+        {rows.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '实到/应到', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{rows.map(r => { const c = course(r.course); return <TableRow key={r.id}>
             <TableCell className="nowrap">{r.date}</TableCell>
             <TableCell><strong className="cell-title">{c?.name || '已删除的课程'}</strong><small className="cell-sub">{c?.code}</small></TableCell>
             <TableCell>{typeName(c)}</TableCell>
             <TableCell className="num">{r.hours}</TableCell>
-            <TableCell className="num">{r.students ?? '—'}</TableCell>
+            <TableCell className="num nowrap" title={r.expectedCount != null ? `实到 ${r.actualCount ?? '—'} / 应到 ${r.expectedCount}` : undefined}>{headcount(r)}</TableCell>
             <TableCell className="nowrap">¥{r.rate} {unitLabel(r.unit)}</TableCell>
             <TableCell className="num"><b>{money2(r.amount)}</b></TableCell>
             <TableCell className="nowrap">{lessonTeacher(r, s.opsCourses)}</TableCell>
@@ -237,7 +252,7 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
   const [courseId, setCourseId] = useState(record?.course || fromLesson?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || fromLesson?.date || today());
   const [lesson, setLesson] = useState(record?.lesson || fromLesson?.id || '');
-  const [attendance, setAttendance] = useState(record?.attendance || (fromLesson?.students ? `${fromLesson.students} 人到课` : ''));
+  const [attendance, setAttendance] = useState(record?.attendance || (fromLesson ? attendanceText(fromLesson.actualCount, fromLesson.expectedCount) : ''));
   const [content, setContent] = useState(record?.content || '');
   const [performance, setPerformance] = useState(record?.performance || '');
   const [issues, setIssues] = useState(record?.issues || '');

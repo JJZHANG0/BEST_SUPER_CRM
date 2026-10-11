@@ -18,7 +18,7 @@ import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { computeAllowance, isUnit } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -457,7 +457,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       return c.json({ record: { program: row.program, author: row.author, draft: row.draft, published: row.published ?? null, updated: row.updated, publishedAt: row.publishedAt ?? null } });
     }
     if (!isCollection(name)) return c.json({ error: 'not_found' }, 404);
-    const parsed = recordSchemas[name].safeParse(body);
+    // Older clients still send `students`: migrate it to 实到人数 (actualCount) before validating.
+    const parsed = recordSchemas[name].safeParse(name === 'lessons' && body && typeof body === 'object' ? normalizeLesson(body) : body);
     if (!parsed.success) return c.json({ error: 'invalid', issues: issuesOf(parsed.error) }, 400);
     if (parsed.data.id !== id) return c.json({ error: 'invalid', issues: ['id mismatch'] }, 400);
     if (name === 'students') return c.json({ record: await saveStudent(parsed.data, user) });
@@ -480,8 +481,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
           rate = type.rate; unit = type.unit;
         }
         if (!isUnit(unit)) return c.json({ error: 'invalid', message: '津贴单位无效' }, 400);
-        if (unit === 'person_hour' && !(Number(data.students) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写学生人数' }, 400);
-        data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.students as number | null);
+        if (unit === 'person_hour' && !(Number(data.actualCount) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写实到人数' }, 400);
+        data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.actualCount as number | null);
       }
     }
     for (const [k, v] of Object.entries(recordSchemas[name].shape)) if ((v as { isOptional(): boolean }).isOptional() && data[k] === undefined) data[k] = null;

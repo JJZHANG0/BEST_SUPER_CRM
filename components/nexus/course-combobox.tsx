@@ -1,0 +1,84 @@
+'use client';
+/**
+ * 课程 combobox for 记录课时: type to filter live by 课程编号 / 课程名称 / 项目 / 授课老师,
+ * ↑ ↓ to move, Enter to pick, Esc to close (restores the current course). WAI-ARIA combobox pattern.
+ */
+import { Fragment, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ChevronsUpDown, Search } from 'lucide-react';
+import { filterCourses, type OpsCourse } from '@/lib/nexus/ops';
+
+const LIMIT = 80;
+const label = (c: OpsCourse) => `${c.code} · ${c.name}`;
+
+/** Wrap every occurrence of the query terms in <mark>. */
+function highlight(text: string, terms: string[]): ReactNode {
+  if (!terms.length || !text) return text;
+  const re = new RegExp('(' + terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
+  return text.split(re).map((part, i) => i % 2 ? <mark key={i}>{part}</mark> : <Fragment key={i}>{part}</Fragment>);
+}
+
+export function CourseCombobox({ courses, value, onChange, projectLabel, ariaLabel = '课程' }: {
+  courses: readonly OpsCourse[]; value: string; onChange: (id: string) => void; projectLabel: (id: string) => string; ariaLabel?: string;
+}) {
+  const listId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const selected = courses.find(c => c.id === value);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState<string | null>(null); // null = not typing; show the selected course
+  const [active, setActive] = useState(0);
+  const typed = query ?? '';
+  const terms = typed.toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = useMemo(() => filterCourses(courses, typed, projectLabel), [courses, typed, projectLabel]);
+  const shown = matches.slice(0, LIMIT);
+  const optId = (i: number) => `${listId}-o${i}`;
+
+  const scrollTo = (i: number) => requestAnimationFrame(() => document.getElementById(optId(i))?.scrollIntoView({ block: 'nearest' }));
+  const openList = () => {
+    if (open) return;
+    const i = Math.max(0, shown.findIndex(c => c.id === value));
+    setOpen(true); setActive(i); scrollTo(i);
+  };
+  const close = () => { setOpen(false); setQuery(null); };
+  const pick = (c: OpsCourse | undefined) => { if (!c) return; onChange(c.id); close(); };
+  const move = (d: number) => {
+    if (!open) { if (query === null) setQuery(''); return openList(); }
+    if (!shown.length) return;
+    const i = (active + d + shown.length) % shown.length; setActive(i); scrollTo(i);
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if ((e.key === 'PageDown' || e.key === 'PageUp') && open && shown.length) {
+      e.preventDefault(); const i = Math.max(0, Math.min(shown.length - 1, active + (e.key === 'PageDown' ? 8 : -8))); setActive(i); scrollTo(i);
+    }
+    else if (e.key === 'Enter') { if (open) { e.preventDefault(); pick(shown[active]); } }
+    else if (e.key === 'Escape') { if (open) { e.preventDefault(); e.stopPropagation(); close(); } }
+    else if (e.key === 'Tab') { if (open && query !== null && shown.length === 1) pick(shown[0]); else close(); }
+  };
+
+  return <div className={'course-combobox' + (open ? ' open' : '')}>
+    <Search size={15} className="cc-icon" aria-hidden="true" />
+    <input ref={input} role="combobox" aria-label={ariaLabel} aria-autocomplete="list" aria-expanded={open} aria-controls={listId}
+      aria-activedescendant={open && shown[active] ? optId(active) : undefined} autoComplete="off" spellCheck={false}
+      // While open the box is a search field (empty = all courses, current course as placeholder).
+      placeholder={selected ? label(selected) : '输入课程编号、名称、项目或授课老师搜索'}
+      value={query ?? (selected ? label(selected) : '')}
+      onFocus={() => { setQuery(''); openList(); }}
+      onClick={openList}
+      onChange={e => { setQuery(e.target.value); setActive(0); setOpen(true); list.current?.scrollTo({ top: 0 }); }}
+      onBlur={close}
+      onKeyDown={onKey} />
+    <button type="button" tabIndex={-1} className="cc-caret" aria-label="展开课程列表" onMouseDown={e => { e.preventDefault(); if (open) close(); else { input.current?.focus(); openList(); } }}><ChevronsUpDown size={15} /></button>
+    {open && <div ref={list} id={listId} role="listbox" aria-label={ariaLabel + '选项'} className="cc-list">
+      {shown.length ? shown.map((c, i) => <div key={c.id} id={optId(i)} role="option" aria-selected={i === active}
+        className={'cc-option' + (i === active ? ' active' : '') + (c.id === value ? ' current' : '')}
+        onMouseDown={e => { e.preventDefault(); pick(c); }} onMouseMove={() => i !== active && setActive(i)}>
+        <span className="cc-code">{highlight(c.code, terms)}</span>
+        <span className="cc-name">{highlight(c.name, terms)}</span>
+        <small className="cc-meta">{highlight([projectLabel(c.project), c.teacher].filter(Boolean).join(' · '), terms)}</small>
+      </div>) : <div className="cc-empty">没有匹配「{typed}」的课程</div>}
+      <div className="cc-foot" aria-live="polite">{matches.length > LIMIT ? `显示前 ${LIMIT} 门，共 ${matches.length} 门匹配，继续输入可缩小范围` : `${matches.length} 门课程`} · ↑↓ 选择 · Enter 确认 · Esc 关闭</div>
+    </div>}
+  </div>;
+}

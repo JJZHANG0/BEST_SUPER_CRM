@@ -11,7 +11,7 @@ import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, t
 import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher } from './ops';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
@@ -125,7 +125,7 @@ export function Provider({children}:{children:ReactNode}){
  const [projects,setProjects]=useState<Project[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.projects,realProjects));
  const [teachers,setTeachers]=useState<Teacher[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.teachers,realTeachers));
  const [opsCourses,setOpsCourses]=useState<OpsCourse[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.opsCourses,realCourses));
- const [lessons,setLessons]=useState<LessonRecord[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.lessons,realLessons));
+ const [lessons,setLessons]=useState<LessonRecord[]>(()=>API_ENABLED?[]:readList<LessonRecord>(STORAGE_KEYS.lessons,realLessons as LessonRecord[]).map(normalizeLesson));
  const [lessonFeedbacks,setLessonFeedbacks]=useState<LessonFeedback[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.lessonFeedbacks,realLessonFeedbacks));
  const [courseSessions,setCourseSessions]=useState<CourseSession[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.courseSessions,[]));
  const [passwordDeferred,setPasswordDeferred]=useState(false);
@@ -139,10 +139,10 @@ export function Provider({children}:{children:ReactNode}){
  const inflight=useRef(new Map<string,string>());
  const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,posts:setPosts,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks,courseSessions:setCourseSessions} as never).current;
  const applyServer=useCallback((data:Bootstrap)=>{
-  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,posts:data.posts??[],classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:data.lessons??[],lessonFeedbacks:data.lessonFeedbacks??[],courseSessions:data.courseSessions??[]};
+  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,posts:data.posts??[],classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:(data.lessons??[]).map(normalizeLesson),lessonFeedbacks:data.lessonFeedbacks??[],courseSessions:data.courseSessions??[]};
   for(const [name,list] of Object.entries(sets) as [Collection,{id?:string;program?:string}[]][]){synced.current[name]=new Map(list.map(x=>[idOf(x),stableJson(x,OMIT[name])]));}
   setPrograms(data.programs);setTeams(data.teams);setStudents(data.students);setEnrollments(data.enrollments);setCourses(data.courses);setFeedbacks(data.feedbacks);setAssignments(data.assignments);setArticles(data.articles);setPosts(data.posts??[]);
-  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons(data.lessons??[]);setLessonFeedbacks(data.lessonFeedbacks??[]);setCourseSessions(data.courseSessions??[]);setApiStaff(data.staff??[]);
+  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons((data.lessons??[]).map(normalizeLesson));setLessonFeedbacks(data.lessonFeedbacks??[]);setCourseSessions(data.courseSessions??[]);setApiStaff(data.staff??[]);
   // Keep blob URLs of files uploaded in this tab.
   setFiles(prev=>data.resources.map(r=>({...r,url:prev.find(p=>p.id===r.id)?.url})));
   setUser(data.user);setRole(data.user.role);

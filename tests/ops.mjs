@@ -23,7 +23,7 @@ assert.equal(O.computeAllowance(10,'hour',-1),0);
 assert.equal(O.needsStudents('person_hour'),true);assert.equal(O.needsStudents('hour'),false);
 
 // Monthly summary + visibility.
-const rec=(id,ops,date,amount,hours=2)=>({id,course:'c',date,hours,students:null,opsTeacher:ops,rate:15,unit:'hour',amount,note:'',createdBy:ops});
+const rec=(id,ops,date,amount,hours=2)=>({id,course:'c',date,hours,expectedCount:null,actualCount:null,opsTeacher:ops,rate:15,unit:'hour',amount,note:'',createdBy:ops});
 const L=[rec('1','xujin@nexus.local','2026-10-02',30),rec('2','xujin@nexus.local','2026-10-09',22.5,1.5),rec('3','XUJIN@nexus.local','2026-09-30',30),rec('4','fangyanqi@nexus.local','2026-10-03',48)];
 assert.deepEqual(O.monthAllowance(L,'xujin@nexus.local','2026-10'),{amount:52.5,hours:3.5,count:2});
 assert.deepEqual(O.monthAllowance(L,'zhangjiejia@nexus.local','2026-10'),{amount:0,hours:0,count:0});
@@ -96,4 +96,49 @@ const page=readFileSync('app/page.tsx','utf8');
 assert(page.includes("['lessons','课时记录'")&&page.includes("['lesson-feedback','课情反馈'")&&page.includes("['admin','系统管理'")&&page.includes("canManageSystem(s.role)?['admin']"));
 assert(readFileSync('components/nexus/admin.tsx','utf8').includes("if (!canManageSystem(s.role)) return"));
 assert(readFileSync('components/nexus/dashboard.tsx','utf8').includes("'当月教务津贴'")&&readFileSync('components/nexus/dashboard.tsx','utf8').includes('stats-grid five'));
+
+// 应到 / 实到人数: legacy migration, roster-based expected attendance, 到课情况 text, course combobox filter.
+assert.deepEqual(O.normalizeLesson({id:'x',course:'c',students:6}),{id:'x',course:'c',expectedCount:null,actualCount:6},'legacy students → actualCount');
+assert.deepEqual(O.normalizeLesson({id:'x',course:'c',students:null}),{id:'x',course:'c',expectedCount:null,actualCount:null});
+assert.deepEqual(O.normalizeLesson({id:'x',course:'c',expectedCount:6,actualCount:5,students:9}),{id:'x',course:'c',expectedCount:6,actualCount:5},'new fields win, idempotent');
+assert.equal(O.teamCore('TEAM   「清澜环」'),'清澜环');assert.equal(O.teamCore('TEAM 埙'),'埙');
+const roster={courses:[{code:'SCHED-1',team:'T3'}],
+  teams:[{id:'T1',name:'TEAM 「云驿」',program:'conrad'},{id:'T2',name:'TEAM 「魔术」',program:'conrad'},{id:'T3',name:'TEAM 哨兵',program:'bpa'},{id:'T4',name:'TEAM 「云驿」',program:'ctb'}],
+  enrollments:[{student:'a',team:'T1',status:'进行中'},{student:'b',team:'T1',status:'进行中'},{student:'c',team:'T1',status:'已退费'},{student:'d',team:'T2',status:'进行中'},{student:'e',team:'T3',status:'进行中'},{student:'z',team:'T4',status:'进行中'}],
+  students:[{id:'a',team:'T1',status:'进行中'},{id:'f',team:'T1',status:'进行中'},{id:'g',team:'T3',status:'进行中'}],
+  classTypes:T};
+const ea=O.expectedAttendance({code:'WS1',name:'康莱德 「航空」TEAM 云驿 第一阶段',classType:'CT02'},roster);
+assert.deepEqual([ea.count,ea.source],[3,'team'],'distinct active students of the conrad 云驿 team (enrollments ∪ students.team, 退费 excluded, other programme ignored)');
+assert.equal(O.expectedAttendance({code:'WS2',name:'康莱德 「网络」TEAM 魔术墙 第二阶段',classType:'CT02'},roster).count,1,'team core prefix (魔术 → 魔术墙)');
+assert.deepEqual((({count,source})=>[count,source])(O.expectedAttendance({code:'sched-1',name:'BPA 决赛课程',classType:'CT02'},roster)),[2,'schedule'],'timetable course with the same 课程编号 links the team');
+assert.deepEqual((({count,source})=>[count,source])(O.expectedAttendance({code:'X',name:'线下课',classType:'CT09'},roster)),[8,'classType'],'fixed class size fallback');
+const unk=O.expectedAttendance({code:'X',name:'VC 申请辅导',classType:'CT02'},roster);assert.deepEqual([unk.count,unk.source],[null,'unknown']);assert.match(unk.hint,/实到人数/);
+assert.equal(O.expectedAttendance(undefined,roster).count,null);
+assert.equal(O.classTypeSize('线下8人班型'),8);assert.equal(O.classTypeSize('2. 线上3-5人班型'),null);assert.equal(O.classTypeSize('6. 线下6人及以上班型'),null);
+assert.equal(O.attendanceText(5,6),'5/6 到课');assert.equal(O.attendanceText(6,6),'6/6 全勤');assert.equal(O.attendanceText(5,null),'5 人到课');assert.equal(O.attendanceText(null,6),'');
+assert.equal(O.computeAllowance(3,'person_hour',2,5),30,'allowance uses 实到人数');
+const cs=[{id:'1',code:'WS2026019-01',name:'2026 BPA商业全能挑战赛- 潘厚安',teacher:'潘厚安',project:'P1'},{id:'2',code:'WS2026017-1-22',name:'康莱德 「航空」TEAM 云驿 第一阶段',teacher:'李进坚',project:'P2'},{id:'3',code:'AB-019',name:'BPA 决赛课程',teacher:'张捷嘉',project:'P1'}];
+const pl=id=>({P1:'WS2026019 BPA',P2:'WS2026017 康莱德'}[id]);
+assert.deepEqual(O.filterCourses(cs,'',pl).map(c=>c.id),['1','2','3']);
+assert.deepEqual(O.filterCourses(cs,'云驿',pl).map(c=>c.id),['2'],'name');
+assert.deepEqual(O.filterCourses(cs,'李进坚',pl).map(c=>c.id),['2'],'teacher');
+assert.deepEqual(O.filterCourses(cs,'康莱德',pl).map(c=>c.id),['2'],'project label');
+assert.deepEqual(O.filterCourses(cs,'019',pl).map(c=>c.id),['1','3'],'code contains');
+assert.deepEqual(O.filterCourses(cs,'bpa 张',pl).map(c=>c.id),['3'],'all terms must match');
+assert.deepEqual(O.filterCourses(cs,'ws2026019',pl).map(c=>c.id),['1','3'],'code prefix first, then project match');
+// Both persistence paths carry expectedCount / actualCount; migration copies the old head count.
+const m8=readFileSync('drizzle/0008_lesson_attendance.sql','utf8');
+assert(m8.includes('ADD COLUMN IF NOT EXISTS "expected_count" integer')&&m8.includes('ADD COLUMN IF NOT EXISTS "actual_count" integer')&&m8.includes('SET "actual_count" = "students"'));
+assert(JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries.some(e=>e.tag==='0008_lesson_attendance'));
+assert(schema.includes("expectedCount: integer('expected_count')")&&schema.includes("actualCount: integer('actual_count')")&&!schema.includes("students: integer('students')"));
+const cols=readFileSync('server/collections.ts','utf8');assert(cols.includes('expectedCount: z.number()')&&cols.includes('actualCount: z.number()'));
+const api=readFileSync('server/app.ts','utf8');assert(api.includes('normalizeLesson(body)')&&api.includes('Number(data.actualCount) > 0')&&api.includes('data.actualCount as number | null'));
+assert(store.includes('.map(normalizeLesson)'),'localStorage + bootstrap lessons migrated');
+const opsUi=readFileSync('components/nexus/ops-pages.tsx','utf8');
+assert(opsUi.includes('<CourseCombobox')&&opsUi.includes('应到人数')&&opsUi.includes('实到人数')&&opsUi.includes('attendanceText(n, expected)'));
+assert(/<FormField label="本次课程内容"><textarea rows=\{2\}/.test(opsUi)&&/<FormField label="学生表现"><textarea rows=\{2\}/.test(opsUi),'课程内容 and 学生表现 same size');
+const cc=readFileSync('components/nexus/course-combobox.tsx','utf8');assert(cc.includes('role="combobox"')&&cc.includes('aria-activedescendant')&&cc.includes("'ArrowDown'")&&cc.includes("'Escape'"));
+const css=readFileSync('app/globals.css','utf8');
+assert(css.includes('.ops-table .num{text-align:left')&&css.includes('.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}'),'ops tables left-aligned');
+assert(css.includes('clip-path:inset(-60% -60% var(--husky-clip,0px) -60%)')&&readFileSync('components/nexus/brand.tsx','utf8').includes("'--husky-clip'"),'husky peeks from behind the tab');
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

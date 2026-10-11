@@ -77,7 +77,7 @@ const xref=Number(txt.match(/startxref\s+(\d+)/)[1]);assert.equal(txt.slice(xref
 for(const m of txt.slice(xref).matchAll(/^(\d{10}) 00000 n/gm)){const off=Number(m[1]);assert.match(txt.slice(off,off+12),/^\d+ 0 obj/)}
 
 // 课时记录 + 学情反馈 in one form.
-const lesson={id:'L1',course:'C1',date:'2026-10-20',hours:1.5,students:4,opsTeacher:'xujin@nexus.local',rate:15,unit:'hour',amount:22.5,note:'',createdBy:'xujin@nexus.local',teacher:'Dora'};
+const lesson={id:'L1',course:'C1',date:'2026-10-20',hours:1.5,expectedCount:5,actualCount:4,opsTeacher:'xujin@nexus.local',rate:15,unit:'hour',amount:22.5,note:'',createdBy:'xujin@nexus.local',teacher:'Dora'};
 const empty={attendance:'',content:'',performance:'',issues:'',nextSteps:''};
 assert.equal(O.feedbackDraftEmpty(empty),true);
 assert.deepEqual(O.lessonWithFeedback({lesson,feedback:empty,withFeedback:true,newId:()=>'F1'}),{lesson,feedback:null,issue:null},'nothing filled: no feedback');
@@ -90,7 +90,7 @@ const upd=O.lessonWithFeedback({lesson:{...lesson,date:'2026-10-21'},feedback:{.
 assert.equal(upd.feedback.id,'F1','editing updates the linked feedback in place');assert.equal(upd.feedback.date,'2026-10-21');assert.equal(upd.feedback.createdBy,'orig');
 
 // 授课老师 + per-teacher hours for the month (older records fall back to the course's teacher).
-const rec=(id,ops,date,hours,teacher,course='C1')=>({id,course,date,hours,students:null,opsTeacher:ops,rate:10,unit:'hour',amount:hours*10,note:'',createdBy:ops,...(teacher?{teacher}:{})});
+const rec=(id,ops,date,hours,teacher,course='C1')=>({id,course,date,hours,expectedCount:null,actualCount:null,opsTeacher:ops,rate:10,unit:'hour',amount:hours*10,note:'',createdBy:ops,...(teacher?{teacher}:{})});
 const L=[rec('1','xujin@nexus.local','2026-10-02',2,'Dora'),rec('2','xujin@nexus.local','2026-10-09',1.5,'Kevin'),rec('3','xujin@nexus.local','2026-10-10',1,'','C2'),rec('4','fangyanqi@nexus.local','2026-10-03',3,'Dora'),rec('5','xujin@nexus.local','2026-09-30',5,'Dora')];
 assert.equal(O.lessonTeacher(L[2],courses),'许瑾');assert.equal(O.lessonTeacher({course:'zz'},courses),'未填写');
 const mine=O.visibleLessons(L,{role:'ops'},'xujin@nexus.local');

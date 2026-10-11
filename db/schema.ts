@@ -285,7 +285,9 @@ export const lessonRecords = pgTable('lesson_records', {
   course: text('course').notNull().references(() => opsCourses.id),
   date: text('date').notNull(),
   hours: doublePrecision('hours').notNull(),
-  students: integer('students'),
+  /** 应到人数 (roster size when logged) / 实到人数 (drives 元/人/小时). Migration 0008 copied the old `students` into actual_count. */
+  expectedCount: integer('expected_count'),
+  actualCount: integer('actual_count'),
   opsTeacher: text('ops_teacher').notNull(),
   rate: doublePrecision('rate').notNull(),
   unit: text('unit').notNull(),

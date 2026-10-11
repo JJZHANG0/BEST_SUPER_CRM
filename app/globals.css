@@ -801,7 +801,7 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .ops-table [data-slot=table-cell]{padding:12px 8px;font-size:.8125rem;color:#6d6080;vertical-align:middle}
 .ops-table .cell-title{display:block;color:#3f354c;font-weight:550}
 .ops-table .cell-sub{display:block;font-size:.6875rem;color:#a093ad;margin-top:2px}
-.ops-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.ops-table .num{text-align:left;font-variant-numeric:tabular-nums}
 .ops-table .num b{color:#3f354c;font-weight:600}
 .nowrap{white-space:nowrap}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem!important;letter-spacing:.01em}
@@ -1133,7 +1133,7 @@ html[data-workspace=public] body{background:#f4f2f7}
 .husky-text{display:inline-flex}
 .husky-text>span{display:inline-block;transition:opacity .42s cubic-bezier(.2,.7,.2,1),filter .42s cubic-bezier(.2,.7,.2,1),transform .48s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--i)*30ms);will-change:transform,opacity,filter}
 .husky-label[data-active] .husky-text>span{opacity:0;filter:blur(6px);transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.55)}
-.husky-pop{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;height:var(--husky-h,150px);aspect-ratio:444/600;translate:-50% -100%;transform-origin:50% 100%;opacity:0;scale:.25;transition:opacity .2s ease .04s,scale .3s cubic-bezier(.5,0,.75,0)}
+.husky-pop{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;height:var(--husky-h,150px);aspect-ratio:444/600;translate:-50% -100%;transform-origin:50% calc(100% - var(--husky-clip,0px));clip-path:inset(-60% -60% var(--husky-clip,0px) -60%);opacity:0;scale:.25;transition:opacity .2s ease .04s,scale .3s cubic-bezier(.5,0,.75,0)}
 .husky-pop[data-active]{opacity:1;scale:1;transition:opacity .18s ease .08s,scale .6s cubic-bezier(.34,1.56,.64,1) .08s}
 .husky-wobble{width:100%;height:100%;transform-origin:50% 92%}
 .husky-pop[data-active] .husky-wobble{animation:husky-wobble 1.05s cubic-bezier(.34,1.56,.64,1) .5s both}
@@ -1250,3 +1250,33 @@ html[data-workspace=public] body{background:#f4f2f7}
 .crumb-link:hover{color:#7746c3;text-decoration:underline}
 .crumb-back{display:inline-flex;align-items:center;gap:4px;min-height:30px;padding:0 8px;margin-right:4px;border-radius:8px;border:1px solid #e6dfef;background:#fff9;color:#7e748f;font-size:.75rem}
 .crumb-back:hover{background:#eee7f8;color:#7746c3}
+
+/* Data tables in ops pages: every header and cell left-aligned (numbers and money too) for one consistent reading line. */
+.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}
+.ops-table [data-slot=table-cell].num{font-variant-numeric:tabular-nums}
+
+/* 记录课时: 应到 / 实到 row. */
+.form-columns.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:720px){.form-columns.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.expected-field .expected-count{display:flex;align-items:baseline;gap:2px;min-height:42px;padding:10px 12px;border:1px dashed #ddd2ea;border-radius:10px;background:#f6f3fa;color:#3f354c;font-size:.95rem;font-weight:600;font-variant-numeric:tabular-nums}
+.expected-field .expected-count small{font-size:.75rem;font-weight:400;color:#8d7f9b}
+.expected-field .expected-count.unknown{color:#a093ad;font-weight:400}
+.form-field .field-hint{margin-top:-4px;font-size:.6875rem;line-height:1.5;color:#a093ad;overflow-wrap:anywhere}
+
+/* 课程 combobox (components/nexus/course-combobox.tsx). */
+.course-combobox{position:relative;display:flex;align-items:center}
+.course-combobox>input{width:100%;min-width:0;border:1px solid #e3d9ee;border-radius:10px;padding:10px 38px 10px 36px;background:#fff;color:#3f354c;font-size:.875rem;outline:none}
+.course-combobox>input:focus{border-color:#a98bd6;box-shadow:0 0 0 3px rgb(150 110 210 / .18)}
+.course-combobox .cc-icon{position:absolute;left:12px;color:#a093ad;pointer-events:none}
+.course-combobox .cc-caret{position:absolute;right:6px;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#a093ad;cursor:pointer}
+.course-combobox .cc-caret:hover{background:#f3eef9;color:#5d4f73}
+.cc-list{position:absolute;z-index:60;top:calc(100% + 6px);left:0;right:0;max-height:300px;overflow-y:auto;padding:6px;border:1px solid #e9e2f1;border-radius:12px;background:#fff;box-shadow:0 18px 40px -12px rgb(40 30 70 / .28)}
+.cc-option{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:1px;align-items:baseline;padding:7px 10px;border-radius:8px;cursor:pointer;color:#4d4259}
+.cc-option.active{background:#f1ebfa}
+.cc-option.current .cc-code::before{content:"✓ ";color:#7c4fc0}
+.cc-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;color:#6f5a8c;white-space:nowrap}
+.cc-name{font-size:.8125rem;color:#3f354c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-meta{grid-column:2;font-size:.6875rem;color:#a093ad;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-option mark{background:#fff0b8;color:inherit;border-radius:2px;padding:0 1px}
+.cc-empty{padding:14px 10px;font-size:.8125rem;color:#8d7f9b}
+.cc-foot{position:sticky;bottom:-6px;margin:4px -6px -6px;padding:6px 12px;border-top:1px solid #f0ebf5;background:#fcfbfe;font-size:.6875rem;color:#a093ad}
