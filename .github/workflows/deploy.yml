@@ -1,0 +1,48 @@
+name: Deploy to server (dev / prod)
+# develop -> dev (http://1.13.182.30:8080), tags v* or manual -> prod (http://1.13.182.30).
+# Disabled until the repository has: secret NEXUS_SSH_KEY (private deploy key authorised for root
+# on the server) and variable NEXUS_DEPLOY_ENABLED=true. Optional variable NEXUS_SSH (user@host).
+on:
+  push:
+    branches: [develop]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || (startsWith(github.ref, 'refs/tags/') && 'prod' || 'dev') }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: vars.NEXUS_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (startsWith(github.ref, 'refs/tags/') && 'prod' || 'dev') }}
+    env:
+      TARGET: ${{ github.event.inputs.environment || (startsWith(github.ref, 'refs/tags/') && 'prod' || 'dev') }}
+      NEXUS_SSH: ${{ vars.NEXUS_SSH || 'root@1.13.182.30' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: |
+          node tests/recruitment.mjs && node tests/auth.mjs && node tests/student-status.mjs
+          node tests/articles.mjs && node tests/api-client.mjs
+      - name: Install deploy key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.NEXUS_SSH_KEY }}" > ~/.ssh/nexus_deploy && chmod 600 ~/.ssh/nexus_deploy
+      - name: Deploy
+        run: bash scripts/deploy.sh "$TARGET"
+      - name: Smoke test
+        run: |
+          URL=http://${NEXUS_SSH#*@}; [ "$TARGET" = dev ] && URL=$URL:8080
+          curl -fsS "$URL/api/health"

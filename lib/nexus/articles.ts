@@ -93,6 +93,10 @@ function validBlock(b: unknown): b is ArticleBlock {
 function validContent(c: unknown): c is ArticleContent {
   return isObj(c) && str(c.title) && str(c.summary) && str(c.cover) && Array.isArray(c.blocks) && c.blocks.every(validBlock);
 }
+/** Shape check shared by the browser store and the API server. */
+export function isValidArticle(a: unknown): a is ProgramArticle {
+  return isObj(a) && str(a.program) && str(a.author) && str(a.updated) && validContent(a.draft) && (a.published === null || validContent(a.published)) && (a.publishedAt === null || str(a.publishedAt));
+}
 /**
  * Merge articles saved in browser storage over the seed. Corrupt or unknown entries are
  * dropped so a bad localStorage value can never break 项目中心.
@@ -101,8 +105,7 @@ export function mergeStoredArticles(seed: readonly ProgramArticle[], stored: unk
   if (!Array.isArray(stored)) return [...seed];
   const byProgram = new Map<string, ProgramArticle>();
   for (const a of stored) {
-    if (isObj(a) && str(a.program) && str(a.author) && str(a.updated) && validContent(a.draft) && (a.published === null || validContent(a.published)) && (a.publishedAt === null || str(a.publishedAt)))
-      byProgram.set(a.program as string, a as unknown as ProgramArticle);
+    if (isValidArticle(a)) byProgram.set(a.program, a);
   }
   return seed.map(a => byProgram.get(a.program) ?? a);
 }

@@ -14,6 +14,12 @@ export default function Login() {
   const choose=(role:'sales'|'ops')=>{s.setRole(role);setEmail('');setPassword('');setError('');setHelp(false)};
   const submit=(event:FormEvent)=>{
     event.preventDefault();if(busy)return;
+    if(s.apiMode){
+      // Shared-database build: verify against the NEXUS API.
+      setError('');setBusy(true);
+      s.login(email,password).then(r=>{if(r.ok)s.go('dashboard');else{setError(r.error);setBusy(false)}});
+      return;
+    }
     const match=authenticateDemo(email,password);
     if(!match){setError('账号或密码不正确。请检查输入，或使用下方示例账号。');return;}
     setError('');setBusy(true);

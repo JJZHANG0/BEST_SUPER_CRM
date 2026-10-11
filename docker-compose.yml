@@ -1,0 +1,14 @@
+# Local PostgreSQL for API development: `docker compose up -d db`
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexus_local
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - nexus-pg:/var/lib/postgresql/data
+volumes:
+  nexus-pg:

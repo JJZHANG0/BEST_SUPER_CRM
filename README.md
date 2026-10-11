@@ -71,3 +71,10 @@ PWA 预留不代表已实现完整安装条件、离线 CRM 或推送。所有�
 `tests/acceptance.cjs` 检查 19 个页面状态在 320、375、390、430、768、1024、1440 及横屏视口的水平溢出，以及销售登录、BPA 查询与 PDF 预览/下载、销售学生范围、运营队伍备注、学生状态与反馈录入。浏览器依赖使用当前工作环境的 Playwright，换环境时请调整脚本中的路径。
 
 另有字体放大、空数据、断网、课程草稿发布、文件上传和 WebMCP 注册的定向检查。浏览器模拟不等同于真机验收：iOS Safari、Android 微信、物理软键盘、安装与下载链路仍需真实设备确认。
+
+## Backend & server environments
+
+The app can also run against a real API + PostgreSQL database (shared data across users and devices):
+production http://1.13.182.30/ and development http://1.13.182.30:8080/. Without `NEXT_PUBLIC_API_BASE`
+(e.g. the GitHub Pages build) it keeps working as the offline demo. See [docs/DEPLOY.md](docs/DEPLOY.md)
+for the architecture, environment layout and `scripts/deploy.sh <dev|prod>`.
