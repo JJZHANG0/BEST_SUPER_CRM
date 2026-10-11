@@ -2,12 +2,55 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 
-const source=ts.transpileModule(readFileSync('lib/nexus/auth.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
-const {authenticateDemo,demoAccounts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const load=async file=>import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64'));
+const A=await load('lib/nexus/auth.ts');
+const R=await load('lib/nexus/roles.ts');
 
-assert.equal(demoAccounts.length,2);
-assert.equal(authenticateDemo('sales@nexus.demo','NexusSales2026!')?.role,'sales');
-assert.equal(authenticateDemo(' OPS@NEXUS.DEMO ','NexusOps2026!')?.role,'ops');
-assert.equal(authenticateDemo('sales@nexus.demo','wrong'),null);
-assert.equal(authenticateDemo('admin@nexus.demo','NexusDemo2026'),null);
-console.log('Demo authorization: two accounts, role mapping, normalization and invalid credentials passed.');
+// Staff directory: 5 运营部 accounts with full-pinyin logins, 3 superadmins + 2 ops, plus the public sales demo.
+const staff=A.staffAccounts;
+assert.equal(staff.length,5);
+assert.deepEqual(staff.map(a=>[a.name,a.email,a.role]),[
+  ['张捷嘉','zhangjiejia@nexus.local','superadmin'],['程雪晴','chengxueqing@nexus.local','superadmin'],['张雪航','zhangxuehang@nexus.local','superadmin'],
+  ['许瑾','xujin@nexus.local','ops'],['方彦淇','fangyanqi@nexus.local','ops']]);
+assert.equal(new Set(staff.map(a=>a.email)).size,5,'logins are unique');
+// No plaintext staff passwords in the client bundle — only salted PBKDF2 hashes.
+for(const a of staff){assert(!('password' in a));assert.match(a.salt,/^[0-9a-f]{32}$/);assert.match(a.hash,/^[0-9a-f]{64}$/)}
+const dir=A.directory();
+assert(dir.every(u=>u.email!=='ops@nexus.demo'),'old ops demo account removed');
+assert(dir.filter(u=>u.role!=='sales').every(u=>u.mustChange),'staff must change the initial password');
+
+// Sales demo still works; normalisation; wrong passwords and unknown accounts fail.
+assert.equal((await A.authenticateDemo(' SALES@nexus.demo ','NexusSales2026!'))?.role,'sales');
+assert.equal(await A.authenticateDemo('sales@nexus.demo','wrong'),null);
+assert.equal(await A.authenticateDemo('ops@nexus.demo','NexusOps2026!'),null);
+assert.equal(await A.authenticateDemo('zhangjiejia@nexus.local','guess-1234'),null);
+
+// Browser overrides: changed password, disabled account, admin-created user.
+const h=await A.makeHash('NewPassw0rd!x');
+let o={'xujin@nexus.local':{...h,mustChange:false}};
+const xu=await A.authenticateDemo('xujin@nexus.local','NewPassw0rd!x',o);
+assert.equal(xu?.name,'许瑾');assert.equal(xu?.mustChange,false);assert.equal(xu?.role,'ops');
+o={'xujin@nexus.local':{...h,active:false}};
+assert.equal(await A.authenticateDemo('xujin@nexus.local','NewPassw0rd!x',o),null,'disabled accounts cannot sign in');
+o={'new@nexus.local':{created:true,name:'新老师',role:'ops',...h}};
+assert.equal((await A.authenticateDemo('new@nexus.local','NewPassw0rd!x',o))?.name,'新老师');
+assert.equal(A.directory({'fangyanqi@nexus.local':{role:'superadmin'}}).find(u=>u.email==='fangyanqi@nexus.local').role,'superadmin');
+const pw=A.randomPassword();assert.equal(pw.length,16);assert.deepEqual(R.passwordIssues(pw),[]);
+
+// Role model: superadmin ⊇ ops; sales read-only.
+assert(R.isOpsLike('superadmin')&&R.isOpsLike('ops')&&!R.isOpsLike('sales'));
+assert(R.canWrite('superadmin')&&R.canWrite('ops')&&!R.canWrite('sales'));
+assert(R.canManageSystem('superadmin')&&!R.canManageSystem('ops')&&!R.canManageSystem('admin')&&!R.canManageSystem('sales'));
+assert(R.canSeeAllLessons('superadmin')&&!R.canSeeAllLessons('ops'));
+assert(R.canEditOwned('ops','xujin@nexus.local','XUJIN@nexus.local'));
+assert(!R.canEditOwned('ops','xujin@nexus.local','fangyanqi@nexus.local'));
+assert(R.canEditOwned('superadmin','zhangjiejia@nexus.local','fangyanqi@nexus.local'));
+assert(!R.canEditOwned('sales','sales@nexus.demo','sales@nexus.demo'));
+assert.deepEqual(R.passwordIssues('short1'),['至少 10 位']);assert.equal(R.passwordIssues('onlyletters').length,1);
+
+// The API seed carries the same five accounts as scrypt hashes and forces a password change.
+const seed=readFileSync('server/staff-seed.ts','utf8');
+for(const a of staff){assert(seed.includes(a.email));}
+assert.equal((seed.match(/passwordHash: 'scrypt\$/g)||[]).length,5);
+assert(readFileSync('server/seed.ts','utf8').includes('mustChangePassword: true'));
+console.log('Auth: five staff accounts (hashed only), roles, sales demo, overrides, disabled users and role gating passed.');

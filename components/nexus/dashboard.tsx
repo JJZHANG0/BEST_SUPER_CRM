@@ -1,18 +1,54 @@
 'use client';
-import { Users, Layers, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, Sparkles, Check, CircleAlert, ChevronRight, TrendingUp } from 'lucide-react';
-import { Badge,SectionTitle } from './ui';
+import { Users, Layers, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, Sparkles, CircleAlert, ChevronRight, Wallet, Megaphone } from 'lucide-react';
+import { Badge, SectionTitle, EmptyState } from './ui';
 import { TodoHomeCard } from './todos';
+import { useMonthAllowance } from './ops-pages';
+import { greeting } from './recruitment';
+import { useNexus, useMe } from '@/lib/nexus/store';
+import { money2, monthLabel, today as todayIso } from '@/lib/nexus/ops';
 import { announcements, type Program, type Student, type Team, type Course, type Role } from '@/lib/nexus/data';
-export default function Dashboard({role,programs,students,teams,courses,go}:{role:Role;programs:Program[];students:Student[];teams:Team[];courses:Course[];go:(v:string)=>void}){
- const sales=role==='sales', attention=teams.filter(t=>t.status!=='正常进行'),today=courses.filter(c=>c.date==='2026-10-09');
- const stats=[{label:sales?'我的学生':'学生总数',value:students.length,unit:'位',icon:Users,sub:sales?'我负责的学生':'覆盖 6 个在读项目',tone:'violet',path:'students'},{label:'进行中的项目',value:programs.filter(p=>p.published).length,unit:'个',icon:Layers,sub:'8 个项目，连接无限可能',tone:'blue',path:'programs'},{label:sales?'待关注事项':'活跃队伍',value:sales?attention.length:teams.length,unit:sales?'项':'支',icon:UsersRound,sub:`${attention.length} 支队伍需要关注`,tone:'pink',path:sales?'students':'teams'},{label:sales?'最新资料':'本周课程',value:sales?5:courses.length,unit:sales?'份':'节',icon:sales?FileText:CalendarDays,sub:sales?'项目资料已准备就绪':`今天有 ${today.length} 节课程`,tone:'green',path:sales?'resources':'courses'}];
- return <><div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>早上好，{sales?'Alex':'陈老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><div className="welcome-date"><CalendarDays size={17}/><div>2026 年 10 月 9 日<span>星期五 · 新的一天，新的可能</span></div></div></div>
- <div className="stats-grid">{stats.map(s=><button className="stat-card glass" key={s.label} onClick={()=>go(s.path)}><div className="stat-top"><span>{s.label}</span><span className={`stat-icon ${s.tone}`}><s.icon size={19}/></span></div><div className="stat-value">{s.value}<span>{s.unit}</span><svg className={`sparkline ${s.tone}`} viewBox="0 0 92 32" aria-hidden="true"><path d="M1 27L11 23L22 25L33 14L43 18L53 12L64 16L76 6L91 3" fill="none" stroke="currentColor" strokeWidth="2"/></svg></div><div className="stat-foot"><span>{s.sub}</span><ChevronRight size={14}/></div></button>)}</div>
- <div className="dashboard-columns"><div className="dashboard-main"><TodoHomeCard/>
- <section className="glass panel attention-panel"><SectionTitle title={sales?'我的学生动态':'需要关注的队伍'} sub={sales?'跟进每位学生的成长':'及时跟进，让协作更从容'} action="查看全部" onClick={()=>go(sales?'students':'teams?attention')}/>{sales?students.slice(0,3).map(s=><button className="attention-row" key={s.id} onClick={()=>go(`students/${s.id}`)}><span className="avatar small-avatar">{s.name.slice(3,4)}</span><div><strong>{s.name}</strong><p>{programs.find(p=>p.id===s.program)?.name}</p></div><Badge>{s.status}</Badge></button>):attention.map((t,i)=><button className="attention-row" key={t.id} onClick={()=>go(`teams/${t.id}`)}><span className={`attention-icon ${i===2?'pink':'orange'}`}><CircleAlert size={18}/></span><div><strong>{t.name} <span>{programs.find(p=>p.id===t.program)?.short}</span></strong><p>{t.note}</p></div><Badge tone={i===2?'pink':'orange'}>{t.status}</Badge><ChevronRight size={16}/></button>)}</section>
- <section className="glass panel"><SectionTitle title="最新项目公告" action="全部公告" onClick={()=>go('announcements')}/><div className="announcement-grid">{announcements.slice(0,2).map((a,i)=><button className="announcement" key={a.title} onClick={()=>go(`programs/${a.program}`)}><Badge tone={i?'orange':'violet'}>{a.tag}</Badge><strong>{a.title}</strong><p>{a.text}</p><small>{a.date}</small></button>)}</div></section></div>
- <div className="dashboard-side"><section className="glass panel quick-panel"><SectionTitle title="快捷操作"/><div className="quick-grid">{(sales?[{label:'项目资料',icon:FileText,path:'resources'},{label:'我的学生',icon:Users,path:'students'},{label:'课程安排',icon:CalendarDays,path:'courses'},{label:'项目中心',icon:Layers,path:'programs'}]:[{label:'新增学生',icon:Plus,path:'students/new'},{label:'新建课程',icon:CalendarDays,path:'courses/new'},{label:'上传资料',icon:FileText,path:'resources/upload'},{label:'记录反馈',icon:MessageSquare,path:'feedback/new'}]).map(x=><button key={x.label} onClick={()=>go(x.path)}><span><x.icon size={20}/></span>{x.label}</button>)}</div></section>
- <section className="glass panel schedule-panel"><SectionTitle title="今日课程" action="日历" onClick={()=>go('courses')}/><div className="mini-date"><span>10 月</span>{[5,6,7,8,9,10,11].map((n,i)=><button key={n} className={n===9?'selected':''} onClick={()=>go(`courses?date=2026-10-${String(n).padStart(2,'0')}`)}><small>{['一','二','三','四','五','六','日'][i]}</small>{n}</button>)}</div><div className="today-courses">{today.map((c,i)=><button key={c.id} className={`today-course line-${i}`} onClick={()=>go(`courses/${c.id}`)}><small><Clock size={13}/>{c.time}<Badge tone="neutral">待上课</Badge></small><strong>{c.name}</strong><p>{teams.find(t=>t.id===c.team)?.name} <span>·</span> {c.teacher}</p></button>)}</div><button className="full-link" onClick={()=>go('courses')}>查看完整课程安排 <ChevronRight size={15}/></button></section>
- <div className="workspace-note"><Sparkles size={22}/><div><strong>让创新，发生在每一天。</strong><p>连接学生、老师与每一种可能。</p></div></div></div></div>
- <footer className="page-footer"><span>PROJECT NEXUS <i>·</i> Innovation, connected.</span><span><span className="live-dot"/> 演示工作空间 · 数据均为虚构</span></footer></>;
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** Monday-first week containing `day` (YYYY-MM-DD). */
+function weekOf(day: string) {
+  const d = new Date(day + 'T12:00:00');
+  const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => { const x = new Date(monday); x.setDate(monday.getDate() + i); return iso(x); });
+}
+const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+
+export default function Dashboard({ programs, students, teams, courses, go }: { role: Role; programs: Program[]; students: Student[]; teams: Team[]; courses: Course[]; go: (v: string) => void }) {
+  const s = useNexus(), me = useMe(), allowance = useMonthAllowance();
+  const today = todayIso(), week = weekOf(today);
+  const attention = teams.filter(t => t.status !== '正常进行' && t.status !== '已完成');
+  const todays = courses.filter(c => c.date === today).sort((a, b) => a.time.localeCompare(b.time));
+  const thisWeek = courses.filter(c => week.includes(c.date));
+  const now = new Date(today + 'T12:00:00');
+  const stats = [
+    { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' },
+    { label: '进行中的项目', value: programs.filter(p => p.published).length, unit: '个', icon: Layers, sub: `项目库共 ${programs.length} 个项目`, tone: 'blue', path: 'programs' },
+    { label: '活跃队伍', value: teams.length, unit: '支', icon: UsersRound, sub: teams.length ? `${attention.length} 支队伍需要关注` : '暂无队伍', tone: 'pink', path: 'teams' },
+    { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' },
+    { label: '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' },
+  ];
+  return <>
+    <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>星期{weekdays[(now.getDay() + 6) % 7]} · 新的一天，新的可能</span></div></div></div>
+    <div className="stats-grid five">{stats.map(x => <button className="stat-card glass" key={x.label} onClick={() => go(x.path)}><div className="stat-top"><span>{x.label}</span><span className={`stat-icon ${x.tone}`}><x.icon size={19} /></span></div><div className="stat-value">{x.value}{x.unit && <span>{x.unit}</span>}</div><div className="stat-foot"><span>{x.sub}</span><ChevronRight size={14} /></div></button>)}</div>
+    <div className="dashboard-columns"><div className="dashboard-main"><TodoHomeCard />
+      <section className="glass panel attention-panel"><SectionTitle title="需要关注的队伍" sub="及时跟进，让协作更从容" action="查看全部" onClick={() => go('teams?attention')} />
+        {attention.map(t => <button className="attention-row" key={t.id} onClick={() => go(`teams/${t.id}`)}><span className="attention-icon orange"><CircleAlert size={18} /></span><div><strong>{t.name} <span>{programs.find(p => p.id === t.program)?.short}</span></strong><p>{t.note || '暂无备注'}</p></div><Badge tone="orange">{t.status}</Badge><ChevronRight size={16} /></button>)}
+        {!attention.length && <EmptyState icon={UsersRound} title={teams.length ? '所有队伍进展正常' : '还没有队伍'} description={teams.length ? '队伍状态标记为材料待补充、进度延期等时会显示在这里。' : '新建队伍后，可在这里跟进需要协调的事项。'} action={teams.length ? undefined : '新建队伍'} onAction={() => go('teams/new')} />}
+      </section>
+      <section className="glass panel"><SectionTitle title="最新项目公告" action={announcements.length ? '全部公告' : undefined} onClick={() => go('announcements')} />
+        {announcements.length ? <div className="announcement-grid">{announcements.slice(0, 2).map((a, i) => <button className="announcement" key={a.title} onClick={() => go(`programs/${a.program}`)}><Badge tone={i ? 'orange' : 'violet'}>{a.tag}</Badge><strong>{a.title}</strong><p>{a.text}</p><small>{a.date}</small></button>)}</div>
+          : <EmptyState icon={Megaphone} title="暂无公告" description="项目公告发布后会显示在这里。" />}
+      </section></div>
+      <div className="dashboard-side"><section className="glass panel quick-panel"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>
+        <section className="glass panel schedule-panel"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
+          <div className="today-courses">{todays.map((c, i) => <button key={c.id} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{c.time}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name} <span>·</span> {c.teacher}</p></button>)}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
+          <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>
+        <div className="workspace-note"><Sparkles size={22} /><div><strong>让创新，发生在每一天。</strong><p>连接学生、老师与每一种可能。</p></div></div></div></div>
+    <footer className="page-footer"><span>PROJECT NEXUS <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
+  </>;
 }

@@ -29,6 +29,8 @@ jobs:
         run: node tests/articles.mjs
       - name: Validate ops todos
         run: node tests/todos.mjs
+      - name: Validate ops lessons, allowance and system management
+        run: node tests/ops.mjs
       - name: Validate API client (demo mode stays offline)
         run: node tests/api-client.mjs
       - name: Type-check and bundle API server

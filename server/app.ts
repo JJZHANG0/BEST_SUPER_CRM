@@ -1,26 +1,42 @@
 /**
  * PROJECT NEXUS API (Hono), mounted under /api behind nginx.
- * Roles: ops/admin may write; sales are read-only and only see their own students,
- * public resources, visible feedback and published articles.
+ * Roles (lib/nexus/roles.ts): ops/admin/superadmin may write shared data; sales are read-only and
+ * only see their own students, public resources, visible feedback and published articles.
+ * 系统管理 (users, 项目, 课程, 班型与津贴) is superadmin-only; 课时记录 / 课情反馈 are owned per
+ * 教务老师 — ops read and write their own, superadmins all.
  */
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
 import { asc, desc, eq, max, min, sql } from 'drizzle-orm';
+import { randomInt } from 'node:crypto';
 import type { Db } from './db';
 import { schema } from './db';
 import type { Config } from './config';
-import { verifyPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
-import { isCollection, recordSchemas, tables, toRecord, type CollectionName } from './collections';
+import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, deletableCollections, type CollectionName } from './collections';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, isOpsLike, isRole, passwordIssues, type Role } from '../lib/nexus/roles';
+import { computeAllowance, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 
-export type SessionUser = { id: number; email: string; name: string; role: 'ops' | 'sales' | 'admin'; salesName: string | null };
+export type SessionUser = { id: number; email: string; name: string; role: Role; salesName: string | null; mustChangePassword: boolean };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
-const canWrite = (u: SessionUser) => u.role === 'ops' || u.role === 'admin';
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, name: u.name, role: u.role, salesName: u.salesName });
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, name: row.name, role: row.role as SessionUser['role'], salesName: row.salesName });
+const canWrite = (u: SessionUser) => roleCanWrite(u.role);
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword });
+const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName });
+/** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
+export function generatePassword(length = 16) {
+  const all = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+?';
+  for (;;) {
+    let pw = '';
+    for (let i = 0; i < length; i++) pw += all[randomInt(all.length)];
+    if (/[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)) return pw;
+  }
+}
+const pgCode = (err: unknown) => (err as { cause?: { code?: string } }).cause?.code || (err as { code?: string }).code;
 const issuesOf = (e: { issues: { path: PropertyKey[]; message: string }[] }) => e.issues.map(i => i.path.join('.') + ': ' + i.message);
 
 export function createApp(db: Db, config: Config, startedAt = new Date()) {
@@ -69,7 +85,71 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
   });
   const forbidden = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅项目运营老师可用' }, 403);
 
+  const onlySuperadmin = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅超级管理员可用' }, 403);
+
   app.get('/auth/me', c => c.json({ user: publicUser(c.get('user')) }));
+
+  app.post('/auth/change-password', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { current?: unknown; next?: unknown } | null;
+    const current = typeof body?.current === 'string' ? body.current : '', next = typeof body?.next === 'string' ? body.next : '';
+    const issues = passwordIssues(next);
+    if (issues.length) return c.json({ error: 'invalid', message: '新密码' + issues.join('，') }, 400);
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1);
+    if (!row || !(await verifyPassword(current, row.passwordHash))) return c.json({ error: 'invalid_credentials' }, 401);
+    if (current === next) return c.json({ error: 'invalid', message: '新密码不能与当前密码相同' }, 400);
+    await db.update(schema.users).set({ passwordHash: await hashPassword(next), mustChangePassword: false, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    return c.json({ ok: true as const });
+  });
+
+  // ---- 系统管理 · 用户管理 (superadmin) ----
+  app.get('/admin/users', async c => {
+    if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);
+    const rows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
+    return c.json({ users: rows.map(adminUser) });
+  });
+  app.post('/admin/users', async c => {
+    if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);
+    const body = await c.req.json().catch(() => null) as { email?: unknown; name?: unknown; role?: unknown; salesName?: unknown } | null;
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) return c.json({ error: 'invalid', message: '请输入有效的登录账号（邮箱格式）' }, 400);
+    if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400);
+    if (!isRole(body?.role) || body.role === 'admin') return c.json({ error: 'invalid', message: '未知角色' }, 400);
+    const salesName = body.role === 'sales' ? (typeof body.salesName === 'string' && body.salesName.trim() ? body.salesName.trim().slice(0, 80) : '顾问 ' + name) : null;
+    const password = generatePassword();
+    try {
+      const [row] = await db.insert(schema.users).values({ email, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true }).returning();
+      return c.json({ user: adminUser(row), password }, 201);
+    } catch (err) {
+      if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: '该账号已存在' }, 409);
+      throw err;
+    }
+  });
+  app.patch('/admin/users/:id', async c => {
+    const me = c.get('user');
+    if (!canManageSystem(me.role)) return onlySuperadmin(c);
+    const id = Number(c.req.param('id'));
+    const [row] = Number.isInteger(id) ? await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1) : [];
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    const body = await c.req.json().catch(() => null) as { name?: unknown; role?: unknown; active?: unknown } | null;
+    const patch: Partial<typeof schema.users.$inferInsert> = { updatedAt: new Date() };
+    if (typeof body?.name === 'string') { const name = body.name.trim().slice(0, 80); if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400); patch.name = name; }
+    if (body?.role !== undefined) { if (!isRole(body.role)) return c.json({ error: 'invalid', message: '未知角色' }, 400); patch.role = body.role; if (body.role === 'sales' && !row.salesName) patch.salesName = '顾问 ' + (patch.name ?? row.name); }
+    if (body?.active !== undefined) { if (typeof body.active !== 'boolean') return c.json({ error: 'invalid' }, 400); patch.active = body.active; }
+    if (row.id === me.id && ((patch.role && patch.role !== row.role) || patch.active === false)) return c.json({ error: 'invalid', message: '不能修改自己的角色或停用自己的账号' }, 400);
+    const [updated] = await db.update(schema.users).set(patch).where(eq(schema.users.id, id)).returning();
+    return c.json({ user: adminUser(updated) });
+  });
+  app.post('/admin/users/:id/reset-password', async c => {
+    if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);
+    const id = Number(c.req.param('id'));
+    const [row] = Number.isInteger(id) ? await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1) : [];
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    const password = generatePassword();
+    await db.update(schema.users).set({ passwordHash: await hashPassword(password), mustChangePassword: true, updatedAt: new Date() }).where(eq(schema.users.id, id));
+    return c.json({ password });
+  });
 
   async function list(name: CollectionName) {
     const t = tables[name] as typeof schema.teams;
@@ -150,12 +230,15 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
-    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments'] as const).map(list));
+    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks'] as const).map(list));
+    const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
+    const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active }));
+    const own = (r: Record<string, unknown>) => canSeeAllLessons(user.role) || String(r.opsTeacher).toLowerCase() === user.email;
     const articleRows = await db.select().from(schema.articles);
     const todoRows = await db.select().from(schema.todos).where(eq(schema.todos.userId, user.id)).orderBy(desc(schema.todos.createdAt));
     const todos = todoRows.map(todoRow);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos, classTypes, projects, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -167,6 +250,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
       resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, todos,
+      classTypes: [], projects: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
     });
   });
 
@@ -231,6 +315,27 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     if (name === 'students') return c.json({ record: await saveStudent(parsed.data, user) });
     const t = tables[name] as typeof schema.teams; // every table has id, sortOrder, updatedAt
     const data = { ...parsed.data } as Record<string, unknown>;
+    if (systemCollections.includes(name) && !canManageSystem(user.role)) return onlySuperadmin(c);
+    if (ownedCollections.includes(name)) {
+      const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
+      if (!canEditOwned(user.role, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user.role, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
+      data.opsTeacher = String(data.opsTeacher).toLowerCase();
+      data.createdBy = current ? current.createdBy : user.email;
+      const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(data.course))).limit(1);
+      if (!course) return c.json({ error: 'invalid', message: '课程不存在' }, 400);
+      if (name === 'lessons') {
+        // Snapshot the class type's rate when the record is created or moved to another course; the API computes the amount.
+        let rate = current ? Number(current.rate) : NaN, unit = current ? String(current.unit) : '';
+        if (!current || current.course !== data.course) {
+          const [type] = await db.select().from(schema.classTypes).where(eq(schema.classTypes.id, course.classType)).limit(1);
+          if (!type) return c.json({ error: 'invalid', message: '课程的班级类型不存在' }, 400);
+          rate = type.rate; unit = type.unit;
+        }
+        if (!isUnit(unit)) return c.json({ error: 'invalid', message: '津贴单位无效' }, 400);
+        if (unit === 'person_hour' && !(Number(data.students) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写学生人数' }, 400);
+        data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.students as number | null);
+      }
+    }
     for (const [k, v] of Object.entries(recordSchemas[name].shape)) if ((v as { isOptional(): boolean }).isOptional() && data[k] === undefined) data[k] = null;
     const now = new Date();
     try {
@@ -245,9 +350,28 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       return c.json({ record: toRecord(name, row as unknown as Record<string, unknown>) });
     } catch (err) {
       // Foreign-key violations (unknown programme / student) are client errors.
-      if ((err as { cause?: { code?: string }; code?: string }).cause?.code === '23503' || (err as { code?: string }).code === '23503') return c.json({ error: 'invalid', issues: ['unknown reference'] }, 400);
+      if (pgCode(err) === '23503') return c.json({ error: 'invalid', issues: ['unknown reference'], message: '引用的记录不存在' }, 400);
+      if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: '编号已存在，请使用其他编号' }, 409);
       throw err;
     }
+  });
+
+  /** Delete one record of an ops collection (系统管理: superadmin; 课时/反馈: owner or superadmin). */
+  app.delete('/:collection/:id', async c => {
+    const user = c.get('user'), name = c.req.param('collection'), id = c.req.param('id');
+    if (!isCollection(name) || !deletableCollections.includes(name)) return c.json({ error: 'not_found' }, 404);
+    const t = tables[name] as typeof schema.teams;
+    const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
+    if (!current) return c.json({ error: 'not_found' }, 404);
+    if (systemCollections.includes(name) ? !canManageSystem(user.role) : !canEditOwned(user.role, user.email, String(current.opsTeacher))) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
+    try {
+      if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
+      await db.delete(t).where(eq(t.id, id));
+    } catch (err) {
+      if (pgCode(err) === '23503') return c.json({ error: 'in_use', message: '该记录仍被其他数据引用，无法删除' }, 409);
+      throw err;
+    }
+    return c.json({ ok: true as const });
   });
 
   return app;

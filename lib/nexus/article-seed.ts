@@ -1,9 +1,9 @@
 import { programs, teams } from './data';
-import { programOffers, cohortOffers, money } from './recruitment';
+import { offerFor as offerOf, cohortOffers, priceText, planText } from './recruitment';
 import type { ArticleBlock, ArticleContent, ProgramArticle } from './articles';
 
 type Copy = { title: string; summary: string; intro: string; highlights: string[]; quote: string; scene: 'workshop' | 'research' | 'showcase' };
-/** Demo editorial copy. Fictional — not official programme literature. */
+/** Starter template copy for the article editor (「套用模板」). Not seeded as content. */
 const copy: Record<string, Copy> = {
   bpa: { title: '在真实商业挑战里，练就未来领导力', summary: '从案例拆解到模拟答辩，12 次课带学生完成一份能上赛场的商业计划书。', intro: 'BPA 美国商业全能挑战赛是面向高中生的综合商业赛事。比起背诵商业概念，我们更关心学生能否看懂一家公司、讲清一个机会，并在评委面前自信表达。', highlights: ['以真实企业案例为起点，学会用数据说话', '小组协作完成商业计划书与财务预测', '两轮模拟答辩，提前熟悉赛场节奏'], quote: '好的商业表达，是把复杂的判断讲成一个可信的故事。', scene: 'showcase' },
   ctb: { title: '从一个真实问题出发，做一次像样的研究', summary: '研究问题定义、调研方法、成果呈现，16 次课陪学生走完完整研究流程。', intro: 'CTB 全球青年创新论坛鼓励青年用跨学科视角回应社会挑战。项目会带学生从身边的现象中提炼研究问题，设计调研并形成有说服力的研究报告。', highlights: ['导师一对一打磨研究问题，避免“题目过大”', '访谈、问卷与二手资料相结合的调研训练', '论坛式展示，练习回应提问与讨论'], quote: '研究不是寻找标准答案，而是把问题问得更好。', scene: 'research' },
@@ -19,7 +19,7 @@ const sceneCaption = { workshop: '课堂掠影：小组协作与原型制作（�
 
 export function articleContentFor(programId: string): ArticleContent {
   const p = programs.find(x => x.id === programId)!;
-  const c = copy[programId], offer = programOffers[programId];
+  const c = copy[programId], offer = offerOf(programId);
   const team = teams.find(t => t.program === programId);
   const cohort = team ? cohortOffers[team.id] : undefined;
   let n = 0;
@@ -30,12 +30,12 @@ export function articleContentFor(programId: string): ArticleContent {
     { id: id(), type: 'paragraph', text: c.highlights.map((h, i) => `${String(i + 1).padStart(2, '0')}  ${h}`).join('\n') },
     { id: id(), type: 'image', src: `materials/scene-${c.scene}.svg`, caption: sceneCaption[c.scene] },
     { id: id(), type: 'heading', text: '课程怎么上' },
-    { id: id(), type: 'paragraph', text: `项目共 ${offer.sessions} 次课、${offer.hours} 课时，采用线上小班与导师指导结合的方式。主要模块包括：\n${p.curriculum.split('\n').map(x => '· ' + x).join('\n')}` },
+    { id: id(), type: 'paragraph', text: `课程计划：${planText(offer)}。主要模块包括：\n${p.curriculum.split('\n').map(x => '· ' + x).join('\n')}` },
     { id: id(), type: 'highlight', kind: 'schedule', title: '时间安排', items: [
       { label: '计划开课', value: cohort?.opens ?? '待运营发布' },
       { label: '报名截止', value: cohort?.deadline ?? '待发布' },
       { label: '上课时间', value: cohort?.schedule ?? '开课前确认' },
-      { label: '课程计划', value: `${offer.sessions} 次 · ${offer.hours} 课时` },
+      { label: '课程计划', value: planText(offer) },
     ] },
     { id: id(), type: 'highlight', kind: 'eligibility', title: '适合谁来', items: [
       { label: '适合对象', value: offer.audience },
@@ -44,29 +44,28 @@ export function articleContentFor(programId: string): ArticleContent {
     ] },
     { id: id(), type: 'quote', text: c.quote },
     { id: id(), type: 'highlight', kind: 'price', title: '费用说明', items: [
-      { label: '项目参考价', value: `${money(offer.fee)} / 人（演示）` },
+      { label: '项目参考价', value: priceText(offer.fee) },
       { label: '费用包含', value: '课程指导、阶段点评与成果辅导' },
       { label: '不含项目', value: '赛事报名、差旅与住宿' },
     ] },
-    { id: id(), type: 'image', src: `materials/poster-${programId}.svg`, caption: '招生海报（演示版），可在项目详情中下载' },
+    { id: id(), type: 'image', src: `materials/poster-${programId}.svg`, caption: '招生海报，可在项目详情中下载' },
     { id: id(), type: 'highlight', kind: 'tip', title: '如何报名', items: [
       { label: '报名方式', value: '联系负责顾问确认报名条件、费用与协议' },
-      { label: '运营对接', value: offer.operations },
+      { label: '运营对接', value: offer.operations || '待指定' },
     ] },
   ];
   return { title: c.title, summary: c.summary, cover: `materials/cover-${programId}.svg`, blocks };
 }
 
-export const seedArticles: ProgramArticle[] = programs.map(p => {
-  const content = articleContentFor(p.id);
-  const live = p.published;
-  return {
-    program: p.id,
-    author: programOffers[p.id].operations,
-    draft: content,
-    // The unpublished summer camp shows how a draft stays hidden from sales until ops publishes it.
-    published: live ? JSON.parse(JSON.stringify(content)) : null,
-    updated: '2026-10-09 18:20',
-    publishedAt: live ? '2026-10-09 18:20' : null,
-  };
-});
+/**
+ * Every programme starts with an empty, unpublished draft; ops write and publish the real article.
+ * (The starter template above is available in the editor.)
+ */
+export const seedArticles: ProgramArticle[] = programs.map(p => ({
+  program: p.id,
+  author: '',
+  draft: { title: p.name, summary: p.description, cover: `materials/cover-${p.id}.svg`, blocks: [] },
+  published: null,
+  updated: '',
+  publishedAt: null,
+}));

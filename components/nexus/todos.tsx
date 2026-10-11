@@ -3,13 +3,15 @@ import { useMemo, useState } from 'react';
 import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
-import { openTodos, doneTodos, groupDoneByMonth, formatDue, DEMO_TODO_USER, type Todo } from '@/lib/nexus/todos';
+import { openTodos, doneTodos, groupDoneByMonth, formatDue, type Todo } from '@/lib/nexus/todos';
 import { SectionTitle, PageTitle, NoResults, FormField } from './ui';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 
-function mine(list: Todo[], user: { id?: number; email?: string } | null, role: string) {
-  const key = user?.id != null ? user.id : (user?.email || (role === 'sales' ? 'sales@nexus.demo' : DEMO_TODO_USER));
-  return list.filter(t => String(t.userId) === String(key));
+/** API todos carry the numeric user id; Pages-demo todos carry the login email. */
+function mine(list: Todo[], user: { id?: number; email?: string } | null, apiMode: boolean) {
+  if (!user) return [];
+  const key = apiMode ? String(user.id) : String(user.email || '').toLowerCase();
+  return list.filter(t => String(t.userId).toLowerCase() === key);
 }
 
 function AddTodoForm({ compact, onAdded }: { compact?: boolean; onAdded?: () => void }) {
@@ -82,10 +84,10 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
       <div className="todo-main">
         <strong>{todo.title}</strong>
         {(todo.note || todo.dueAt) && (
-          <p>
-            {todo.dueAt && <span className="todo-due"><CalendarDays size={12} />{formatDue(todo.dueAt)}</span>}
-            {todo.dueAt && todo.note ? ' · ' : ''}
-            {todo.note}
+          <p className="todo-meta">
+            {todo.dueAt && <span className="todo-due"><CalendarDays size={12} aria-hidden="true" /><span>{formatDue(todo.dueAt)}</span></span>}
+            {todo.dueAt && todo.note && <span className="todo-sep" aria-hidden="true">·</span>}
+            {todo.note && <span className="todo-note">{todo.note}</span>}
           </p>
         )}
       </div>
@@ -102,7 +104,7 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
 /** Compact homepage card: open todos + add input. Checked items leave this list. */
 export function TodoHomeCard() {
   const s = useNexus();
-  const list = useMemo(() => openTodos(mine(s.todos, s.user, s.role)), [s.todos, s.user, s.role]);
+  const list = useMemo(() => openTodos(mine(s.todos, s.user, s.apiMode)), [s.todos, s.user, s.apiMode]);
   const preview = list.slice(0, 6);
   return (
     <section className="glass panel todo-home-panel">
@@ -129,7 +131,7 @@ export function TodoHomeCard() {
 
 export function TodosOpenPage() {
   const s = useNexus();
-  const list = useMemo(() => openTodos(mine(s.todos, s.user, s.role)), [s.todos, s.user, s.role]);
+  const list = useMemo(() => openTodos(mine(s.todos, s.user, s.apiMode)), [s.todos, s.user, s.apiMode]);
   return (
     <>
       <PageTitle title="待办事项" en="OPEN TODOS" description="记录运营节奏，勾选完成即可归档到「已完成」。" />
@@ -147,7 +149,7 @@ export function TodosOpenPage() {
 
 export function TodosDonePage() {
   const s = useNexus();
-  const groups = useMemo(() => groupDoneByMonth(mine(s.todos, s.user, s.role)), [s.todos, s.user, s.role]);
+  const groups = useMemo(() => groupDoneByMonth(mine(s.todos, s.user, s.apiMode)), [s.todos, s.user, s.apiMode]);
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   return (
     <>

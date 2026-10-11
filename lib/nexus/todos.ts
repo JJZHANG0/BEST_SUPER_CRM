@@ -1,6 +1,6 @@
 /**
  * Ops 待办 (TODO) helpers. Records are scoped per logged-in user.
- * Demo/GitHub Pages seeds a few open items for ops@nexus.demo; the API stores the same shape.
+ * Everyone starts with an empty list (no seeded samples); the API and the Pages demo store the same shape.
  */
 export type Todo = {
   id: string;
@@ -15,26 +15,6 @@ export type Todo = {
   createdAt: string;
   updatedAt: string;
 };
-
-export const DEMO_TODO_USER = 'ops@nexus.demo';
-
-/** Sample open todos shown to the ops demo account on first load (localStorage / empty DB). */
-export function seedTodos(userId: number | string = DEMO_TODO_USER, now = new Date()): Todo[] {
-  const iso = (d: Date) => d.toISOString();
-  const day = (offset: number) => {
-    const d = new Date(now);
-    d.setHours(12, 0, 0, 0);
-    d.setDate(d.getDate() + offset);
-    return d.toISOString().slice(0, 10);
-  };
-  const base = now.getTime();
-  return [
-    { id: 'TODO-seed-1', userId, title: '核对本周 BPA 课程排期', note: '确认两支队伍的上课时间无冲突', dueAt: day(1), completedAt: null, createdAt: iso(new Date(base - 86_400_000 * 2)), updatedAt: iso(new Date(base - 86_400_000 * 2)) },
-    { id: 'TODO-seed-2', userId, title: '整理 CTB 队伍进度备注', note: '把「材料待补充」的队伍说明写清楚，方便周报引用', dueAt: day(2), completedAt: null, createdAt: iso(new Date(base - 86_400_000)), updatedAt: iso(new Date(base - 86_400_000)) },
-    { id: 'TODO-seed-3', userId, title: '准备周五项目周报素材', dueAt: day(4), completedAt: null, createdAt: iso(new Date(base - 36_000_000)), updatedAt: iso(new Date(base - 36_000_000)) },
-    { id: 'TODO-seed-4', userId, title: '跟进需关注学生状态更新', note: '与负责销售对齐状态不佳同学的下一步', dueAt: null, completedAt: null, createdAt: iso(now), updatedAt: iso(now) },
-  ];
-}
 
 export const isOpen = (t: Todo) => !t.completedAt;
 export const isDone = (t: Todo) => !!t.completedAt;
@@ -89,9 +69,9 @@ export function monthLabelFromIso(iso: string, timeZone = 'Asia/Shanghai'): stri
   return `${y}年${Number(m)}月`;
 }
 
-/** Merge stored list with seed: keep user edits; inject missing seed ids only when storage was empty. */
-export function mergeStoredTodos(seed: Todo[], stored: unknown): Todo[] {
-  if (!Array.isArray(stored) || !stored.length) return seed.slice();
+/** Valid todos from browser storage (anything malformed is dropped). */
+export function storedTodos(stored: unknown): Todo[] {
+  if (!Array.isArray(stored)) return [];
   return stored.filter((x): x is Todo => !!x && typeof x === 'object' && typeof (x as Todo).id === 'string' && typeof (x as Todo).title === 'string');
 }
 

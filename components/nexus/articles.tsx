@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useNexus } from '@/lib/nexus/store';
 import { assetUrl } from '@/lib/nexus/assets';
-import { cohortAvailability, cohortOffers, money, programOffers } from '@/lib/nexus/recruitment';
+import { cohortAvailability, cohortOffers, offerFor, priceText, planText } from '@/lib/nexus/recruitment';
 import { articleIssues, articleState, blockLabels, highlightKinds, highlightLabels, LIMITS, moveBlock, newBlock, publishArticle, readingMinutes, saveDraft, shareText, unpublishArticle, type ArticleBlock, type ArticleContent, type BlockType, type HighlightKind } from '@/lib/nexus/articles';
 import { articleContentFor } from '@/lib/nexus/article-seed';
 import type { Program } from '@/lib/nexus/data';
@@ -44,7 +44,7 @@ export function ArticleView({ content, program, author, date, compact = false }:
     {content.cover ? <img className="article-cover" src={resolveSrc(content.cover)} alt={`${program.name}推文封面`} /> : <div className="article-cover placeholder"><ImageGlyph size={26} />请选择封面</div>}
     {content.summary && <p className="article-summary">{content.summary}</p>}
     <Blocks blocks={content.blocks} />
-    <p className="article-end">以上为演示内容，正式信息以签约报价与项目公告为准</p>
+    <p className="article-end">正式信息以签约报价与项目公告为准</p>
   </div>;
 }
 
@@ -61,7 +61,7 @@ export function ProgramHub() {
   return <>
     <PageTitle title="项目中心" en="PROGRAM HUB" description={ops ? '像排版公众号推文一样编排项目介绍，发布后销售老师即可阅读与分享。' : '阅读每个项目的介绍推文：亮点、课程、时间与费用一目了然。'} />
     <div className="sticky-filters"><div className="filter-toolbar"><SearchBox value={q} onChange={setQ} placeholder="搜索项目或推文标题，例如 BPA" /><Choice value={status} onChange={setStatus} options={['全部状态', '招生中', '滚动招生', '预报名', '筹备中']} label="招生状态" /></div><div className="filter-chips">{['全部项目', '我的收藏', '最近浏览', ...new Set(s.programs.map(p => p.type))].map(t => <button className={type === t ? 'selected' : ''} key={t} onClick={() => setType(t)}>{t === '我的收藏' && <Star size={14} />} {t}</button>)}</div></div>
-    <div className="results-meta">共 {list.length} 个项目 <span>{ops ? '推文保存在本浏览器（演示）· 发布后销售端可见' : '项目介绍由运营老师发布 · 内容为演示'}</span></div>
+    <div className="results-meta">共 {list.length} 个项目 <span>{ops ? (s.apiMode ? '推文保存到服务器 · 发布后销售端可见' : '推文保存在本浏览器（预览站）· 发布后销售端可见') : '项目介绍由运营老师发布'}</span></div>
     <div className="program-grid article-grid">{list.map(p => {
       const a = articleFor(p.id), c = ops ? a?.draft : a?.published, state = a ? articleState(a) : '未发布', readable = !!a?.published;
       const fav = s.favorites.includes(p.id);
@@ -94,7 +94,7 @@ export function ArticleReader({ id }: { id: string }) {
   const preview = ops && !a.published;
   const content = a.published ?? (ops ? a.draft : null);
   if (!content) return <><Back to="programs" label="返回项目中心" /><Notice>该项目的介绍推文正在筹备中，运营老师发布后即可阅读。</Notice></>;
-  const offer = programOffers[id];
+  const offer = offerFor(id);
   const remaining = s.teams.filter(t => t.program === id).reduce((n, t) => { const c = cohortAvailability(t, s.enrollments); return n + (c.status === '招生中' ? c.remaining : 0); }, 0);
   const others = s.programs.filter(x => x.id !== id && s.articles.find(o => o.program === x.id)?.published).slice(0, 3);
   const copy = async () => { try { await navigator.clipboard.writeText(shareText(content, p.name)); toast.success('分享文案已复制，可直接粘贴到微信'); } catch { toast.error('浏览器限制了复制，可直接选择页面文字复制。'); } };
@@ -108,8 +108,8 @@ export function ArticleReader({ id }: { id: string }) {
         <div className="article-actions"><button className="secondary" onClick={copy}><Copy size={16} />复制分享文案</button><Poster program={id} /><button className="primary" onClick={() => s.go('programs/' + id)}>招生与开班详情<ChevronRight size={16} /></button></div>
       </article>
       <aside className="article-aside">
-        <section className="glass panel article-facts"><SectionTitle title="招生速览" sub="演示数据 · 非正式报价" />
-          <dl><div><dt>项目参考价</dt><dd>{money(offer.fee)}<small> / 人</small></dd></div><div><dt>当前可报余位</dt><dd>{remaining}<small> 个</small></dd></div><div><dt>课程计划</dt><dd>{offer.sessions}<small> 次 / {offer.hours} 课时</small></dd></div><div className="wide"><dt>适合人群</dt><dd className="text">{offer.audience}</dd></div></dl>
+        <section className="glass panel article-facts"><SectionTitle title="招生速览" sub="以正式报价为准" />
+          <dl><div><dt>项目参考价</dt><dd>{priceText(offer.fee)}{offer.fee>0&&<small> / 人</small>}</dd></div><div><dt>当前可报余位</dt><dd>{remaining}<small> 个</small></dd></div><div><dt>课程计划</dt><dd>{planText(offer)}</dd></div><div className="wide"><dt>适合人群</dt><dd className="text">{offer.audience||'待补充'}</dd></div></dl>
         </section>
         {others.length > 0 && <section className="glass panel article-more"><SectionTitle title="更多项目介绍" />{others.map(o => { const oa = s.articles.find(x => x.program === o.id)!.published!; return <button key={o.id} className="article-more-item" onClick={() => s.go('programs/' + o.id + '/article')}><img src={resolveSrc(oa.cover)} alt="" loading="lazy" /><span><strong>{oa.title}</strong><small>{o.name}</small></span></button>; })}</section>}
       </aside>
@@ -179,8 +179,8 @@ export function ArticleEditor({ id }: { id: string }) {
   const add = (type: BlockType | 'facts') => {
     let block: ArticleBlock;
     if (type === 'facts') {
-      const offer = programOffers[id], team = s.teams.find(t => t.program === id), cohort = team ? cohortOffers[team.id] : undefined;
-      block = { id: nid(), type: 'highlight', kind: 'price', title: '招生信息', items: [{ label: '项目参考价', value: `${money(offer.fee)} / 人（演示）` }, { label: '课程计划', value: `${offer.sessions} 次 · ${offer.hours} 课时` }, { label: '计划开课', value: cohort?.opens ?? '待发布' }, { label: '报名截止', value: cohort?.deadline ?? '待发布' }] };
+      const offer = offerFor(id), team = s.teams.find(t => t.program === id), cohort = team ? cohortOffers[team.id] : undefined;
+      block = { id: nid(), type: 'highlight', kind: 'price', title: '招生信息', items: [{ label: '项目参考价', value: priceText(offer.fee) }, { label: '课程计划', value: planText(offer) }, { label: '计划开课', value: cohort?.opens ?? '待发布' }, { label: '报名截止', value: cohort?.deadline ?? '待发布' }] };
     } else block = newBlock(type, nid());
     update({ blocks: [...draft.blocks, block] });
     requestAnimationFrame(() => document.getElementById('block-' + block.id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }));
@@ -200,7 +200,7 @@ export function ArticleEditor({ id }: { id: string }) {
     <div className="glass composer-bar">
       <div className="composer-status"><Badge tone={stateTone(state)}>推文{state}</Badge><span>{dirty ? '有未保存的修改' : `已保存 · ${a.updated}`}</span>{a.publishedAt && <span>上次发布 {a.publishedAt}</span>}</div>
       <div className="composer-actions">
-        <button className="secondary" onClick={() => setConfirmReset(true)}><RotateCcw size={16} />恢复示例</button>
+        <button className="secondary" onClick={() => setConfirmReset(true)}><RotateCcw size={16} />套用模板</button>
         {a.published && <button className="secondary" onClick={unpublish}><EyeOff size={16} />撤回发布</button>}
         <button className="secondary" onClick={() => s.go(`programs/${id}/article`)}><Eye size={16} />阅读视图</button>
         <button className="secondary" onClick={save} disabled={!dirty}><Save size={16} />保存草稿</button>
@@ -233,6 +233,6 @@ export function ArticleEditor({ id }: { id: string }) {
       </div>
       <aside className="composer-preview" aria-label="推文实时预览"><div className="composer-preview-label"><Smartphone size={15} />实时预览 · 销售端阅读效果</div><div className="phone-frame"><div className="phone-screen"><ArticleView compact content={draft} program={p} author={a.author} date={a.publishedAt} /></div></div></aside>
     </div>
-    <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}><AlertDialogContent><AlertDialogTitle>恢复为示例内容？</AlertDialogTitle><AlertDialogDescription>当前编辑区的内容将被示例推文替换。保存或发布后才会生效，已发布版本暂不受影响。</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { update(articleContentFor(id)); setConfirmReset(false); toast.info('已载入示例内容，保存或发布后生效'); }}>恢复示例</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}><AlertDialogContent><AlertDialogTitle>套用推文模板？</AlertDialogTitle><AlertDialogDescription>当前编辑区的内容将被模板替换，请把模板中的文字改成真实信息。保存或发布后才会生效，已发布版本暂不受影响。</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { update(articleContentFor(id)); setConfirmReset(false); toast.info('已载入模板，修改后保存或发布'); }}>套用模板</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>;
 }

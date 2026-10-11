@@ -3,13 +3,18 @@
  * (e.g. "/api" on the server builds). Without it — the GitHub Pages build — the app runs in
  * demo mode on the local store, exactly as before.
  */
-import type { Role } from './data';
+import type { Role } from './roles';
 export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/$/, '');
 export const API_ENABLED = API_BASE.length > 0;
 /** 'production' | 'development' | '' (demo) — shown as a small badge outside production. */
 export const APP_ENV = process.env.NEXT_PUBLIC_NEXUS_ENV || '';
-export type ApiUser = { id: number; email: string; name: string; role: Role; salesName: string | null };
-export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles';
+export type ApiUser = { id: number; email: string; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean };
+/** Ops teachers listed for 教务老师 pickers and name lookups. */
+export type StaffMember = { email: string; name: string; role: Role; active: boolean };
+/** Row of 系统管理 · 用户管理. */
+export type AdminUser = { id: number; email: string; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null };
+export type OpsCollection = 'classTypes' | 'projects' | 'opsCourses' | 'lessons' | 'lessonFeedbacks';
+export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }
 
@@ -50,6 +55,12 @@ export const api = {
   createTodo: (body: { title: string; note?: string | null; dueAt?: string | null }) => request<{ todo: ApiTodo }>('/todos', { method: 'POST', body: JSON.stringify(body) }),
   updateTodo: (id: string, body: TodoWrite) => request<{ todo: ApiTodo }>(`/todos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTodo: (id: string) => request<{ ok: true }>(`/todos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  remove: (collection: OpsCollection, id: string) => request<{ ok: true }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  changePassword: (current: string, next: string) => request<{ ok: true }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ current, next }) }),
+  adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),
+  createUser: (body: { email: string; name: string; role: Role; salesName?: string | null }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: number, body: { name?: string; role?: Role; active?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetPassword: (id: number) => request<{ password: string }>(`/admin/users/${id}/reset-password`, { method: 'POST' }),
 };
 
 /** Key-order independent JSON for change detection; drops undefined values and browser-only fields. */
