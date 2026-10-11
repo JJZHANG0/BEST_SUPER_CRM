@@ -13,7 +13,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "build:static": "node scripts/build-static.mjs",
-    "build:pages": "NEXT_PUBLIC_BASE_PATH=/BEST_SUPER_CRM node scripts/build-static.mjs",
+    "build:pages": "NEXT_PUBLIC_BASE_PATH=/BEST_SUPER_CRM NEXT_PUBLIC_SITE_ORIGIN=https://jjzhang0.github.io node scripts/build-static.mjs",
     "db:migrate": "tsx --env-file=.env server/index.ts migrate",
     "db:seed": "tsx --env-file=.env server/index.ts seed",
     "api:dev": "tsx watch --env-file=.env server/index.ts",
