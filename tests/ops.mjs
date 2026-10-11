@@ -79,6 +79,15 @@ for(const t of ['class_types','projects','ops_courses','lesson_records','lesson_
 assert(mig.includes('"must_change_password" boolean DEFAULT false NOT NULL'));
 assert(JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries.some(e=>e.tag==='0002_ops_lessons_allowance'));
 
+// Username login (migration 0003): column, case-insensitive unique index, backfill; API accepts username or email.
+const m3=readFileSync('drizzle/0003_users_username.sql','utf8');
+assert(m3.includes('ADD COLUMN "username" text')&&m3.includes('lower("username")')&&m3.includes('UPDATE "users"'));
+assert(JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries.some(e=>e.tag==='0003_users_username'));
+assert(schema.includes("username: text('username')")&&schema.includes('users_username_lower_idx'));
+const appSrc=readFileSync('server/app.ts','utf8');
+assert(appSrc.includes('body?.login')&&appSrc.includes('lower(${schema.users.username})')&&appSrc.includes('该用户名已被使用'));
+assert(readFileSync('components/nexus/login.tsx','utf8').includes('用户名（姓名）'));
+
 // API gating wiring.
 const app=readFileSync('server/app.ts','utf8');
 for(const s of ["app.get('/admin/users'","app.post('/admin/users'","app.patch('/admin/users/:id'","reset-password","app.post('/auth/change-password'","app.delete('/:collection/:id'","canManageSystem(user.role)","canEditOwned(user.role, user.email","computeAllowance(rate, unit"])assert(app.includes(s),s);

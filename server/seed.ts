@@ -22,8 +22,10 @@ const withOrder = <T extends object>(list: readonly T[]) => list.map((x, i) => (
 
 export async function seed(db: Db, log: (s: string) => void = console.log) {
   for (const a of staffSeed) {
-    const res = await db.insert(schema.users).values({ email: a.email, name: a.name, role: a.role, salesName: null, passwordHash: a.passwordHash, mustChangePassword: true }).onConflictDoNothing().returning({ id: schema.users.id });
-    if (res.length) log(`seed: user ${a.email} (${a.role})`);
+    const res = await db.insert(schema.users).values({ email: a.email, username: a.username, name: a.name, role: a.role, salesName: null, passwordHash: a.passwordHash, mustChangePassword: true }).onConflictDoNothing().returning({ id: schema.users.id });
+    if (res.length) log(`seed: user ${a.username} <${a.email}> (${a.role})`);
+    // Existing rows from an earlier seed get their username once (never overwrites a username set by an admin).
+    else await db.update(schema.users).set({ username: a.username }).where(and(eq(schema.users.email, a.email), sql`${schema.users.username} is null`, sql`not exists (select 1 from users x where lower(x.username) = lower(${a.username}))`));
   }
   const sales = await db.insert(schema.users).values({ email: salesDemo.email, name: salesDemo.name, role: 'sales', salesName: salesDemo.salesName, passwordHash: await hashPassword(salesDemo.password) }).onConflictDoNothing().returning({ id: schema.users.id });
   if (sales.length) log(`seed: user ${salesDemo.email} (sales demo)`);

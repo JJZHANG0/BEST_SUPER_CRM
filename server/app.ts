@@ -16,18 +16,26 @@ import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, deletableCollections, type CollectionName } from './collections';
-import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, isOpsLike, isRole, passwordIssues, type Role } from '../lib/nexus/roles';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { computeAllowance, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 
-export type SessionUser = { id: number; email: string; name: string; role: Role; salesName: string | null; mustChangePassword: boolean };
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword });
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword });
-const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword });
+const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
+/** Human message for a unique violation on users (username vs email). */
+function conflictMessage(err: unknown) {
+  const e = err as { constraint?: string; constraint_name?: string; detail?: string; message?: string; cause?: { constraint?: string; detail?: string; message?: string } };
+  // Use the driver error (constraint / detail), not drizzle's wrapper message, which echoes the whole SQL column list.
+  const d = e?.cause ?? e;
+  const text = [d?.constraint, (d as { constraint_name?: string })?.constraint_name, d?.detail].filter(Boolean).join(' ') || String(d?.message || '');
+  return /username/i.test(text) ? '该用户名已被使用' : /email/i.test(text) ? '该邮箱已被使用' : '该账号已存在';
+}
 export function generatePassword(length = 16) {
   const all = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+?';
   for (;;) {
@@ -57,10 +65,14 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
     const now = Date.now(), slot = attempts.get(ip);
     if (slot && slot.until > now && slot.n >= 20) return c.json({ error: 'too_many_attempts' }, 429);
-    const body = await c.req.json().catch(() => null) as { email?: unknown; password?: unknown } | null;
-    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    // `login` is a username (e.g. 张捷嘉) or an email; `email` is accepted for older clients.
+    const body = await c.req.json().catch(() => null) as { login?: unknown; email?: unknown; password?: unknown } | null;
+    const raw = typeof body?.login === 'string' ? body.login : typeof body?.email === 'string' ? body.email : '';
     const password = typeof body?.password === 'string' ? body.password : '';
-    const [row] = email ? await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1) : [];
+    const ident = raw.includes('@') ? raw.trim().toLowerCase() : normalizeUsername(raw).toLowerCase();
+    const [row] = !ident ? [] : raw.includes('@')
+      ? await db.select().from(schema.users).where(eq(schema.users.email, ident)).limit(1)
+      : await db.select().from(schema.users).where(sql`lower(${schema.users.username}) = ${ident}`).limit(1);
     if (!row || !row.active || !(await verifyPassword(password, row.passwordHash))) {
       attempts.set(ip, slot && slot.until > now ? { n: slot.n + 1, until: slot.until } : { n: 1, until: now + 600_000 });
       return c.json({ error: 'invalid_credentials' }, 401);
@@ -110,19 +122,22 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
   });
   app.post('/admin/users', async c => {
     if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);
-    const body = await c.req.json().catch(() => null) as { email?: unknown; name?: unknown; role?: unknown; salesName?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { email?: unknown; username?: unknown; name?: unknown; role?: unknown; salesName?: unknown } | null;
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-    const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) return c.json({ error: 'invalid', message: '请输入有效的登录账号（邮箱格式）' }, 400);
+    const name = typeof body?.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
     if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400);
+    const username = normalizeUsername(body?.username ?? name);
+    const uIssue = usernameIssue(username);
+    if (uIssue) return c.json({ error: 'invalid', message: uIssue }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) return c.json({ error: 'invalid', message: '请输入有效的邮箱（作为备用登录账号）' }, 400);
     if (!isRole(body?.role) || body.role === 'admin') return c.json({ error: 'invalid', message: '未知角色' }, 400);
     const salesName = body.role === 'sales' ? (typeof body.salesName === 'string' && body.salesName.trim() ? body.salesName.trim().slice(0, 80) : '顾问 ' + name) : null;
     const password = generatePassword();
     try {
-      const [row] = await db.insert(schema.users).values({ email, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true }).returning();
+      const [row] = await db.insert(schema.users).values({ email, username, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true }).returning();
       return c.json({ user: adminUser(row), password }, 201);
     } catch (err) {
-      if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: '该账号已存在' }, 409);
+      if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: conflictMessage(err) }, 409);
       throw err;
     }
   });
@@ -132,14 +147,20 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const id = Number(c.req.param('id'));
     const [row] = Number.isInteger(id) ? await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1) : [];
     if (!row) return c.json({ error: 'not_found' }, 404);
-    const body = await c.req.json().catch(() => null) as { name?: unknown; role?: unknown; active?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { name?: unknown; username?: unknown; role?: unknown; active?: unknown } | null;
     const patch: Partial<typeof schema.users.$inferInsert> = { updatedAt: new Date() };
-    if (typeof body?.name === 'string') { const name = body.name.trim().slice(0, 80); if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400); patch.name = name; }
+    if (body?.username !== undefined) { const username = normalizeUsername(body.username); const issue = usernameIssue(username); if (issue) return c.json({ error: 'invalid', message: issue }, 400); patch.username = username; }
+    if (typeof body?.name === 'string') { const name = body.name.trim().replace(/\s+/g, ' ').slice(0, 80); if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400); patch.name = name; }
     if (body?.role !== undefined) { if (!isRole(body.role)) return c.json({ error: 'invalid', message: '未知角色' }, 400); patch.role = body.role; if (body.role === 'sales' && !row.salesName) patch.salesName = '顾问 ' + (patch.name ?? row.name); }
     if (body?.active !== undefined) { if (typeof body.active !== 'boolean') return c.json({ error: 'invalid' }, 400); patch.active = body.active; }
     if (row.id === me.id && ((patch.role && patch.role !== row.role) || patch.active === false)) return c.json({ error: 'invalid', message: '不能修改自己的角色或停用自己的账号' }, 400);
-    const [updated] = await db.update(schema.users).set(patch).where(eq(schema.users.id, id)).returning();
-    return c.json({ user: adminUser(updated) });
+    try {
+      const [updated] = await db.update(schema.users).set(patch).where(eq(schema.users.id, id)).returning();
+      return c.json({ user: adminUser(updated) });
+    } catch (err) {
+      if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: conflictMessage(err) }, 409);
+      throw err;
+    }
   });
   app.post('/admin/users/:id/reset-password', async c => {
     if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);

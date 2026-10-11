@@ -5,11 +5,11 @@ import * as seed from './data';
 import { seedArticles } from './article-seed';
 import { mergeStoredArticles, type ProgramArticle } from './articles';
 import { isHealth, type Assignment } from './students';
-import { authenticateDemo, directory, makeHash, randomPassword, type Overrides, type DirectoryUser } from './auth';
+import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, type Overrides, type DirectoryUser } from './auth';
 import { api, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback } from './ops';
-import { isOpsLike, passwordIssues, type Role } from './roles';
+import { isOpsLike, passwordIssues, type Role, normalizeUsername, usernameIssue } from './roles';
 export type FileRecord=seed.Resource & {url?:string};
 export type LoginResult={ok:true;role:Role}|{ok:false;error:string};
 type St<T>=Dispatch<SetStateAction<T>>;
@@ -38,7 +38,7 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   /** Change the signed-in user's password. Resolves to an error message, or null on success. */
   changePassword:(current:string,next:string)=>Promise<string|null>;
   /** 系统管理 · 用户管理 (superadmin). */
-  admin:{list:()=>Promise<AdminUser[]>;create:(u:{email:string;name:string;role:Role;salesName?:string|null})=>Promise<{ok:true;password:string}|{ok:false;error:string}>;update:(u:AdminUser,patch:{name?:string;role?:Role;active?:boolean})=>Promise<string|null>;resetPassword:(u:AdminUser)=>Promise<{ok:true;password:string}|{ok:false;error:string}>};
+  admin:{list:()=>Promise<AdminUser[]>;create:(u:{email:string;username:string;name:string;role:Role;salesName?:string|null})=>Promise<{ok:true;password:string}|{ok:false;error:string}>;update:(u:AdminUser,patch:{name?:string;username?:string;role?:Role;active?:boolean})=>Promise<string|null>;resetPassword:(u:AdminUser)=>Promise<{ok:true;password:string}|{ok:false;error:string}>};
   /** False when changes could not be saved (browser storage refused, or the API rejected them). */
   persisted:boolean;
   /** True when this build talks to the NEXUS API (shared database); false in the static demo. */
@@ -65,8 +65,8 @@ type Bootstrap={user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
 const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
-const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,name:u.name,role:u.role,salesName:u.salesName,mustChangePassword:u.mustChange});
-const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName});
+const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,mustChangePassword:u.mustChange});
+const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName});
 const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):'无法连接服务器，请检查网络后重试';
 
 export function Provider({children}:{children:ReactNode}){
@@ -140,7 +140,8 @@ export function Provider({children}:{children:ReactNode}){
  useEffect(()=>{first.current=false},[]);
  /** Article changes come from ops actions; persist right away so a quota error can be reported in the editor. */
  const updateArticles=(fn:(list:ProgramArticle[])=>ProgramArticle[])=>{const next=fn(articles);setArticles(next);if(API_ENABLED)return true;const ok=write(STORAGE_KEYS.articles,next);setPersisted(ok);return ok};
- const login=async(email:string,password:string):Promise<LoginResult>=>{
+ const login=async(identifier:string,password:string):Promise<LoginResult>=>{
+  const email=identifier.trim();
   if(!API_ENABLED){
    let match:DirectoryUser|null=null;
    try{match=await authenticateDemo(email,password,overrides)}catch{return {ok:false,error:'当前浏览器不支持安全登录（需要 HTTPS），请更换浏览器后重试。'}}
@@ -205,17 +206,21 @@ export function Provider({children}:{children:ReactNode}){
  const admin:Store['admin']={
   list:async()=>{if(API_ENABLED)return (await api.adminUsers()).users;return directory(overrides).map(asAdmin)},
   create:async u=>{
-   const email=u.email.trim().toLowerCase(),name=u.name.trim();
-   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return {ok:false,error:'请输入有效的登录账号（邮箱格式）'};
+   const email=u.email.trim().toLowerCase(),name=u.name.trim().replace(/\s+/g,' '),username=normalizeUsername(u.username||name);
    if(!name)return {ok:false,error:'请填写姓名'};
-   if(API_ENABLED){try{const r=await api.createUser({...u,email,name});setApiStaff(l=>isOpsLike(r.user.role)?[...l,{email:r.user.email,name:r.user.name,role:r.user.role,active:true}]:l);return {ok:true,password:r.password}}catch(e){return {ok:false,error:apiError(e,'创建失败')}}}
-   if(directory(overrides).some(x=>x.email===email))return {ok:false,error:'该账号已存在'};
+   const ui=usernameIssue(username);if(ui)return {ok:false,error:ui};
+   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return {ok:false,error:'请输入有效的邮箱（作为备用登录账号）'};
+   if(API_ENABLED){try{const r=await api.createUser({...u,email,name,username});setApiStaff(l=>isOpsLike(r.user.role)?[...l,{email:r.user.email,name:r.user.name,role:r.user.role,active:true}]:l);return {ok:true,password:r.password}}catch(e){return {ok:false,error:apiError(e,'创建失败')}}}
+   if(directory(overrides).some(x=>x.email===email))return {ok:false,error:'该邮箱已被使用'};
+   if(usernameTaken(username,overrides))return {ok:false,error:'该用户名已被使用'};
    const password=randomPassword();const h=await makeHash(password);
-   setOverrides(o=>({...o,[email]:{created:true,name,role:u.role,active:true,mustChange:true,salesName:u.role==='sales'?(u.salesName||'顾问 '+name):null,...h}}));
+   setOverrides(o=>({...o,[email]:{created:true,name,username,role:u.role,active:true,mustChange:true,salesName:u.role==='sales'?(u.salesName||'顾问 '+name):null,...h}}));
    return {ok:true,password};
   },
   update:async(u,patch)=>{
    if(u.email===user?.email&&(patch.role&&patch.role!==u.role||patch.active===false))return '不能修改自己的角色或停用自己的账号';
+   if(patch.username!==undefined){const un=normalizeUsername(patch.username);const ui=usernameIssue(un);if(ui)return ui;if(!API_ENABLED&&usernameTaken(un,overrides,u.email))return '该用户名已被使用';patch={...patch,username:un}}
+   if(patch.name!==undefined){patch={...patch,name:patch.name.trim().replace(/\s+/g,' ')};if(!patch.name)return '请填写姓名'}
    if(API_ENABLED){try{const r=await api.updateUser(u.id,patch);setApiStaff(l=>{const rest=l.filter(x=>x.email!==r.user.email);return isOpsLike(r.user.role)?[...rest,{email:r.user.email,name:r.user.name,role:r.user.role,active:r.user.active}]:rest});return null}catch(e){return apiError(e,'保存失败')}}
    setOverrides(o=>({...o,[u.email]:{...o[u.email],...patch}}));return null;
   },

@@ -3,7 +3,8 @@
  * the API maps rows to the same shapes the frontend already uses (lib/nexus/data.ts).
  * Generate migrations with `npm run db:generate` after editing this file.
  */
-import { boolean, doublePrecision, index, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 const stamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -13,6 +14,8 @@ const stamps = {
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: text('email').notNull().unique(),
+  /** Login name (usually the person's name, e.g. 张捷嘉). Unique case-insensitively; email remains an alternative login. */
+  username: text('username'),
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
   /** 'superadmin' | 'ops' | 'sales' | 'admin' (see lib/nexus/roles.ts) */
@@ -23,7 +26,7 @@ export const users = pgTable('users', {
   /** Set for seeded / admin-created / reset accounts; cleared when the user changes the password. */
   mustChangePassword: boolean('must_change_password').notNull().default(false),
   ...stamps,
-});
+}, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
 
 export const programs = pgTable('programs', {
   id: text('id').primaryKey(),

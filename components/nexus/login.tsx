@@ -1,6 +1,6 @@
 'use client';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
-import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, Mail, ShieldCheck, Sparkles, UsersRound, Layers3} from 'lucide-react';
+import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, UserRound, Sparkles, UsersRound, Layers3} from 'lucide-react';
 import {useNexus} from '@/lib/nexus/store';
 import {salesDemo} from '@/lib/nexus/auth';
 const workspaces=[{role:'sales',label:'销售顾问'},{role:'ops',label:'运营老师'}] as const;
@@ -42,11 +42,11 @@ export default function Login() {
         <h2 id="access-title">欢迎回来</h2><p className="access-subtitle">使用内部授权账号，开启今天的协作。</p>
         <fieldset className="access-role" disabled={busy}><legend className="sr-only">选择工作空间</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:!sales;return <button type="button" key={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span>{on&&<Check size={14}/>}</button>})}</fieldset>
         <form onSubmit={submit} className="access-form" aria-busy={busy}>
-          <label htmlFor="access-email">授权邮箱</label><div className="access-input"><Mail size={18}/><input id="access-email" type="email" inputMode="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required placeholder={sales?salesDemo.email:'姓名全拼@nexus.local'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}}/></div>
+          <label htmlFor="access-email">用户名（姓名）</label><div className="access-input"><UserRound size={18}/><input id="access-email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={120} placeholder={sales?salesDemo.email:'例如：张捷嘉'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}}/></div>
           <div className="access-password-label"><label htmlFor="access-password">登录密码</label><button type="button" disabled={busy} onClick={()=>setHelp(!help)} aria-expanded={help}>需要帮助？</button></div>
           <div className="access-input"><LockKeyhole size={18}/><input id="access-password" type={show?'text':'password'} autoComplete="current-password" required placeholder="请输入账号密码" value={password} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onKeyUp={e=>setCaps(e.getModifierState('CapsLock'))} onBlur={()=>setCaps(false)} onChange={e=>{setPassword(e.target.value);setError('')}}/><button type="button" className="access-reveal" aria-label={show?'隐藏密码':'显示密码'} aria-pressed={show} onClick={()=>setShow(!show)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>
           {caps&&<p className="access-help" role="status">大写锁定已开启，请注意密码大小写。</p>}
-          {help&&<p className="access-help" role="status">内部账号由管理员分配，不开放注册。运营老师账号为「姓名全拼@nexus.local」，首次登录需修改初始密码；忘记密码请联系超级管理员重置。</p>}
+          {help&&<p className="access-help" role="status">内部账号由管理员分配，不开放注册。运营老师使用本人姓名作为用户名登录（也可使用邮箱），首次登录需修改初始密码；忘记密码请联系超级管理员重置。</p>}
           {error&&<p id="access-error" role="alert" className="access-error">{error}</p>}
           <button className="access-submit" disabled={busy} type="submit">{busy?<><LoaderCircle className="access-spinner" size={19}/>正在进入工作空间…</>:<>登录工作空间<ArrowRight size={19}/></>}</button>
         </form>

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
 import { useNexus } from '@/lib/nexus/store';
 import type { AdminUser } from '@/lib/nexus/api';
-import { canManageSystem, roleLabels, isOpsLike, type Role } from '@/lib/nexus/roles';
+import { canManageSystem, roleLabels, isOpsLike, type Role, normalizeUsername } from '@/lib/nexus/roles';
 import {
   allowanceUnits, courseStatuses, importCourses, newRecordId, statusFromDates, toCsv, unitLabel, courseCsvColumns,
   type ClassType, type CourseStatus, type OpsCourse, type Project, type CourseImport,
@@ -45,12 +45,12 @@ export default function AdminPage() {
 }
 
 function PasswordReveal({ info, onClose }: { info: { name: string; email: string; password: string } | null; onClose: () => void }) {
-  const copy = async () => { if (!info) return; try { await navigator.clipboard.writeText(`账号：${info.email}\n初始密码：${info.password}\n首次登录后请修改密码。`); toast.success('已复制'); } catch { toast.error('浏览器限制了复制，请手动选择文字'); } };
+  const copy = async () => { if (!info) return; try { await navigator.clipboard.writeText(`用户名：${info.email}\n初始密码：${info.password}\n首次登录后请修改密码。`); toast.success('已复制'); } catch { toast.error('浏览器限制了复制，请手动选择文字'); } };
   return <Dialog open={!!info} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
     <DialogTitle>初始密码</DialogTitle>
     <DialogDescription>此密码只显示这一次。请通过安全渠道发给 {info?.name}，对方首次登录时需要修改。</DialogDescription>
-    <dl className="password-reveal"><div><dt>登录账号</dt><dd>{info?.email}</dd></div><div><dt>初始密码</dt><dd><code>{info?.password}</code></dd></div></dl>
-    <div className="actions"><button className="secondary" onClick={copy}><Copy size={16} />复制账号与密码</button><button className="primary" onClick={onClose}>我已保存</button></div>
+    <dl className="password-reveal"><div><dt>用户名</dt><dd>{info?.email}</dd></div><div><dt>初始密码</dt><dd><code>{info?.password}</code></dd></div></dl>
+    <div className="actions"><button className="secondary" onClick={copy}><Copy size={16} />复制用户名与密码</button><button className="primary" onClick={onClose}>我已保存</button></div>
   </DialogContent></Dialog>;
 }
 
@@ -64,16 +64,17 @@ function UsersTab() {
   const load = async () => { try { setUsers(await s.admin.list()); } catch { toast.error('加载用户失败'); setUsers([]); } };
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- (re)load from the API / demo directory
   useEffect(() => { void load(); }, [s.staff]);
-  const list = (users || []).filter(u => (u.name + u.email).toLowerCase().includes(q.trim().toLowerCase()));
+  const list = (users || []).filter(u => (u.name + (u.username || '') + u.email).toLowerCase().includes(q.trim().toLowerCase()));
   const update = async (u: AdminUser, patch: { name?: string; role?: Role; active?: boolean }) => { const err = await s.admin.update(u, patch); if (err) { toast.error(err); return false; } toast.success('已保存'); await load(); return true; };
-  const reset = async (u: AdminUser) => { if (!window.confirm(`为 ${u.name} 生成新的初始密码？旧密码将立即失效。`)) return; const r = await s.admin.resetPassword(u); if (!r.ok) return toast.error(r.error); setReveal({ name: u.name, email: u.email, password: r.password }); await load(); };
+  const reset = async (u: AdminUser) => { if (!window.confirm(`为 ${u.name} 生成新的初始密码？旧密码将立即失效。`)) return; const r = await s.admin.resetPassword(u); if (!r.ok) return toast.error(r.error); setReveal({ name: u.name, email: u.username || u.email, password: r.password }); await load(); };
   return <section className="glass panel">
-    <div className="filter-toolbar"><SearchBox value={q} onChange={setQ} placeholder="搜索姓名或登录账号" /><button className="primary compact push-right" onClick={() => setCreating(true)}><UserPlus size={16} />新建账号</button></div>
+    <div className="filter-toolbar"><SearchBox value={q} onChange={setQ} placeholder="搜索姓名、用户名或邮箱" /><button className="primary compact push-right" onClick={() => setCreating(true)}><UserPlus size={16} />新建账号</button></div>
     {!s.apiMode && <Notice>预览站说明：账号的新增、停用、改密只保存在当前浏览器，正式环境由服务器统一管理。</Notice>}
     <div className="results-meta">{list.length} 个账号<span>运营老师 {list.filter(u => isOpsLike(u.role)).length} 位 · 超级管理员 {list.filter(u => u.role === 'superadmin').length} 位</span></div>
-    {users === null ? <p className="muted">正在加载…</p> : list.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['姓名', '登录账号', '角色', '状态', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
+    {users === null ? <p className="muted">正在加载…</p> : list.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['姓名', '用户名', '邮箱', '角色', '状态', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
       <TableBody>{list.map(u => { const self = u.email === s.user?.email; return <TableRow key={u.email} className={u.active ? '' : 'is-disabled'}>
         <TableCell><span className="user-cell"><span className="avatar small-avatar">{u.name.slice(0, 1)}</span><strong className="cell-title">{u.name}</strong>{self && <Badge tone="neutral">我</Badge>}</span></TableCell>
+        <TableCell>{u.username ? <strong>{u.username}</strong> : <span className="muted">—</span>}</TableCell>
         <TableCell className="mono">{u.email}</TableCell>
         <TableCell><Badge tone={u.role === 'superadmin' ? 'violet' : u.role === 'sales' ? 'neutral' : 'green'}>{roleLabels[u.role] || u.role}</Badge></TableCell>
         <TableCell>{u.active ? (u.mustChangePassword ? <Badge tone="orange">待首次改密</Badge> : <Badge tone="green">已启用</Badge>) : <Badge tone="neutral">已停用</Badge>}</TableCell>
@@ -91,25 +92,27 @@ function UsersTab() {
 
 function UserDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (info: { name: string; email: string; password: string }) => void }) {
   const s = useNexus();
-  const [name, setName] = useState(''), [email, setEmail] = useState(''), [role, setRole] = useState<Role>('ops'), [busy, setBusy] = useState(false);
-  const submit = async (e: FormEvent) => { e.preventDefault(); setBusy(true); const r = await s.admin.create({ name, email, role }); setBusy(false); if (!r.ok) return toast.error(r.error); onSaved({ name: name.trim(), email: email.trim().toLowerCase(), password: r.password }); };
+  const [name, setName] = useState(''), [username, setUsername] = useState(''), [email, setEmail] = useState(''), [role, setRole] = useState<Role>('ops'), [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => { e.preventDefault(); setBusy(true); const login = normalizeUsername(username || name); const r = await s.admin.create({ name, username: login, email, role }); setBusy(false); if (!r.ok) return toast.error(r.error); onSaved({ name: name.trim(), email: login, password: r.password }); };
   return <Dialog open onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
     <DialogTitle>新建账号</DialogTitle><DialogDescription>系统会生成随机初始密码，对方首次登录时需要修改。</DialogDescription>
     <form className="form-stack" onSubmit={submit}>
       <FormField label="姓名"><input required maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="例如：王小明" /></FormField>
-      <FormField label="登录账号（建议：姓名全拼@nexus.local）"><input required type="email" maxLength={120} value={email} onChange={e => setEmail(e.target.value)} placeholder="wangxiaoming@nexus.local" /></FormField>
+      <FormField label="用户名（登录用，默认同姓名，不区分大小写）"><input maxLength={40} value={username} onChange={e => setUsername(e.target.value)} placeholder={normalizeUsername(name) || '默认使用姓名'} /></FormField>
+      <FormField label="邮箱（备用登录账号，建议：姓名全拼@nexus.local）"><input required type="email" maxLength={120} value={email} onChange={e => setEmail(e.target.value)} placeholder="wangxiaoming@nexus.local" /></FormField>
       <FormField label="角色"><Picker label="角色" value={role} onChange={v => setRole(v as Role)} options={roleOptions} /></FormField>
       <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" disabled={busy} type="submit">创建并生成密码</button></div>
     </form>
   </DialogContent></Dialog>;
 }
-function UserEditDialog({ user, onClose, onSave }: { user: AdminUser; onClose: () => void; onSave: (patch: { name?: string; role?: Role }) => void }) {
+function UserEditDialog({ user, onClose, onSave }: { user: AdminUser; onClose: () => void; onSave: (patch: { name?: string; username?: string; role?: Role }) => void }) {
   const s = useNexus(); const self = user.email === s.user?.email;
-  const [name, setName] = useState(user.name), [role, setRole] = useState<Role>(user.role);
+  const [name, setName] = useState(user.name), [username, setUsername] = useState(user.username || ''), [role, setRole] = useState<Role>(user.role);
   return <Dialog open onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
     <DialogTitle>编辑账号</DialogTitle><DialogDescription>{user.email}</DialogDescription>
-    <form className="form-stack" onSubmit={e => { e.preventDefault(); onSave({ ...(name.trim() !== user.name ? { name: name.trim() } : {}), ...(role !== user.role ? { role } : {}) }); }}>
+    <form className="form-stack" onSubmit={e => { e.preventDefault(); const un = normalizeUsername(username); onSave({ ...(name.trim() !== user.name ? { name: name.trim() } : {}), ...(un !== (user.username || '') ? { username: un } : {}), ...(role !== user.role ? { role } : {}) }); }}>
       <FormField label="姓名"><input required maxLength={80} value={name} onChange={e => setName(e.target.value)} /></FormField>
+      <FormField label="用户名（登录用）"><input required maxLength={40} value={username} onChange={e => setUsername(e.target.value)} /></FormField>
       <FormField label={self ? '角色（不能修改自己的角色）' : '角色'}>{self ? <input value={roleLabels[user.role]} disabled /> : <Picker label="角色" value={role} onChange={v => setRole(v as Role)} options={roleOptions} />}</FormField>
       <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">保存</button></div>
     </form>

@@ -21,6 +21,19 @@ export const canSeeAllLessons = (role: unknown) => role === 'superadmin';
 /** May create or edit a lesson record / feedback owned by `owner` (an email). */
 export const canEditOwned = (role: unknown, me: string, owner: string) => canSeeAllLessons(role) || (isOpsLike(role) && !!me && me.toLowerCase() === String(owner || '').toLowerCase());
 /** Password policy shared by the browser and the API. */
+/** Login username (usually the person's name, e.g. 张捷嘉): NFKC, trimmed, inner whitespace collapsed. */
+export function normalizeUsername(v: unknown): string {
+  return typeof v === 'string' ? v.normalize('NFKC').trim().replace(/\s+/g, ' ') : '';
+}
+/** Case-insensitive comparison key for usernames. */
+export const usernameKey = (v: unknown) => normalizeUsername(v).toLowerCase();
+/** Validation message for a (normalised) username, or null when valid. '@' is reserved for email logins. */
+export function usernameIssue(u: string): string | null {
+  if (!u) return '请填写用户名';
+  if (u.length > 40) return '用户名不超过 40 个字符';
+  if (u.includes('@')) return '用户名不能包含 @';
+  return null;
+}
 export function passwordIssues(pw: string): string[] {
   const out: string[] = [];
   if (pw.length < 10) out.push('至少 10 位');

@@ -9,11 +9,13 @@
  * Runtime-import free so tests/auth.mjs can load it directly.
  */
 import type { Role } from './roles';
+// Inlined (not imported) so this file stays runtime-import free for tests.
+const unameKey = (v: unknown) => typeof v === 'string' ? v.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase() : '';
 
-export type DirectoryUser = { email: string; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean };
-type StaffAccount = { name: string; email: string; role: Role; salt: string; hash: string };
+export type DirectoryUser = { email: string; username: string | null; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean };
+type StaffAccount = { name: string; username: string; email: string; role: Role; salt: string; hash: string };
 /** Per-browser changes made through 系统管理 / 修改密码 on the Pages preview. */
-export type UserOverride = { name?: string; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null };
+export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null };
 export type Overrides = Record<string, UserOverride>;
 
 /** Public sales demo account (intentionally advertised on the login page). */
@@ -21,13 +23,13 @@ export const salesDemo = { role: 'sales' as Role, label: '销售顾问', name: '
 /** Kept for the login page's "fill demo account" button. */
 export const demoAccounts = [salesDemo] as const;
 
-/** 运营部老师. Initial passwords are delivered out of band and must be changed on first sign-in. */
+/** 运营部老师 — sign in with their name (username) or email. Initial passwords are delivered out of band and must be changed on first sign-in. */
 export const staffAccounts: readonly StaffAccount[] = [
-  { name: '张捷嘉', email: 'zhangjiejia@nexus.local', role: 'superadmin', salt: 'bc355382768dcfbfe486ad56141c989f', hash: '15bbde64841f9b813b5f292f95627a72023759d42b3da899a8dc90a0d4c579bf' },
-  { name: '程雪晴', email: 'chengxueqing@nexus.local', role: 'superadmin', salt: 'b80d15780bd91e1b78c97de5d329a9f0', hash: '340e37e90f88182c420733e8daddab75152339e4a44b1b957db415bfaca4d971' },
-  { name: '张雪航', email: 'zhangxuehang@nexus.local', role: 'superadmin', salt: 'da11a3d08cd179b9e0c3693705238d63', hash: '4466ab71f1afca1d31b2378d478082ee6904f9ecb083306304ab6b196fba6030' },
-  { name: '许瑾', email: 'xujin@nexus.local', role: 'ops', salt: 'ba918c0135e170b6e2438d7b496d5468', hash: 'b3f9323a95189bdac4ed6ed2a6024f8772637636887cd5e096bdbf382485455b' },
-  { name: '方彦淇', email: 'fangyanqi@nexus.local', role: 'ops', salt: '27f4d48997feff07dda12357def67a5e', hash: 'e78d8604ae8825cae0debc2ca1515d334a1203d72e975484adef00571d8281aa' },
+  { name: '张捷嘉', username: '张捷嘉', email: 'zhangjiejia@nexus.local', role: 'superadmin', salt: 'bc355382768dcfbfe486ad56141c989f', hash: '15bbde64841f9b813b5f292f95627a72023759d42b3da899a8dc90a0d4c579bf' },
+  { name: '程雪晴', username: '程雪晴', email: 'chengxueqing@nexus.local', role: 'superadmin', salt: 'b80d15780bd91e1b78c97de5d329a9f0', hash: '340e37e90f88182c420733e8daddab75152339e4a44b1b957db415bfaca4d971' },
+  { name: '张雪航', username: '张雪航', email: 'zhangxuehang@nexus.local', role: 'superadmin', salt: 'da11a3d08cd179b9e0c3693705238d63', hash: '4466ab71f1afca1d31b2378d478082ee6904f9ecb083306304ab6b196fba6030' },
+  { name: '许瑾', username: '许瑾', email: 'xujin@nexus.local', role: 'ops', salt: 'ba918c0135e170b6e2438d7b496d5468', hash: 'b3f9323a95189bdac4ed6ed2a6024f8772637636887cd5e096bdbf382485455b' },
+  { name: '方彦淇', username: '方彦淇', email: 'fangyanqi@nexus.local', role: 'ops', salt: '27f4d48997feff07dda12357def67a5e', hash: 'e78d8604ae8825cae0debc2ca1515d334a1203d72e975484adef00571d8281aa' },
 ];
 export const PBKDF2_ITERATIONS = 120_000;
 
@@ -59,28 +61,41 @@ const norm = (email: string) => email.trim().toLowerCase();
 /** Built-in accounts merged with this browser's overrides. */
 export function directory(overrides: Overrides = {}): DirectoryUser[] {
   const base: DirectoryUser[] = [
-    ...staffAccounts.map(a => ({ email: a.email, name: a.name, role: a.role, salesName: null, active: true, mustChange: true, builtIn: true })),
-    { email: salesDemo.email, name: salesDemo.name, role: salesDemo.role, salesName: salesDemo.salesName, active: true, mustChange: false, builtIn: true },
+    ...staffAccounts.map(a => ({ email: a.email, username: a.username, name: a.name, role: a.role, salesName: null, active: true, mustChange: true, builtIn: true })),
+    { email: salesDemo.email, username: null, name: salesDemo.name, role: salesDemo.role, salesName: salesDemo.salesName, active: true, mustChange: false, builtIn: true },
   ];
   const out = base.map(u => { const o = overrides[u.email]; return o ? { ...u, ...pick(o) } : u; });
   for (const [email, o] of Object.entries(overrides)) if (o.created && !out.some(u => u.email === email) && o.role) {
-    out.push({ email, name: o.name || email, role: o.role, salesName: o.salesName ?? null, active: o.active ?? true, mustChange: o.mustChange ?? true, builtIn: false });
+    out.push({ email, username: o.username ?? null, name: o.name || email, role: o.role, salesName: o.salesName ?? null, active: o.active ?? true, mustChange: o.mustChange ?? true, builtIn: false });
   }
   return out;
 }
 function pick(o: UserOverride) {
   const r: Partial<DirectoryUser> = {};
   if (o.name) r.name = o.name;
+  if (o.username !== undefined) r.username = o.username;
   if (o.role) r.role = o.role;
   if (typeof o.active === 'boolean') r.active = o.active;
   if (typeof o.mustChange === 'boolean') r.mustChange = o.mustChange;
   if (o.salesName !== undefined) r.salesName = o.salesName;
   return r;
 }
-/** Resolves to the signed-in user, or null for unknown / disabled accounts and wrong passwords. */
-export async function authenticateDemo(email: string, password: string, overrides: Overrides = {}): Promise<DirectoryUser | null> {
-  const key = norm(email);
-  const user = directory(overrides).find(u => u.email === key);
+/** Finds an account by email (contains '@') or by username (case/whitespace-insensitive). */
+export function findAccount(identifier: string, overrides: Overrides = {}): DirectoryUser | undefined {
+  const list = directory(overrides);
+  if (identifier.includes('@')) { const e = norm(identifier); return list.find(u => u.email === e); }
+  const k = unameKey(identifier);
+  return k ? list.find(u => u.username != null && unameKey(u.username) === k) : undefined;
+}
+/** True when another account (not `exceptEmail`) already uses this username. */
+export function usernameTaken(username: string, overrides: Overrides = {}, exceptEmail?: string) {
+  const k = unameKey(username);
+  return directory(overrides).some(u => u.email !== exceptEmail && u.username != null && unameKey(u.username) === k);
+}
+/** Resolves to the signed-in user, or null for unknown / disabled accounts and wrong passwords. Accepts username or email. */
+export async function authenticateDemo(identifier: string, password: string, overrides: Overrides = {}): Promise<DirectoryUser | null> {
+  const user = findAccount(identifier, overrides);
+  const key = user?.email ?? '';
   if (!user || !user.active || !password) return null;
   const o = overrides[key];
   if (o?.hash && o.salt) return (await pbkdf2Hex(password, o.salt)) === o.hash ? user : null;

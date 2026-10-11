@@ -37,6 +37,26 @@ assert.equal((await A.authenticateDemo('new@nexus.local','NewPassw0rd!x',o))?.na
 assert.equal(A.directory({'fangyanqi@nexus.local':{role:'superadmin'}}).find(u=>u.email==='fangyanqi@nexus.local').role,'superadmin');
 const pw=A.randomPassword();assert.equal(pw.length,16);assert.deepEqual(R.passwordIssues(pw),[]);
 
+// Name-as-username login: every staff account's username is the person's name; email still works.
+assert.deepEqual(staff.map(a=>a.username),['张捷嘉','程雪晴','张雪航','许瑾','方彦淇']);
+assert.equal(A.findAccount('张捷嘉')?.email,'zhangjiejia@nexus.local');
+assert.equal(A.findAccount('  许瑾 ')?.email,'xujin@nexus.local','username is trimmed');
+assert.equal(A.findAccount('ZHANGJIEJIA@nexus.local')?.username,'张捷嘉','email login still resolves');
+assert.equal(A.findAccount('张'),undefined,'no prefix matching');
+assert.equal(A.findAccount('Alex'),undefined,'sales demo signs in with email only');
+assert.equal(A.findAccount(''),undefined);
+const ho={'xujin@nexus.local':{...h,mustChange:false}};
+assert.equal((await A.authenticateDemo('许瑾','NewPassw0rd!x',ho))?.email,'xujin@nexus.local','username + password');
+assert.equal(await A.authenticateDemo('许瑾','wrong-pass-1',ho),null);
+assert.equal(await A.authenticateDemo('许 瑾','NewPassw0rd!x',ho),null,'inner whitespace is significant after collapsing');
+// Renamed username (admin edit) replaces the old login name; uniqueness is case-insensitive.
+const ren={'xujin@nexus.local':{...h,username:'Xu Jin'}};
+assert.equal((await A.authenticateDemo('  xu   JIN ','NewPassw0rd!x',ren))?.email,'xujin@nexus.local');
+assert.equal(A.findAccount('许瑾',ren),undefined);
+assert(A.usernameTaken('方彦淇'));assert(!A.usernameTaken('方彦淇',{},'fangyanqi@nexus.local'));assert(A.usernameTaken('xu jin',ren));
+assert.equal(R.normalizeUsername('  张 \t 捷嘉  '),'张 捷嘉');assert.equal(R.normalizeUsername(5),'');
+assert.equal(R.usernameIssue(''),'请填写用户名');assert.equal(R.usernameIssue('a@b'),'用户名不能包含 @');assert.equal(R.usernameIssue('x'.repeat(41)),'用户名不超过 40 个字符');assert.equal(R.usernameIssue('张捷嘉'),null);
+
 // Role model: superadmin ⊇ ops; sales read-only.
 assert(R.isOpsLike('superadmin')&&R.isOpsLike('ops')&&!R.isOpsLike('sales'));
 assert(R.canWrite('superadmin')&&R.canWrite('ops')&&!R.canWrite('sales'));
@@ -50,7 +70,7 @@ assert.deepEqual(R.passwordIssues('short1'),['至少 10 位']);assert.equal(R.pa
 
 // The API seed carries the same five accounts as scrypt hashes and forces a password change.
 const seed=readFileSync('server/staff-seed.ts','utf8');
-for(const a of staff){assert(seed.includes(a.email));}
+for(const a of staff){assert(seed.includes(a.email));assert(seed.includes(`username: '${a.username}'`));}
 assert.equal((seed.match(/passwordHash: 'scrypt\$/g)||[]).length,5);
 assert(readFileSync('server/seed.ts','utf8').includes('mustChangePassword: true'));
 console.log('Auth: five staff accounts (hashed only), roles, sales demo, overrides, disabled users and role gating passed.');
