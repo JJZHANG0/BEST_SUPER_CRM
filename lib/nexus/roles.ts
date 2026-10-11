@@ -20,6 +20,12 @@ export const canManageSystem = (role: unknown) => role === 'superadmin';
 export const canSeeAllLessons = (role: unknown) => role === 'superadmin';
 /** May create or edit a lesson record / feedback owned by `owner` (an email). */
 export const canEditOwned = (role: unknown, me: string, owner: string) => canSeeAllLessons(role) || (isOpsLike(role) && !!me && me.toLowerCase() === String(owner || '').toLowerCase());
+/** 任务指派: create a todo for another ops teacher (superadmin capability; 张捷嘉 is a superadmin). */
+export const canAssignTodos = (role: unknown) => role === 'superadmin';
+/** 绩效考核: score, finalize and reopen other teachers' monthly KPI sheets (superadmin capability). */
+export const canReviewKpi = (role: unknown) => role === 'superadmin';
+/** May receive assigned todos and fill 当月绩效 (every ops-workspace account). */
+export const canFillKpi = (role: unknown) => isOpsLike(role);
 /** Password policy shared by the browser and the API. */
 /** Login username (usually the person's name, e.g. 张捷嘉): NFKC, trimmed, inner whitespace collapsed. */
 export function normalizeUsername(v: unknown): string {

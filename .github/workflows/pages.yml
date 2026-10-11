@@ -31,6 +31,10 @@ jobs:
         run: node tests/todos.mjs
       - name: Validate ops lessons, allowance and system management
         run: node tests/ops.mjs
+      - name: Validate monthly KPI scoring, review workflow and permissions
+        run: node tests/kpi.mjs
+      - name: Validate imported real data, course times and password skip
+        run: node tests/real-seed.mjs
       - name: Validate API client (demo mode stays offline)
         run: node tests/api-client.mjs
       - name: Type-check and bundle API server

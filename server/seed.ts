@@ -5,7 +5,9 @@
  *   - the public sales demo account (sales@nexus.demo)
  *   - the programme catalogue, one empty unpublished article per programme
  *   - 班级类型 / 教务津贴标准
- * Teams, students, schedules, feedback, todos, 项目, 课程 and 课时记录 are entered in the app.
+ *   - real 运营部 data from the spreadsheet (lib/nexus/real-seed.ts): 项目编号, 课程, 授课老师,
+ *     and 课时记录 / 学情反馈 from 2026-10-01 on (matched by 项目编号 / 课程编号 so existing rows win)
+ * Teams, students, schedules, feedback and todos are entered in the app (as are later 项目 / 课程 / 课时记录).
  * Old demo rows in an existing database are left alone; remove them with `purge-demo` (see below).
  */
 import { and, inArray, like, or, sql, eq } from 'drizzle-orm';
@@ -16,6 +18,7 @@ import { seedArticles } from '../lib/nexus/article-seed';
 import { salesDemo } from '../lib/nexus/auth';
 import { defaultClassTypes } from '../lib/nexus/ops';
 import { staffSeed } from './staff-seed';
+import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from '../lib/nexus/real-seed';
 import { hashPassword } from './password';
 
 const withOrder = <T extends object>(list: readonly T[]) => list.map((x, i) => ({ ...x, sortOrder: i }));
@@ -38,6 +41,7 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
     const rows = await run();
     if (rows.length) log(`seed: ${name} +${rows.length}`);
   }
+  await seedRealData(db, log);
   const res = await db.execute(sql`select count(*)::int as n from users`);
   log(`seed: done (${(res.rows[0] as { n: number }).n} users)`);
 }
@@ -67,4 +71,24 @@ export async function purgeDemo(db: Db, log: (s: string) => void = console.log) 
     await tx.update(schema.users).set({ active: false }).where(eq(schema.users.email, 'ops@nexus.demo'));
   });
   log('purge: done (ops@nexus.demo disabled)');
+}
+
+/** Insert-if-missing for the imported spreadsheet data. Existing rows (by 项目编号 / 课程编号 / 老师姓名 / id) are never overwritten. */
+export async function seedRealData(db: Db, log: (s: string) => void = console.log) {
+  const n = (rows: unknown[]) => rows.length;
+  const p = await db.insert(schema.projects).values(withOrder(realProjects)).onConflictDoNothing().returning({ id: schema.projects.id });
+  const t = await db.insert(schema.teachers).values(withOrder(realTeachers)).onConflictDoNothing().returning({ id: schema.teachers.id });
+  // Courses point at whatever row now owns each 项目编号 (an admin may have created it under another id).
+  const projectId = new Map((await db.select({ id: schema.projects.id, code: schema.projects.code }).from(schema.projects)).map(r => [r.code, r.id]));
+  const codeOf = new Map(realProjects.map(x => [x.id, x.code]));
+  const courses = realCourses.flatMap(c => { const id = projectId.get(codeOf.get(c.project) || ''); return id ? [{ ...c, project: id }] : []; });
+  const c = courses.length ? await db.insert(schema.opsCourses).values(withOrder(courses)).onConflictDoNothing().returning({ id: schema.opsCourses.id }) : [];
+  const courseId = new Map((await db.select({ id: schema.opsCourses.id, code: schema.opsCourses.code }).from(schema.opsCourses)).map(r => [r.code, r.id]));
+  const courseCode = new Map(realCourses.map(x => [x.id, x.code]));
+  const remap = <T extends { course: string }>(list: readonly T[]) => list.flatMap(r => { const id = courseId.get(courseCode.get(r.course) || ''); return id ? [{ ...r, course: id }] : []; });
+  const lessons = remap(realLessons);
+  const l = lessons.length ? await db.insert(schema.lessonRecords).values(withOrder(lessons)).onConflictDoNothing().returning({ id: schema.lessonRecords.id }) : [];
+  const feedbacks = remap(realLessonFeedbacks);
+  const f = feedbacks.length ? await db.insert(schema.lessonFeedbacks).values(withOrder(feedbacks)).onConflictDoNothing().returning({ id: schema.lessonFeedbacks.id }) : [];
+  if (n(p) + n(t) + n(c) + n(l) + n(f)) log(`seed: real data +${n(p)} projects, +${n(t)} teachers, +${n(c)} courses, +${n(l)} lessons, +${n(f)} feedbacks`);
 }

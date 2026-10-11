@@ -25,6 +25,7 @@ export const recordSchemas = {
   classTypes: z.object({ id, name: s(80).min(1), rate: z.number().min(0).max(100000), unit: unit, note: s(200), active: z.boolean() }),
   projects: z.object({ id, code: s(40).min(1), name: s().min(1), startDate: date, endDate: date, status, note: s(1000) }),
   opsCourses: z.object({ id, code: s(60).min(1), project: id, name: s().min(1), status, classType: id, teacher: s(80), opsTeacher: s(120), startDate: date, endDate: date }),
+  teachers: z.object({ id, name: s(80).min(1), note: s(200), active: z.boolean() }),
   lessons: z.object({ id, course: id, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hours: z.number().positive().max(24), students: z.number().int().min(0).max(1000).nullable(), opsTeacher: s(120).min(3), rate: z.number().min(0), unit, amount: z.number().min(0), note: s(1000), createdBy: s(120) }),
   lessonFeedbacks: z.object({ id, course: id, lesson: s(80).nullable(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), attendance: s(200), content: s(4000), performance: s(4000), issues: s(4000), nextSteps: s(2000), opsTeacher: s(120).min(3), createdBy: s(120) }),
 } as const;
@@ -32,10 +33,10 @@ export type CollectionName = keyof typeof recordSchemas;
 export const tables = {
   programs: schema.programs, teams: schema.teams, students: schema.students, enrollments: schema.enrollments,
   courses: schema.courses, feedbacks: schema.feedbacks, resources: schema.resources, assignments: schema.assignments,
-  classTypes: schema.classTypes, projects: schema.projects, opsCourses: schema.opsCourses, lessons: schema.lessonRecords, lessonFeedbacks: schema.lessonFeedbacks,
+  classTypes: schema.classTypes, projects: schema.projects, teachers: schema.teachers, opsCourses: schema.opsCourses, lessons: schema.lessonRecords, lessonFeedbacks: schema.lessonFeedbacks,
 } as const;
 /** 系统管理 data: written by superadmins only. */
-export const systemCollections: readonly CollectionName[] = ['classTypes', 'projects', 'opsCourses'];
+export const systemCollections: readonly CollectionName[] = ['classTypes', 'projects', 'teachers', 'opsCourses'];
 /** Per-teacher records: ops write their own, superadmins any; ops only read their own. */
 export const ownedCollections: readonly CollectionName[] = ['lessons', 'lessonFeedbacks'];
 /** Collections that accept DELETE. */

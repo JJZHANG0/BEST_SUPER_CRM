@@ -4,6 +4,7 @@
  * demo mode on the local store, exactly as before.
  */
 import type { Role } from './roles';
+import type { KpiItem, KpiReviewAction, KpiSheet } from './kpi';
 export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/$/, '');
 export const API_ENABLED = API_BASE.length > 0;
 /** 'production' | 'development' | '' (demo) — shown as a small badge outside production. */
@@ -13,7 +14,7 @@ export type ApiUser = { id: number; email: string; username?: string | null; nam
 export type StaffMember = { email: string; name: string; role: Role; active: boolean };
 /** Row of 系统管理 · 用户管理. */
 export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null };
-export type OpsCollection = 'classTypes' | 'projects' | 'opsCourses' | 'lessons' | 'lessonFeedbacks';
+export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks';
 export type Collection = 'programs' | 'teams' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }
@@ -41,9 +42,15 @@ export type ApiTodo = {
   note?: string | null;
   dueAt?: string | null;
   completedAt?: string | null;
+  assignedBy?: number | null;
+  assignedByName?: string | null;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
   createdAt: string;
   updatedAt: string;
 };
+/** One row of 绩效考核: a teacher and their sheet for the month (null when not started). */
+export type KpiReviewRow = { user: { key: string; name: string; email: string; role: Role }; sheet: KpiSheet | null };
 export type TodoWrite = { title?: string; note?: string | null; dueAt?: string | null; completedAt?: string | null };
 
 export const api = {
@@ -52,9 +59,13 @@ export const api = {
   bootstrap: <T>() => request<T>('/bootstrap'),
   put: <T>(collection: Collection, id: string, record: unknown) => request<{ record: T }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(record) }),
   listTodos: () => request<{ todos: ApiTodo[] }>('/todos'),
-  createTodo: (body: { title: string; note?: string | null; dueAt?: string | null }) => request<{ todo: ApiTodo }>('/todos', { method: 'POST', body: JSON.stringify(body) }),
+  createTodo: (body: { title: string; note?: string | null; dueAt?: string | null; assignee?: string | null }) => request<{ todo: ApiTodo }>('/todos', { method: 'POST', body: JSON.stringify(body) }),
   updateTodo: (id: string, body: TodoWrite) => request<{ todo: ApiTodo }>(`/todos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTodo: (id: string) => request<{ ok: true }>(`/todos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  kpi: (month: string) => request<{ sheet: KpiSheet | null }>(`/kpi/${month}`),
+  saveKpi: (month: string, items: KpiItem[], submit: boolean) => request<{ sheet: KpiSheet }>(`/kpi/${month}`, { method: 'PUT', body: JSON.stringify({ items, submit }) }),
+  kpiReview: (month: string) => request<{ rows: KpiReviewRow[] }>(`/kpi-review/${month}`),
+  reviewKpi: (userKey: string, month: string, body: { items?: KpiItem[]; reviewNote?: string; action: KpiReviewAction }) => request<{ sheet: KpiSheet }>(`/kpi-review/${encodeURIComponent(userKey)}/${month}`, { method: 'PUT', body: JSON.stringify(body) }),
   remove: (collection: OpsCollection, id: string) => request<{ ok: true }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   changePassword: (current: string, next: string) => request<{ ok: true }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ current, next }) }),
   adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),

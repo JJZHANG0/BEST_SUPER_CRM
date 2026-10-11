@@ -178,8 +178,30 @@ export const todos = pgTable('todos', {
   note: text('note'),
   dueAt: timestamp('due_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  /** 任务指派: the superadmin who assigned this todo to user_id (null for personal todos). */
+  assignedBy: integer('assigned_by').references(() => users.id),
+  assignedByName: text('assigned_by_name'),
   ...stamps,
-}, t => [index('todos_user_idx').on(t.userId), index('todos_user_open_idx').on(t.userId, t.completedAt)]);
+}, t => [index('todos_user_idx').on(t.userId), index('todos_user_open_idx').on(t.userId, t.completedAt), index('todos_assigned_by_idx').on(t.assignedBy)]);
+
+/**
+ * 当月绩效 / 绩效考核: one KPI sheet per user and month (YYYY-MM). items holds the fixed KR slots
+ * (lib/nexus/kpi.ts). status: draft → submitted → finalized (reviewer may return or reopen).
+ */
+export const kpiSheets = pgTable('kpi_sheets', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  month: text('month').notNull(),
+  status: text('status').notNull().default('draft'),
+  items: jsonb('items').notNull(),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  reviewedBy: integer('reviewed_by').references(() => users.id),
+  reviewedByName: text('reviewed_by_name'),
+  reviewNote: text('review_note').notNull().default(''),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+  total: doublePrecision('total'),
+  ...stamps,
+}, t => [uniqueIndex('kpi_sheets_user_month_idx').on(t.userId, t.month), index('kpi_sheets_month_idx').on(t.month)]);
 
 /** 班级类型 + 教务津贴标准. unit: 'hour' (元/小时) | 'person_hour' (元/人/小时) | 'session' (元/次). */
 export const classTypes = pgTable('class_types', {
@@ -222,6 +244,16 @@ export const opsCourses = pgTable('ops_courses', {
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('ops_courses_project_idx').on(t.project), index('ops_courses_ops_teacher_idx').on(t.opsTeacher)]);
+
+/** 授课老师 directory (系统管理 · 授课老师); seeded from the 课程编号管理 sheet. */
+export const teachers = pgTable('teachers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  note: text('note').notNull().default(''),
+  active: boolean('active').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [uniqueIndex('teachers_name_idx').on(t.name)]);
 
 /** 课时记录. rate / unit snapshot the class type when the record is created; amount is computed by the API. */
 export const lessonRecords = pgTable('lesson_records', {

@@ -8,7 +8,7 @@
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
-import { asc, desc, eq, max, min, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, max, min, or, sql } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
 import type { Db } from './db';
 import { schema } from './db';
@@ -16,7 +16,8 @@ import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, deletableCollections, type CollectionName } from './collections';
-import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
+import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 
@@ -177,9 +178,12 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const rows = await db.select().from(t).orderBy(asc(t.sortOrder), asc(t.createdAt));
     return rows.map(r => toRecord(name, r as unknown as Record<string, unknown>));
   }
-  const todoRow = (r: typeof schema.todos.$inferSelect) => ({
+  type TodoOwner = { name: string; email: string } | null;
+  const todoRow = (r: typeof schema.todos.$inferSelect, owner: TodoOwner = null) => ({
     id: r.id, userId: r.userId, title: r.title, note: r.note ?? null,
     dueAt: r.dueAt ? r.dueAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    assignedBy: r.assignedBy ?? null, assignedByName: r.assignedByName ?? null,
+    ownerName: owner?.name ?? null, ownerEmail: owner?.email ?? null,
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   });
   const parseDue = (v: unknown) => {
@@ -188,33 +192,58 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const d = new Date(v.length <= 10 ? v + 'T12:00:00+08:00' : v);
     return Number.isNaN(d.getTime()) ? undefined : d;
   };
+  /** Own todos plus the ones this user assigned to others (「我指派的」), with the owner's name. */
+  async function todosFor(user: SessionUser) {
+    const rows = await db.select({ t: schema.todos, name: schema.users.name, email: schema.users.email }).from(schema.todos)
+      .innerJoin(schema.users, eq(schema.users.id, schema.todos.userId))
+      .where(or(eq(schema.todos.userId, user.id), eq(schema.todos.assignedBy, user.id)))
+      .orderBy(desc(schema.todos.createdAt));
+    return rows.map(r => todoRow(r.t, { name: r.name, email: r.email }));
+  }
+  async function ownerOf(userId: number): Promise<TodoOwner> {
+    const [u] = await db.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    return u ?? null;
+  }
 
-  app.get('/todos', async c => {
-    const user = c.get('user');
-    const rows = await db.select().from(schema.todos).where(eq(schema.todos.userId, user.id)).orderBy(desc(schema.todos.createdAt));
-    return c.json({ todos: rows.map(todoRow) });
-  });
+  app.get('/todos', async c => c.json({ todos: await todosFor(c.get('user')) }));
 
+  /** Personal todo, or (superadmin) a todo assigned to another ops teacher via `assignee` (email). */
   app.post('/todos', async c => {
     const user = c.get('user');
-    const body = await c.req.json().catch(() => null) as { title?: unknown; note?: unknown; dueAt?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { title?: unknown; note?: unknown; dueAt?: unknown; assignee?: unknown } | null;
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     if (!title || title.length > 200) return c.json({ error: 'invalid', issues: ['title required (1–200)'] }, 400);
     const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 2000) : null;
     const dueAt = parseDue(body?.dueAt);
     if (dueAt === undefined) return c.json({ error: 'invalid', issues: ['dueAt'] }, 400);
+    let ownerId = user.id, assignedBy: number | null = null, assignedByName: string | null = null;
+    const assignee = typeof body?.assignee === 'string' ? body.assignee.trim().toLowerCase() : '';
+    if (assignee && assignee !== user.email) {
+      if (!canAssignTodos(user.role)) return c.json({ error: 'forbidden', message: '只有超级管理员可以指派任务' }, 403);
+      const [target] = await db.select().from(schema.users).where(eq(schema.users.email, assignee)).limit(1);
+      if (!target || !target.active || !isOpsLike(target.role)) return c.json({ error: 'invalid', message: '请选择在职的运营老师' }, 400);
+      ownerId = target.id; assignedBy = user.id; assignedByName = user.name;
+    }
     const id = 'TODO-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     const now = new Date();
-    const [row] = await db.insert(schema.todos).values({ id, userId: user.id, title, note: note || null, dueAt, completedAt: null, createdAt: now, updatedAt: now }).returning();
-    return c.json({ todo: todoRow(row) }, 201);
+    const [row] = await db.insert(schema.todos).values({ id, userId: ownerId, title, note: note || null, dueAt, completedAt: null, assignedBy, assignedByName, createdAt: now, updatedAt: now }).returning();
+    return c.json({ todo: todoRow(row, await ownerOf(ownerId)) }, 201);
   });
 
+  /**
+   * Owner edits their personal todos. For assigned todos the assignee only completes / restores,
+   * and the assigner may edit title / note / DDL (not the completion state).
+   */
   app.patch('/todos/:id', async c => {
     const user = c.get('user'), id = c.req.param('id');
     const [current] = await db.select().from(schema.todos).where(eq(schema.todos.id, id)).limit(1);
-    if (!current || current.userId !== user.id) return c.json({ error: 'not_found' }, 404);
+    const isOwner = current?.userId === user.id, isAssigner = !!current?.assignedBy && current.assignedBy === user.id;
+    if (!current || (!isOwner && !isAssigner)) return c.json({ error: 'not_found' }, 404);
     const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
     if (!body || typeof body !== 'object') return c.json({ error: 'invalid' }, 400);
+    const assigned = current.assignedBy != null && current.assignedBy !== current.userId;
+    if (assigned && isOwner && !isAssigner && ['title', 'note', 'dueAt'].some(k => k in body)) return c.json({ error: 'forbidden', message: '指派的任务只能由指派人修改内容' }, 403);
+    if (assigned && isAssigner && !isOwner && 'completedAt' in body) return c.json({ error: 'forbidden', message: '指派的任务由负责老师标记完成' }, 403);
     const patch: Partial<typeof schema.todos.$inferInsert> = { updatedAt: new Date() };
     if ('title' in body) {
       const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -237,29 +266,96 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       else return c.json({ error: 'invalid', issues: ['completedAt'] }, 400);
     }
     const [row] = await db.update(schema.todos).set(patch).where(eq(schema.todos.id, id)).returning();
-    return c.json({ todo: todoRow(row) });
+    return c.json({ todo: todoRow(row, await ownerOf(row.userId)) });
   });
 
+  /** Personal todos: owner. Assigned todos: only the assigner withdraws them. */
   app.delete('/todos/:id', async c => {
     const user = c.get('user'), id = c.req.param('id');
     const [current] = await db.select().from(schema.todos).where(eq(schema.todos.id, id)).limit(1);
-    if (!current || current.userId !== user.id) return c.json({ error: 'not_found' }, 404);
+    if (!current || (current.userId !== user.id && current.assignedBy !== user.id)) return c.json({ error: 'not_found' }, 404);
+    const assigned = current.assignedBy != null && current.assignedBy !== current.userId;
+    if (assigned && current.assignedBy !== user.id) return c.json({ error: 'forbidden', message: '指派的任务只能由指派人撤回' }, 403);
     await db.delete(schema.todos).where(eq(schema.todos.id, id));
     return c.json({ ok: true as const });
+  });
+
+  // ---- 当月绩效 (self-fill) and 绩效考核 (review) ----
+  const kpiRow = (r: typeof schema.kpiSheets.$inferSelect, userName: string): KpiSheet => ({
+    id: String(r.id), userKey: String(r.userId), userName, month: r.month, status: r.status as KpiStatus, items: normalizeItems(r.items),
+    submittedAt: r.submittedAt ? r.submittedAt.toISOString() : null, reviewedByName: r.reviewedByName ?? null, reviewNote: r.reviewNote,
+    finalizedAt: r.finalizedAt ? r.finalizedAt.toISOString() : null, total: r.total ?? null, updatedAt: r.updatedAt.toISOString(),
+  });
+  const kpiOf = async (userId: number, month: string) => (await db.select().from(schema.kpiSheets).where(and(eq(schema.kpiSheets.userId, userId), eq(schema.kpiSheets.month, month))).limit(1))[0];
+
+  app.get('/kpi/:month', async c => {
+    const user = c.get('user'), month = c.req.param('month');
+    if (!canFillKpi(user.role)) return forbidden(c);
+    if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
+    const row = await kpiOf(user.id, month);
+    return c.json({ sheet: row ? ownerView(kpiRow(row, user.name)) : null });
+  });
+
+  /** Save own draft (and optionally submit). Only drafts can be edited by the teacher (rules: lib/nexus/kpi.ts teacherSave). */
+  app.put('/kpi/:month', async c => {
+    const user = c.get('user'), month = c.req.param('month');
+    if (!canFillKpi(user.role)) return forbidden(c);
+    if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
+    const body = await c.req.json().catch(() => null) as { items?: unknown; submit?: unknown } | null;
+    const current = await kpiOf(user.id, month);
+    const result = teacherSave(current ? kpiRow(current, user.name) : null, { id: '', userKey: String(user.id), userName: user.name, month }, body?.items, body?.submit === true);
+    if (!result.ok) return c.json({ error: result.status === 409 ? 'conflict' : 'invalid', message: result.error }, result.status);
+    const { sheet } = result;
+    const values = { items: sheet.items, status: sheet.status, submittedAt: sheet.submittedAt ? new Date(sheet.submittedAt) : null, updatedAt: new Date(sheet.updatedAt) };
+    const [row] = current
+      ? await db.update(schema.kpiSheets).set(values).where(eq(schema.kpiSheets.id, current.id)).returning()
+      : await db.insert(schema.kpiSheets).values({ ...values, userId: user.id, month }).returning();
+    return c.json({ sheet: ownerView(kpiRow(row, user.name)) });
+  });
+
+  /** Reviewer: every ops teacher (plus anyone who filled a sheet) for one month. */
+  app.get('/kpi-review/:month', async c => {
+    const user = c.get('user'), month = c.req.param('month');
+    if (!canReviewKpi(user.role)) return c.json({ error: 'forbidden', message: '此操作仅绩效审核人可用' }, 403);
+    if (!isMonth(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
+    const sheets = await db.select().from(schema.kpiSheets).where(eq(schema.kpiSheets.month, month));
+    const ids = sheets.map(r => r.userId);
+    // Every active ops-workspace teacher (superadmins also fill 当月绩效) except the reviewer, plus anyone with a sheet.
+    const teachers = and(inArray(schema.users.role, ['ops', 'superadmin', 'admin']), eq(schema.users.active, true));
+    const people = (await db.select().from(schema.users).where(ids.length ? or(teachers, inArray(schema.users.id, ids)) : teachers).orderBy(asc(schema.users.id))).filter(p => p.id !== user.id);
+    return c.json({ rows: people.map(p => { const r = sheets.find(x => x.userId === p.id); return { user: { key: String(p.id), name: p.name, email: p.email, role: p.role }, sheet: r ? kpiRow(r, p.name) : null }; }) });
+  });
+
+  /** Reviewer: score / finalize / return to draft / reopen a finalized sheet (rules: lib/nexus/kpi.ts reviewSheet). */
+  app.put('/kpi-review/:userId/:month', async c => {
+    const user = c.get('user'), month = c.req.param('month'), userId = Number(c.req.param('userId'));
+    if (!canReviewKpi(user.role)) return c.json({ error: 'forbidden', message: '此操作仅绩效审核人可用' }, 403);
+    if (!isMonth(month) || !Number.isInteger(userId)) return c.json({ error: 'invalid' }, 400);
+    const body = await c.req.json().catch(() => null) as { items?: unknown; reviewNote?: unknown; action?: unknown } | null;
+    const current = await kpiOf(userId, month);
+    const [owner] = await db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    const result = reviewSheet(current ? kpiRow(current, owner?.name || '') : null, { action: body?.action ?? 'save', items: body?.items, reviewNote: body?.reviewNote, reviewerKey: String(user.id), reviewerName: user.name });
+    if (!result.ok) return c.json({ error: result.status === 409 ? 'conflict' : result.status === 404 ? 'not_found' : result.status === 403 ? 'forbidden' : 'invalid', message: result.error }, result.status);
+    const { sheet } = result;
+    const [row] = await db.update(schema.kpiSheets).set({
+      items: sheet.items, status: sheet.status, reviewNote: sheet.reviewNote ?? '', submittedAt: sheet.submittedAt ? new Date(sheet.submittedAt) : null,
+      finalizedAt: sheet.finalizedAt ? new Date(sheet.finalizedAt) : null, total: sheet.total ?? null, updatedAt: new Date(sheet.updatedAt),
+      ...(body?.action === 'reopen' ? {} : { reviewedBy: user.id, reviewedByName: user.name }),
+    }).where(eq(schema.kpiSheets.id, current!.id)).returning();
+    return c.json({ sheet: kpiRow(row, owner?.name || '') });
   });
 
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
-    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks'] as const).map(list));
+    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers'] as const).map(list));
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active }));
     const own = (r: Record<string, unknown>) => canSeeAllLessons(user.role) || String(r.opsTeacher).toLowerCase() === user.email;
     const articleRows = await db.select().from(schema.articles);
-    const todoRows = await db.select().from(schema.todos).where(eq(schema.todos.userId, user.id)).orderBy(desc(schema.todos.createdAt));
-    const todos = todoRows.map(todoRow);
+    const todos = await todosFor(user);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos, classTypes, projects, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -271,7 +367,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
       resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, todos,
-      classTypes: [], projects: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
+      classTypes: [], projects: [], teachers: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
     });
   });
 

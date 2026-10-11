@@ -6,10 +6,12 @@ import { seedArticles } from './article-seed';
 import { mergeStoredArticles, type ProgramArticle } from './articles';
 import { isHealth, type Assignment } from './students';
 import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, type Overrides, type DirectoryUser } from './auth';
-import { api, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
+import { api, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback } from './ops';
-import { isOpsLike, passwordIssues, type Role, normalizeUsername, usernameIssue } from './roles';
+import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher } from './ops';
+import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
+import { isOpsLike, canAssignTodos, canReviewKpi, passwordIssues, type Role, normalizeUsername, usernameIssue } from './roles';
 export type FileRecord=seed.Resource & {url?:string};
 export type LoginResult={ok:true;role:Role}|{ok:false;error:string};
 type St<T>=Dispatch<SetStateAction<T>>;
@@ -20,7 +22,12 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   articles:ProgramArticle[];updateArticles:(fn:(list:ProgramArticle[])=>ProgramArticle[])=>boolean;
   /** Personal todos for the signed-in user (ops homepage + 待办/已完成 pages). */
   todos:Todo[];
-  addTodo:(input:{title:string;note?:string;dueAt?:string|null})=>Promise<boolean>;
+  /** Personal todo, or with `assignee` (an ops teacher's email) a task assigned by a superadmin. */
+  addTodo:(input:{title:string;note?:string;dueAt?:string|null;assignee?:string|null})=>Promise<boolean>;
+  /** Key of the signed-in user on todos / KPI sheets (API: users.id as text; demo: login email). */
+  meKey:string;
+  /** 当月绩效 (own sheet) and 绩效考核 (reviewer). */
+  kpi:{load:(month:string)=>Promise<KpiSheet|null>;save:(month:string,items:KpiItem[],submit:boolean)=>Promise<{ok:true;sheet:KpiSheet}|{ok:false;error:string}>;reviewList:(month:string)=>Promise<KpiReviewRow[]>;review:(userKey:string,month:string,body:{items?:KpiItem[];reviewNote?:string;action:KpiReviewAction})=>Promise<{ok:true;sheet:KpiSheet}|{ok:false;error:string}>};
   completeTodo:(id:string)=>Promise<boolean>;
   restoreTodo:(id:string)=>Promise<boolean>;
   deleteTodo:(id:string)=>Promise<boolean>;
@@ -28,6 +35,8 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   /** 班型与津贴标准, 项目编号, 课程, 课时记录, 课情反馈. */
   classTypes:ClassType[];setClassTypes:St<ClassType[]>;
   projects:Project[];setProjects:St<Project[]>;
+  /** 授课老师 directory (系统管理). */
+  teachers:Teacher[];setTeachers:St<Teacher[]>;
   opsCourses:OpsCourse[];setOpsCourses:St<OpsCourse[]>;
   lessons:LessonRecord[];setLessons:St<LessonRecord[]>;
   lessonFeedbacks:LessonFeedback[];setLessonFeedbacks:St<LessonFeedback[]>;
@@ -45,7 +54,9 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   apiMode:boolean;user:ApiUser|null;
   /** True while a saved API session is being restored on page load. */
   restoring:boolean;
-  login:(email:string,password:string)=>Promise<LoginResult>;logout:()=>void};
+  login:(email:string,password:string)=>Promise<LoginResult>;logout:()=>void;
+  /** 首次登录改密可「稍后修改」: true after skipping in this browser session; the next sign-in asks again. */
+  passwordDeferred:boolean;deferPasswordChange:()=>void};
 const Context=createContext<Store>(null!);
 /**
  * Demo mode (no NEXT_PUBLIC_API_BASE, e.g. GitHub Pages): records are kept in this browser's
@@ -54,17 +65,19 @@ const Context=createContext<Store>(null!);
  * API mode: data is loaded from /api/bootstrap after login and every record the UI changes is
  * written back with PUT /api/<collection>/<id>; the server is the source of truth.
  */
-export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v2',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v2',students:'nexus.demo.students.v2',enrollments:'nexus.demo.enrollments.v2',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v2',opsCourses:'nexus.demo.ops-courses.v2',lessons:'nexus.demo.lessons.v2',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v2'} as const;
-export const LEGACY_KEYS=['nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1'];
+export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v2',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v2',students:'nexus.demo.students.v2',enrollments:'nexus.demo.enrollments.v2',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',kpi:'nexus.demo.kpi.v1'} as const;
+/** v2 → v3 of 项目/课程/课时/课情反馈 loads the real data imported from the 运营部 spreadsheet (lib/nexus/real-seed.ts). */
+export const LEGACY_KEYS=['nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2'];
+const PW_LATER_KEY='nexus.password-later.v1';
 function read(key:string){if(API_ENABLED||typeof window==='undefined')return null;try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null}catch{return null}}
 function readList<T>(key:string,fallback:readonly T[]):T[]{const v=read(key);return Array.isArray(v)?v as T[]:fallback.slice()}
 function write(key:string,value:unknown){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
 if(typeof window!=='undefined'&&!API_ENABLED){try{LEGACY_KEYS.forEach(k=>localStorage.removeItem(k))}catch{/* storage unavailable */}}
-type Bootstrap={user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[]};
+type Bootstrap={user:ApiUser;programs:seed.Program[];teams:seed.Team[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[]};
 /** Browser-only fields that never go to the API. */
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
-const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
+const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,assignedBy:t.assignedBy??null,assignedByName:t.assignedByName??null,ownerName:t.ownerName??null,ownerEmail:t.ownerEmail??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
 const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,mustChangePassword:u.mustChange});
 const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName});
 const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):'无法连接服务器，请检查网络后重试';
@@ -83,11 +96,14 @@ export function Provider({children}:{children:ReactNode}){
  const [assignments,setAssignments]=useState<Assignment[]>(()=>readList(STORAGE_KEYS.assignments,[]));
  const [articles,setArticles]=useState<ProgramArticle[]>(()=>{const saved=read(STORAGE_KEYS.articles);return saved?mergeStoredArticles(seedArticles,saved):seedArticles});
  const [todos,setTodos]=useState<Todo[]>(()=>storedTodos(read(STORAGE_KEYS.todos)));
+ const [kpiSheets,setKpiSheets]=useState<KpiSheet[]>(()=>readList<KpiSheet>(STORAGE_KEYS.kpi,[]).filter(x=>x&&typeof x==='object'&&typeof x.userKey==='string'&&typeof x.month==='string'&&Array.isArray(x.items)));
  const [classTypes,setClassTypes]=useState<ClassType[]>(()=>readList(STORAGE_KEYS.classTypes,defaultClassTypes));
- const [projects,setProjects]=useState<Project[]>(()=>readList(STORAGE_KEYS.projects,[]));
- const [opsCourses,setOpsCourses]=useState<OpsCourse[]>(()=>readList(STORAGE_KEYS.opsCourses,[]));
- const [lessons,setLessons]=useState<LessonRecord[]>(()=>readList(STORAGE_KEYS.lessons,[]));
- const [lessonFeedbacks,setLessonFeedbacks]=useState<LessonFeedback[]>(()=>readList(STORAGE_KEYS.lessonFeedbacks,[]));
+ const [projects,setProjects]=useState<Project[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.projects,realProjects));
+ const [teachers,setTeachers]=useState<Teacher[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.teachers,realTeachers));
+ const [opsCourses,setOpsCourses]=useState<OpsCourse[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.opsCourses,realCourses));
+ const [lessons,setLessons]=useState<LessonRecord[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.lessons,realLessons));
+ const [lessonFeedbacks,setLessonFeedbacks]=useState<LessonFeedback[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.lessonFeedbacks,realLessonFeedbacks));
+ const [passwordDeferred,setPasswordDeferred]=useState(false);
  const [overrides,setOverrides]=useState<Overrides>(()=>{const v=read(STORAGE_KEYS.users);return v&&typeof v==='object'&&!Array.isArray(v)?v as Overrides:{}});
  const [apiStaff,setApiStaff]=useState<StaffMember[]>([]);
  const [persisted,setPersisted]=useState(true);
@@ -96,12 +112,12 @@ export function Provider({children}:{children:ReactNode}){
  /** Last server-confirmed JSON per collection and record id (API mode only). */
  const synced=useRef<Partial<Record<Collection,Map<string,string>>>>({});
  const inflight=useRef(new Map<string,string>());
- const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,classTypes:setClassTypes,projects:setProjects,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks} as never).current;
+ const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks} as never).current;
  const applyServer=useCallback((data:Bootstrap)=>{
-  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,classTypes:data.classTypes??[],projects:data.projects??[],opsCourses:data.opsCourses??[],lessons:data.lessons??[],lessonFeedbacks:data.lessonFeedbacks??[]};
+  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:data.lessons??[],lessonFeedbacks:data.lessonFeedbacks??[]};
   for(const [name,list] of Object.entries(sets) as [Collection,{id?:string;program?:string}[]][]){synced.current[name]=new Map(list.map(x=>[idOf(x),stableJson(x,OMIT[name])]));}
   setPrograms(data.programs);setTeams(data.teams);setStudents(data.students);setEnrollments(data.enrollments);setCourses(data.courses);setFeedbacks(data.feedbacks);setAssignments(data.assignments);setArticles(data.articles);
-  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setOpsCourses(data.opsCourses??[]);setLessons(data.lessons??[]);setLessonFeedbacks(data.lessonFeedbacks??[]);setApiStaff(data.staff??[]);
+  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons(data.lessons??[]);setLessonFeedbacks(data.lessonFeedbacks??[]);setApiStaff(data.staff??[]);
   // Keep blob URLs of files uploaded in this tab.
   setFiles(prev=>data.resources.map(r=>({...r,url:prev.find(p=>p.id===r.id)?.url})));
   setUser(data.user);setRole(data.user.role);
@@ -125,13 +141,13 @@ export function Provider({children}:{children:ReactNode}){
    }).catch(e=>{setPersisted(false);toast.error(e instanceof ApiError&&e.status===403?'没有权限执行此操作，修改未保存':e instanceof ApiError&&e.status===400&&e.message&&e.message!==e.code?e.message:'保存到服务器失败，请稍后重试');if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}).finally(()=>{if(inflight.current.get(key)===body)inflight.current.delete(key);if(!inflight.current.size)setTimeout(()=>{if(!inflight.current.size)void refresh()},50)});
   }
  },[refresh,setters]);
- const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['classTypes',classTypes],['projects',projects],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks]];
+ const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks]];
  for(const [name,list] of collections){
   // eslint-disable-next-line react-hooks/rules-of-hooks -- fixed-length list, same order every render
   useEffect(()=>{if(authenticated)push(name,list)},[list,authenticated,push,name]);
  }
  // Demo mode: every collection except uploaded files is kept in localStorage.
- const demoPersist:[string,unknown][]=[[STORAGE_KEYS.programs,programs],[STORAGE_KEYS.teams,teams],[STORAGE_KEYS.students,students],[STORAGE_KEYS.enrollments,enrollments],[STORAGE_KEYS.courses,courses],[STORAGE_KEYS.feedbacks,feedbacks],[STORAGE_KEYS.assignments,assignments],[STORAGE_KEYS.classTypes,classTypes],[STORAGE_KEYS.projects,projects],[STORAGE_KEYS.opsCourses,opsCourses],[STORAGE_KEYS.lessons,lessons],[STORAGE_KEYS.lessonFeedbacks,lessonFeedbacks],[STORAGE_KEYS.users,overrides]];
+ const demoPersist:[string,unknown][]=[[STORAGE_KEYS.programs,programs],[STORAGE_KEYS.teams,teams],[STORAGE_KEYS.students,students],[STORAGE_KEYS.enrollments,enrollments],[STORAGE_KEYS.courses,courses],[STORAGE_KEYS.feedbacks,feedbacks],[STORAGE_KEYS.assignments,assignments],[STORAGE_KEYS.classTypes,classTypes],[STORAGE_KEYS.projects,projects],[STORAGE_KEYS.teachers,teachers],[STORAGE_KEYS.opsCourses,opsCourses],[STORAGE_KEYS.lessons,lessons],[STORAGE_KEYS.lessonFeedbacks,lessonFeedbacks],[STORAGE_KEYS.users,overrides]];
  const first=useRef(true);
  for(const [key,value] of demoPersist){
   // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/set-state-in-effect -- fixed-length list, same order every render; flags a localStorage quota failure
@@ -146,12 +162,17 @@ export function Provider({children}:{children:ReactNode}){
    let match:DirectoryUser|null=null;
    try{match=await authenticateDemo(email,password,overrides)}catch{return {ok:false,error:'当前浏览器不支持安全登录（需要 HTTPS），请更换浏览器后重试。'}}
    if(!match)return {ok:false,error:'账号或密码不正确，或账号已停用。'};
-   setUser(demoUser(match));setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
+   clearPwLater();setUser(demoUser(match));setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
   }
-  try{const res=await api.login(email,password);token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
+  try{const res=await api.login(email,password);clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
   catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':'服务器暂时不可用，请稍后重试。'):'无法连接服务器，请检查网络后重试。'}}
  };
- const logout=()=>{token.clear();setUser(null);setAuthenticated(false)};
+ const logout=()=>{token.clear();clearPwLater();setUser(null);setAuthenticated(false)};
+ // 「稍后修改」 lasts for this browser session only (sessionStorage); every explicit sign-in asks again.
+ function clearPwLater(){setPasswordDeferred(false);try{sessionStorage.removeItem(PW_LATER_KEY)}catch{/* ignore */}}
+ const deferPasswordChange=()=>{setPasswordDeferred(true);try{sessionStorage.setItem(PW_LATER_KEY,String(user?.email||''))}catch{/* session-only */}};
+ // eslint-disable-next-line react-hooks/set-state-in-effect -- restore the per-session skip after a reload
+ useEffect(()=>{if(!user?.email)return;try{setPasswordDeferred(sessionStorage.getItem(PW_LATER_KEY)===user.email)}catch{/* ignore */}},[user?.email]);
  // Any path that signs out (including setAuthenticated(false)) drops the session.
  const wasAuthed=useRef(false);
  useEffect(()=>{if(wasAuthed.current&&!authenticated){if(API_ENABLED)token.clear();setUser(null)}wasAuthed.current=authenticated},[authenticated]);
@@ -160,11 +181,16 @@ export function Provider({children}:{children:ReactNode}){
 
  const demoUserKey=()=>user?.email||'';
  const persistTodos=(list:Todo[])=>{if(API_ENABLED)return true;const ok=write(STORAGE_KEYS.todos,list);setPersisted(ok);return ok};
- const addTodo=async(input:{title:string;note?:string;dueAt?:string|null})=>{
+ const addTodo=async(input:{title:string;note?:string;dueAt?:string|null;assignee?:string|null})=>{
   const title=input.title.trim();if(!title)return false;
-  if(API_ENABLED){try{const {todo}=await api.createTodo({title,note:input.note??null,dueAt:input.dueAt??null});setTodos(l=>[asTodo(todo),...l]);setPersisted(true);return true}catch(e){setPersisted(false);toast.error(e instanceof ApiError?'保存待办失败':'无法连接服务器');return false}}
+  const assignee=(input.assignee||'').trim().toLowerCase();
+  const assigning=!!assignee&&assignee!==String(user?.email||'').toLowerCase();
+  if(assigning&&!canAssignTodos(role)){toast.error('只有超级管理员可以指派任务');return false}
+  if(API_ENABLED){try{const {todo}=await api.createTodo({title,note:input.note??null,dueAt:input.dueAt??null,...(assigning?{assignee}:{})});setTodos(l=>[asTodo(todo),...l]);setPersisted(true);return true}catch(e){setPersisted(false);toast.error(e instanceof ApiError?apiError(e,'保存待办失败'):'无法连接服务器');return false}}
   const now=new Date().toISOString();
-  const item:Todo={id:newTodoId(),userId:demoUserKey(),title,note:input.note?.trim()||undefined,dueAt:input.dueAt??null,completedAt:null,createdAt:now,updatedAt:now};
+  const target=assigning?directory(overrides).find(u=>u.email===assignee&&u.active&&isOpsLike(u.role)):null;
+  if(assigning&&!target){toast.error('请选择在职的运营老师');return false}
+  const item:Todo={id:newTodoId(),userId:assigning?assignee:demoUserKey(),title,note:input.note?.trim()||undefined,dueAt:input.dueAt??null,completedAt:null,...(assigning?{assignedBy:demoUserKey(),assignedByName:user?.name||'',ownerName:target!.name,ownerEmail:assignee}:{}),createdAt:now,updatedAt:now};
   let ok=true;setTodos(l=>{const next=[item,...l];ok=persistTodos(next);return next});return ok;
  };
  const completeTodo=async(id:string)=>{
@@ -187,6 +213,37 @@ export function Provider({children}:{children:ReactNode}){
   let ok=true;setTodos(l=>{const next=l.map(t=>t.id===id?{...t,...('title' in patch&&patch.title!=null?{title:patch.title.trim()}:{}),...('note' in patch?{note:patch.note??undefined}:{}),...('dueAt' in patch?{dueAt:patch.dueAt??null}:{}),updatedAt:stamp}:t);ok=persistTodos(next);return next});return ok;
  };
 
+ const meKey=API_ENABLED?String(user?.id??''):String(user?.email||'').toLowerCase();
+ const persistKpi=(list:KpiSheet[])=>{setKpiSheets(list);if(API_ENABLED)return true;const ok=write(STORAGE_KEYS.kpi,list);setPersisted(ok);return ok};
+ const kpi:Store['kpi']={
+  load:async month=>{
+   if(API_ENABLED){try{return (await api.kpi(month)).sheet}catch(e){toast.error(apiError(e,'读取绩效失败'));return null}}
+   const own=kpiSheets.find(x=>x.userKey===meKey&&x.month===month);return own?ownerView(own):null;
+  },
+  save:async(month,items,submit)=>{
+   if(API_ENABLED){try{return {ok:true,sheet:(await api.saveKpi(month,items,submit)).sheet}}catch(e){return {ok:false,error:apiError(e,'保存失败')}}}
+   const current=kpiSheets.find(x=>x.userKey===meKey&&x.month===month)??null;
+   const r=teacherSave(current,{id:'KPI-'+meKey+'-'+month,userKey:meKey,userName:user?.name||'',month},items,submit);
+   if(!r.ok)return {ok:false,error:r.error};
+   if(!persistKpi([...kpiSheets.filter(x=>x!==current),r.sheet]))return {ok:false,error:'浏览器存储空间不足，未能保存'};
+   return {ok:true,sheet:ownerView(r.sheet)};
+  },
+  reviewList:async month=>{
+   if(!canReviewKpi(role))return [];
+   if(API_ENABLED){try{return (await api.kpiReview(month)).rows}catch(e){toast.error(apiError(e,'读取绩效失败'));return []}}
+   const people=directory(overrides);const sheets=kpiSheets.filter(x=>x.month===month);
+   return people.filter(u=>u.email.toLowerCase()!==meKey.toLowerCase()&&((isOpsLike(u.role)&&u.active)||sheets.some(x=>x.userKey===u.email))).map(u=>({user:{key:u.email,name:u.name,email:u.email,role:u.role},sheet:sheets.find(x=>x.userKey===u.email)??null}));
+  },
+  review:async(userKey,month,body)=>{
+   if(!canReviewKpi(role))return {ok:false,error:'此操作仅绩效审核人可用'};
+   if(API_ENABLED){try{return {ok:true,sheet:(await api.reviewKpi(userKey,month,body)).sheet}}catch(e){return {ok:false,error:apiError(e,'保存失败')}}}
+   const current=kpiSheets.find(x=>x.userKey===userKey&&x.month===month)??null;
+   const r=reviewSheet(current,{...body,reviewerKey:meKey,reviewerName:user?.name||''});
+   if(!r.ok)return {ok:false,error:r.error};
+   if(!persistKpi(kpiSheets.map(x=>x===current?r.sheet:x)))return {ok:false,error:'浏览器存储空间不足，未能保存'};
+   return {ok:true,sheet:r.sheet};
+  },
+ };
  const removeRecord=async(name:OpsCollection,id:string)=>{
   const drop=()=>(setters[name] as unknown as Dispatch<SetStateAction<{id:string}[]>>)(l=>l.filter(x=>x.id!==id));
   if(!API_ENABLED){drop();return true}
@@ -229,7 +286,7 @@ export function Provider({children}:{children:ReactNode}){
    const password=randomPassword();const h=await makeHash(password);setOverrides(o=>({...o,[u.email]:{...o[u.email],...h,mustChange:true}}));return {ok:true,password};
   },
  };
- return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,todos,addTodo,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,removeRecord,staff,staffName,changePassword,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout}}>{children}</Context.Provider>}
+ return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,removeRecord,staff,staffName,changePassword,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){const s=useNexus();const salesName=s.user?.salesName||'';const students=s.students.filter(x=>s.role!=='sales'||x.sales===salesName);const teams=s.teams;return {students,teams,courses:s.courses.filter(c=>s.role!=='sales'||(teams.some(t=>t.id===c.team)&&s.programs.find(p=>p.id===c.program)?.published)),files:s.files.filter(f=>s.role!=='sales'||f.public),feedbacks:s.feedbacks.filter(f=>s.role!=='sales'||(f.visible&&students.some(x=>x.id===f.student)))};}
 /** Display name of the signed-in user. */

@@ -1,6 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { KeyRound, LogOut } from 'lucide-react';
+import { KeyRound, LogOut, Clock } from 'lucide-react';
 import { BrandMark } from '@/components/nexus/brand';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
@@ -40,9 +40,12 @@ export function PasswordGate() {
   return <main className="password-gate">
     <section className="glass panel">
       <BrandMark />
-      <div className="password-gate-head"><span className="empty-state-icon"><KeyRound size={22} /></span><div><h1>请先修改初始密码</h1><p>{s.user?.name}，欢迎加入。初始密码由管理员发放，为了账号安全，请设置只有你知道的新密码。</p></div></div>
+      <div className="password-gate-head"><span className="empty-state-icon"><KeyRound size={22} /></span><div><h1>建议修改初始密码</h1><p>{s.user?.name}，欢迎加入。初始密码由管理员发放，为了账号安全，请设置只有你知道的新密码；也可以稍后再改。</p></div></div>
       <ChangePasswordForm />
-      <button className="text-button" onClick={() => { s.logout(); s.go('login'); }}><LogOut size={15} />退出登录</button>
+      <div className="password-gate-actions">
+        <button type="button" className="text-button" onClick={() => { s.deferPasswordChange(); toast('已跳过，本次登录期间不再提醒', { description: '下次登录时会再次提醒；也可随时在「个人设置」中修改密码。' }); }}><Clock size={15} />稍后修改</button>
+        <button type="button" className="text-button" onClick={() => { s.logout(); s.go('login'); }}><LogOut size={15} />退出登录</button>
+      </div>
     </section>
   </main>;
 }

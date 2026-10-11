@@ -24,6 +24,33 @@ export type OpsCourse = {
   /** 教务老师: email of one ops teacher. */ opsTeacher: string;
   startDate: string; endDate: string;
 };
+/** 授课老师 directory (系统管理 · 授课老师). Ops teachers are also selectable as 授课老师 via the staff list. */
+export type Teacher = { id: string; name: string; note: string; active: boolean };
+/** Names offered by the 授课老师 picker: active teachers + active ops staff, de-duplicated, keeping `current` selectable. */
+export function teacherNames(teachers: readonly Teacher[], staff: readonly { name: string; active: boolean }[], current = ''): string[] {
+  const out: string[] = [];
+  const add = (n: string) => { const v = (n || '').trim(); if (v && !out.includes(v)) out.push(v); };
+  staff.filter(u => u.active).forEach(u => add(u.name));
+  teachers.filter(t => t.active).forEach(t => add(t.name));
+  if (current) add(current);
+  return out;
+}
+/** 'HH:MM' → minutes; NaN when malformed. */
+export const timeToMinutes = (t: string) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+/** Validation for a 开始时间 / 结束时间 pair; null when valid. */
+export function timeRangeIssue(start: string, end: string): string | null {
+  const a = timeToMinutes(start), b = timeToMinutes(end);
+  if (Number.isNaN(a)) return '请填写开始时间';
+  if (Number.isNaN(b)) return '请填写结束时间';
+  if (b <= a) return '结束时间需晚于开始时间';
+  return null;
+}
+/** Human duration of a time range, e.g. 「1.5 小时」 / 「45 分钟」. */
+export function durationLabel(start: string, end: string): string {
+  const mins = timeToMinutes(end) - timeToMinutes(start);
+  if (!(mins > 0)) return '';
+  return mins % 60 === 0 ? `${mins / 60} 小时` : mins > 60 ? `${Math.round(mins / 6) / 10} 小时` : `${mins} 分钟`;
+}
 /** One 课时记录. rate/unit are a snapshot of the class type when the record was created. */
 export type LessonRecord = {
   id: string; course: string; date: string; hours: number; students: number | null; opsTeacher: string;

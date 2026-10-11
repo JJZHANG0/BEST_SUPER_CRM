@@ -1,7 +1,7 @@
 'use client';
 /** 系统管理 (superadmin): users, 项目编号, 课程 (with CSV import) and 班型与津贴标准. */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { UserPlus, KeyRound, Pencil, Trash2, Upload, Download, Plus, Copy, ShieldCheck, FolderKanban, BookOpenCheck, Users, BadgeJapaneseYen, Ban, CircleCheck } from 'lucide-react';
+import { UserPlus, KeyRound, Pencil, Trash2, Upload, Download, Plus, Copy, ShieldCheck, FolderKanban, BookOpenCheck, Users, BadgeJapaneseYen, Ban, CircleCheck, GraduationCap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
@@ -10,14 +10,16 @@ import type { AdminUser } from '@/lib/nexus/api';
 import { canManageSystem, roleLabels, isOpsLike, type Role, normalizeUsername } from '@/lib/nexus/roles';
 import {
   allowanceUnits, courseStatuses, importCourses, newRecordId, statusFromDates, toCsv, unitLabel, courseCsvColumns,
-  type ClassType, type CourseStatus, type OpsCourse, type Project, type CourseImport,
+  type ClassType, type Teacher, type CourseStatus, type OpsCourse, type Project, type CourseImport,
 } from '@/lib/nexus/ops';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState, Notice } from './ui';
+import { TeacherPicker } from './teacher-picker';
 
 const tabs = [
   { id: 'users', label: '用户管理', icon: Users },
   { id: 'projects', label: '项目管理', icon: FolderKanban },
   { id: 'courses', label: '课程管理', icon: BookOpenCheck },
+  { id: 'teachers', label: '授课老师', icon: GraduationCap },
   { id: 'class-types', label: '班型与津贴', icon: BadgeJapaneseYen },
 ] as const;
 type Tab = typeof tabs[number]['id'];
@@ -40,6 +42,7 @@ export default function AdminPage() {
     {tab === 'users' && <UsersTab />}
     {tab === 'projects' && <ProjectsTab />}
     {tab === 'courses' && <CoursesTab />}
+    {tab === 'teachers' && <TeachersTab />}
     {tab === 'class-types' && <ClassTypesTab />}
   </>;
 }
@@ -225,7 +228,7 @@ function CourseDialog({ course, onClose }: { course: OpsCourse | null; onClose: 
       <div className="form-columns"><FormField label="项目编号"><Picker label="项目编号" value={project} onChange={setProject} options={s.projects.map(p => ({ value: p.id, label: p.code + (p.name !== p.code ? ' · ' + p.name : '') }))} /></FormField><FormField label="课程编号"><input required maxLength={60} value={code} onChange={e => setCode(e.target.value)} placeholder="COND02501-11A" /></FormField></div>
       <FormField label="课程名称"><input required maxLength={200} value={name} onChange={e => setName(e.target.value)} placeholder="COND 星跃 商业(11月线上小组课)" /></FormField>
       <div className="form-columns"><FormField label="班级类型"><Picker label="班级类型" value={classType} onChange={setClassType} options={types.map(x => ({ value: x.id, label: x.name }))} /></FormField><FormField label="津贴标准"><input disabled value={t ? `¥${t.rate} ${unitLabel(t.unit)}` : ''} /></FormField></div>
-      <div className="form-columns"><FormField label="授课老师"><input maxLength={80} value={teacher} onChange={e => setTeacher(e.target.value)} placeholder="例如：Dora" /></FormField><FormField label="教务老师"><Picker label="教务老师" value={opsTeacher} onChange={setOps} options={[{ value: '', label: '未指定' }, ...s.staff.filter(u => u.active || u.email === opsTeacher).map(u => ({ value: u.email, label: u.name }))]} /></FormField></div>
+      <div className="form-columns"><FormField label="授课老师"><TeacherPicker value={teacher} onChange={setTeacher} /></FormField><FormField label="教务老师"><Picker label="教务老师" value={opsTeacher} onChange={setOps} options={[{ value: '', label: '未指定' }, ...s.staff.filter(u => u.active || u.email === opsTeacher).map(u => ({ value: u.email, label: u.name }))]} /></FormField></div>
       <div className="form-columns three"><FormField label="起始日期"><input type="date" value={startDate} onChange={e => { setStart(e.target.value); if (!course) setStatus(statusFromDates(e.target.value, endDate)); }} /></FormField><FormField label="终止日期"><input type="date" value={endDate} onChange={e => { setEnd(e.target.value); if (!course) setStatus(statusFromDates(startDate, e.target.value)); }} /></FormField><FormField label="课程状态"><Picker label="课程状态" value={status} onChange={v => setStatus(v as CourseStatus)} options={courseStatuses.map(x => ({ value: x, label: x }))} /></FormField></div>
       <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">保存课程</button></div>
     </form>
@@ -239,6 +242,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
   const apply = () => {
     if (!result || !result.courses.length) return;
     if (result.projects.length) s.setProjects(l => [...l, ...result.projects]);
+    { const known = new Set([...s.teachers.map(t => t.name), ...s.staff.map(u => u.name)]); const fresh = [...new Set(result.courses.map(c => c.teacher.trim()).filter(n => n && !known.has(n)))]; if (fresh.length) s.setTeachers(l => [...l, ...fresh.map(name => ({ id: newRecordId('TCH'), name, note: '', active: true }))]); }
     s.setOpsCourses(l => { const byId = new Map(result.courses.map(c => [c.id, c])); const kept = l.map(c => byId.get(c.id) ?? c); const added = result.courses.filter(c => !l.some(x => x.id === c.id)); return [...kept, ...added]; });
     s.log(`导入课程：新增 ${result.created}，更新 ${result.updated}`);
     toast.success(`已导入：新增 ${result.created} 门，更新 ${result.updated} 门${result.projects.length ? `，新建项目 ${result.projects.length} 个` : ''}`);
@@ -281,5 +285,48 @@ function ClassTypesTab() {
         <TableCell className="row-actions">{dirty(t) && <button className="primary compact" onClick={() => save(t)}>保存</button>}<button className="icon-button" title="删除" aria-label={`删除${t.name}`} onClick={() => remove(t)}><Trash2 size={15} /></button></TableCell>
       </TableRow>; })}</TableBody></Table></div>
     {!s.classTypes.length && <EmptyState icon={BadgeJapaneseYen} title="还没有班级类型" action="新增班型" onAction={add} />}
+  </section>;
+}
+
+/** 授课老师 directory: names offered by the 授课老师 pickers (ops staff are always included automatically). */
+function TeachersTab() {
+  const s = useNexus();
+  const [q, setQ] = useState(''), [name, setName] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const used = (n: string) => s.opsCourses.filter(c => c.teacher === n).length + s.courses.filter(c => c.teacher === n).length;
+  const list = s.teachers.filter(t => t.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const taken = (n: string, except?: string) => s.teachers.some(t => t.id !== except && t.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const add = (e: FormEvent) => {
+    e.preventDefault();
+    const n = name.trim().replace(/\s+/g, ' ');
+    if (!n) return toast.error('请填写老师姓名');
+    if (taken(n)) return toast.error('该老师已在名单中');
+    s.setTeachers(l => [...l, { id: newRecordId('TCH'), name: n, note: '', active: true }]);
+    s.log('新增授课老师：' + n); setName(''); toast.success(`已添加 ${n}`);
+  };
+  const save = (t: Teacher) => {
+    const n = (drafts[t.id] ?? t.name).trim().replace(/\s+/g, ' ');
+    if (!n) return toast.error('请填写老师姓名');
+    if (taken(n, t.id)) return toast.error('该老师已在名单中');
+    s.setTeachers(l => l.map(x => x.id === t.id ? { ...x, name: n } : x));
+    // Keep course assignments pointing at the renamed teacher.
+    if (n !== t.name) { s.setOpsCourses(l => l.map(c => c.teacher === t.name ? { ...c, teacher: n } : c)); s.setCourses(l => l.map(c => c.teacher === t.name ? { ...c, teacher: n } : c)); }
+    setDrafts(d => { const x = { ...d }; delete x[t.id]; return x; }); toast.success('已保存');
+  };
+  const toggle = (t: Teacher) => { s.setTeachers(l => l.map(x => x.id === t.id ? { ...x, active: !x.active } : x)); toast.success(t.active ? `已停用 ${t.name}，不再出现在选择列表中` : `已启用 ${t.name}`); };
+  const remove = async (t: Teacher) => { if (used(t.name)) return toast.error('已有课程使用该老师，可改为停用'); if (!window.confirm(`删除授课老师「${t.name}」？`)) return; if (await s.removeRecord('teachers', t.id)) toast.success('已删除'); };
+  return <section className="glass panel">
+    <form className="filter-toolbar" onSubmit={add}><SearchBox value={q} onChange={setQ} placeholder="搜索老师" /><input className="teacher-add-input" aria-label="新老师姓名" placeholder="新老师姓名，例如：陈佳浩Venti" maxLength={80} value={name} onChange={e => setName(e.target.value)} /><button className="primary compact" type="submit"><Plus size={16} />添加老师</button></form>
+    <div className="results-meta">{list.length} 位授课老师<span>运营老师账号会自动出现在授课老师选择列表中，无需重复添加</span></div>
+    {list.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['姓名', '关联课程', '状态', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
+      <TableBody>{list.map(t => { const draft = drafts[t.id]; return <TableRow key={t.id} className={t.active ? '' : 'is-disabled'}>
+        <TableCell><input className="cell-input" aria-label="老师姓名" value={draft ?? t.name} maxLength={80} onChange={e => setDrafts(d => ({ ...d, [t.id]: e.target.value }))} /></TableCell>
+        <TableCell className="num">{used(t.name)}</TableCell>
+        <TableCell>{t.active ? <Badge tone="green">在用</Badge> : <Badge tone="neutral">已停用</Badge>}</TableCell>
+        <TableCell className="row-actions">{draft !== undefined && draft !== t.name && <button className="primary compact" onClick={() => save(t)}>保存</button>}
+          <button className="icon-button" title={t.active ? '停用' : '启用'} aria-label={(t.active ? '停用' : '启用') + t.name} onClick={() => toggle(t)}>{t.active ? <Ban size={15} /> : <CircleCheck size={15} />}</button>
+          <button className="icon-button" title="删除" aria-label={`删除${t.name}`} onClick={() => remove(t)}><Trash2 size={15} /></button></TableCell>
+      </TableRow>; })}</TableBody></Table></div>
+      : <EmptyState icon={GraduationCap} title={s.teachers.length ? '没有匹配的老师' : '还没有授课老师'} description="添加授课老师后，新建课程时即可从列表中选择。" />}
   </section>;
 }
