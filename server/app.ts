@@ -25,7 +25,7 @@ const issuesOf = (e: { issues: { path: PropertyKey[]; message: string }[] }) => 
 
 export function createApp(db: Db, config: Config, startedAt = new Date()) {
   const app = new Hono<Env>().basePath('/api');
-  if (config.corsOrigins.length) app.use('*', cors({ origin: config.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'] }));
+  if (config.corsOrigins.length) app.use('*', cors({ origin: config.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] }));
   app.onError((err, c) => { console.error(err); return c.json({ error: 'internal_error' }, 500); });
   app.notFound(c => c.json({ error: 'not_found' }, 404));
 
@@ -76,13 +76,86 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     const rows = await db.select().from(t).orderBy(asc(t.sortOrder), asc(t.createdAt));
     return rows.map(r => toRecord(name, r as unknown as Record<string, unknown>));
   }
+  const todoRow = (r: typeof schema.todos.$inferSelect) => ({
+    id: r.id, userId: r.userId, title: r.title, note: r.note ?? null,
+    dueAt: r.dueAt ? r.dueAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+  });
+  const parseDue = (v: unknown) => {
+    if (v == null || v === '') return null;
+    if (typeof v !== 'string') return undefined;
+    const d = new Date(v.length <= 10 ? v + 'T12:00:00+08:00' : v);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+
+  app.get('/todos', async c => {
+    const user = c.get('user');
+    const rows = await db.select().from(schema.todos).where(eq(schema.todos.userId, user.id)).orderBy(desc(schema.todos.createdAt));
+    return c.json({ todos: rows.map(todoRow) });
+  });
+
+  app.post('/todos', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { title?: unknown; note?: unknown; dueAt?: unknown } | null;
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    if (!title || title.length > 200) return c.json({ error: 'invalid', issues: ['title required (1–200)'] }, 400);
+    const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 2000) : null;
+    const dueAt = parseDue(body?.dueAt);
+    if (dueAt === undefined) return c.json({ error: 'invalid', issues: ['dueAt'] }, 400);
+    const id = 'TODO-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    const now = new Date();
+    const [row] = await db.insert(schema.todos).values({ id, userId: user.id, title, note: note || null, dueAt, completedAt: null, createdAt: now, updatedAt: now }).returning();
+    return c.json({ todo: todoRow(row) }, 201);
+  });
+
+  app.patch('/todos/:id', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [current] = await db.select().from(schema.todos).where(eq(schema.todos.id, id)).limit(1);
+    if (!current || current.userId !== user.id) return c.json({ error: 'not_found' }, 404);
+    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') return c.json({ error: 'invalid' }, 400);
+    const patch: Partial<typeof schema.todos.$inferInsert> = { updatedAt: new Date() };
+    if ('title' in body) {
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      if (!title || title.length > 200) return c.json({ error: 'invalid', issues: ['title'] }, 400);
+      patch.title = title;
+    }
+    if ('note' in body) patch.note = typeof body.note === 'string' ? body.note.trim().slice(0, 2000) || null : null;
+    if ('dueAt' in body) {
+      const dueAt = parseDue(body.dueAt);
+      if (dueAt === undefined) return c.json({ error: 'invalid', issues: ['dueAt'] }, 400);
+      patch.dueAt = dueAt;
+    }
+    if ('completedAt' in body) {
+      if (body.completedAt === null || body.completedAt === '') patch.completedAt = null;
+      else if (typeof body.completedAt === 'string') {
+        const d = new Date(body.completedAt);
+        if (Number.isNaN(d.getTime())) return c.json({ error: 'invalid', issues: ['completedAt'] }, 400);
+        patch.completedAt = d;
+      } else if (body.completedAt === true) patch.completedAt = new Date();
+      else return c.json({ error: 'invalid', issues: ['completedAt'] }, 400);
+    }
+    const [row] = await db.update(schema.todos).set(patch).where(eq(schema.todos.id, id)).returning();
+    return c.json({ todo: todoRow(row) });
+  });
+
+  app.delete('/todos/:id', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [current] = await db.select().from(schema.todos).where(eq(schema.todos.id, id)).limit(1);
+    if (!current || current.userId !== user.id) return c.json({ error: 'not_found' }, 404);
+    await db.delete(schema.todos).where(eq(schema.todos.id, id));
+    return c.json({ ok: true as const });
+  });
+
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
     const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments'] as const).map(list));
     const articleRows = await db.select().from(schema.articles);
+    const todoRows = await db.select().from(schema.todos).where(eq(schema.todos.userId, user.id)).orderBy(desc(schema.todos.createdAt));
+    const todos = todoRows.map(todoRow);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, todos });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -93,7 +166,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
       teams, students: mine,
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
-      resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles,
+      resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, todos,
     });
   });
 
@@ -133,6 +206,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date()) {
     if (!parsed.success) return c.json({ error: 'invalid', issues: issuesOf(parsed.error) }, 400);
     return c.json({ record: await saveStudent(parsed.data, user) });
   });
+
 
   /** Upsert one record of a collection (ops/admin). The body is the full frontend record. */
   app.put('/:collection/:id', async c => {

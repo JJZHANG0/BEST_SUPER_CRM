@@ -29,11 +29,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || 'http_' + res.status, (data as { message?: string }).message);
   return data as T;
 }
+export type ApiTodo = {
+  id: string;
+  userId: number;
+  title: string;
+  note?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type TodoWrite = { title?: string; note?: string | null; dueAt?: string | null; completedAt?: string | null };
+
 export const api = {
   login: (email: string, password: string) => request<{ token: string; user: ApiUser }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   me: () => request<{ user: ApiUser }>('/auth/me'),
   bootstrap: <T>() => request<T>('/bootstrap'),
   put: <T>(collection: Collection, id: string, record: unknown) => request<{ record: T }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(record) }),
+  listTodos: () => request<{ todos: ApiTodo[] }>('/todos'),
+  createTodo: (body: { title: string; note?: string | null; dueAt?: string | null }) => request<{ todo: ApiTodo }>('/todos', { method: 'POST', body: JSON.stringify(body) }),
+  updateTodo: (id: string, body: TodoWrite) => request<{ todo: ApiTodo }>(`/todos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTodo: (id: string) => request<{ ok: true }>(`/todos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 /** Key-order independent JSON for change detection; drops undefined values and browser-only fields. */

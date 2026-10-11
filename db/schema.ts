@@ -164,3 +164,14 @@ export const articles = pgTable('articles', {
   updatedBy: integer('updated_by').references(() => users.id),
   ...stamps,
 });
+
+/** Ops / sales personal todos (待办). Scoped per user; completedAt set when checked off. */
+export const todos = pgTable('todos', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  title: text('title').notNull(),
+  note: text('note'),
+  dueAt: timestamp('due_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  ...stamps,
+}, t => [index('todos_user_idx').on(t.userId), index('todos_user_open_idx').on(t.userId, t.completedAt)]);

@@ -2,13 +2,14 @@
  * Idempotent seed from the bundled demo data. Existing rows are never overwritten, so running
  * it on every deploy is safe: it only fills an empty database (or adds new demo records).
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from './db';
 import { schema } from './db';
 import * as demo from '../lib/nexus/data';
 import { seedArticles } from '../lib/nexus/article-seed';
 import { seedAssignments } from '../lib/nexus/students';
 import { demoAccounts } from '../lib/nexus/auth';
+import { seedTodos } from '../lib/nexus/todos';
 import { hashPassword } from './password';
 
 const withOrder = <T extends object>(list: readonly T[]) => list.map((x, i) => ({ ...x, sortOrder: i }));
@@ -33,6 +34,21 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
   for (const [name, run] of steps) {
     const rows = await run();
     if (rows.length) log(`seed: ${name} +${rows.length}`);
+  }
+  // Sample open todos for the ops demo account (skip if that user already has any).
+  const [ops] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, 'ops@nexus.demo')).limit(1);
+  if (ops) {
+    const existing = await db.select({ id: schema.todos.id }).from(schema.todos).where(eq(schema.todos.userId, ops.id)).limit(1);
+    if (!existing.length) {
+      const samples = seedTodos(ops.id);
+      await db.insert(schema.todos).values(samples.map(t => ({
+        id: t.id, userId: ops.id, title: t.title, note: t.note ?? null,
+        dueAt: t.dueAt ? new Date(t.dueAt.length <= 10 ? t.dueAt + 'T12:00:00+08:00' : t.dueAt) : null,
+        completedAt: t.completedAt ? new Date(t.completedAt) : null,
+        createdAt: new Date(t.createdAt), updatedAt: new Date(t.updatedAt),
+      })));
+      log(`seed: todos +${samples.length}`);
+    }
   }
   const res = await db.execute(sql`select count(*)::int as n from students`);
   log(`seed: done (${(res.rows[0] as { n: number }).n} students)`);

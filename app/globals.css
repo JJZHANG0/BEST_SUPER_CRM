@@ -715,3 +715,39 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .notice-dialog [data-slot=dialog-description]{font-size:0.8125rem;line-height:1.8}
 .notice-dialog>.text-button{justify-self:start}
 .env-badge{font-style:normal;font-size:0.625rem;font-weight:700;letter-spacing:.08em;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:3px 6px;line-height:1}
+
+/* Ops 待办 — flat white, coherent with ops panels; #1f6fd9 hover only on interactive labels */
+.todo-home-panel .todo-list.compact{margin-top:8px}
+.todo-add{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
+.todo-add-row{display:flex;align-items:center;gap:8px}
+.todo-add-row>input{flex:1;min-width:0;border:1px solid #e3d9ee;border-radius:10px;padding:10px 12px;background:#fffd;color:#594368;font-size:.875rem;outline:none;min-height:40px}
+.todo-add-row>input:focus{border-color:#ae8dcf;box-shadow:0 0 0 3px #d6c5ed44}
+.todo-add-extra{display:grid;grid-template-columns:160px 1fr;gap:12px}
+.todo-add-extra.compact-extra{grid-template-columns:140px 1fr;margin-top:2px}
+.todo-add-extra.compact-extra>input{border:1px solid #e3d9ee;border-radius:8px;padding:8px 10px;background:#fffd;font-size:.8125rem;color:#594368;min-height:36px}
+.todo-list{display:flex;flex-direction:column}
+.todo-row{display:flex;align-items:flex-start;gap:10px;padding:12px 4px;border-bottom:1px solid #eee9f380;width:100%}
+.todo-row:last-child{border:0}
+.todo-check{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;color:#9a86b0;flex-shrink:0;margin-top:1px}
+.todo-check:hover{background:#f3eef9;color:#7a5aad}
+.todo-row.done .todo-check{color:#43896d;background:#e7f4ee}
+.todo-main{flex:1;min-width:0;text-align:left}
+.todo-main strong{display:block;font-size:.8125rem;font-weight:550;color:#3f354c;line-height:1.5}
+.todo-row.done .todo-main strong{color:#8a8296;text-decoration:line-through;text-decoration-color:#cfc6db}
+.todo-main p{font-size:.6875rem;color:#95809f;margin-top:5px;line-height:1.6}
+.todo-due{display:inline-flex;align-items:center;gap:4px;color:#7d6e92}
+.todo-actions{display:flex;align-items:center;gap:2px;opacity:.55}
+.todo-row:hover .todo-actions{opacity:1}
+.todo-empty{padding:28px 12px}
+.todo-month{margin-bottom:18px}
+.todo-month .section-title{margin-bottom:10px}
+@media(hover:hover){
+  .todo-row:hover{background:#f9f6fd;border-radius:10px}
+  .todo-main strong:hover{color:#1f6fd9}
+}
+@media(max-width:767px){
+  .todo-add-extra{grid-template-columns:1fr}
+  .todo-main strong{font-size:.875rem}
+  .todo-main p{font-size:.75rem}
+  .todo-actions{opacity:1}
+}
