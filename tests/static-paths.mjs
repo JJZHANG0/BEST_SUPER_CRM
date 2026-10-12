@@ -12,7 +12,16 @@ for(const m of html.matchAll(/(?:src|href)="([^"#]+)"/g)){
 }
 assert(existsSync('out/.nojekyll'));
 const manifest=JSON.parse(readFileSync('out/manifest.webmanifest','utf8'));
-assert.equal(manifest.start_url,prefix+'/');assert.equal(manifest.icons[0].src,prefix+'/favicon.svg');
+assert.equal(manifest.start_url,prefix+'/');
+// Husky favicon set: every manifest icon lives under the Pages base, carries ?v= cache-busting and exists.
+assert(manifest.icons.length>=3&&manifest.icons.some(i=>i.purpose==='maskable'));
+for(const i of manifest.icons){assert(i.src.startsWith(prefix+'/')&&/\?v=\w+$/.test(i.src),`manifest icon ${i.src}`);assert(existsSync('out'+i.src.slice(prefix.length).split('?')[0]),`Missing icon ${i.src}`)}
+for(const f of ['favicon.ico','favicon-16x16.png','favicon-32x32.png','icon-192.png','icon-512.png','apple-touch-icon.png'])assert(existsSync('out/'+f),`Missing ${f}`);
+assert(!existsSync('out/favicon.svg'),'old B. tile favicon removed');
+assert(/<link rel="icon" href="\/BEST_SUPER_CRM\/favicon\.ico\?v=\w+"/.test(html),'favicon.ico link under Pages base with ?v=');
+assert(/<link rel="apple-touch-icon" href="\/BEST_SUPER_CRM\/apple-touch-icon\.png\?v=\w+" sizes="180x180"/.test(html),'apple-touch-icon link');
+assert(/<link rel="manifest" href="\/BEST_SUPER_CRM\/manifest\.webmanifest\?v=\w+"/.test(html),'manifest link');
+for(const f of ['husky-avatar.webp','husky-avatar.png'])assert(existsSync(`out/brand/${f}`),`Missing sidebar avatar ${f}`);
 for(const p of ['bpa','ctb','conrad','prime','ihosa','mvp','winter','summer']){assert(existsSync(`out/materials/poster-${p}.svg`));assert(existsSync(`out/materials/cover-${p}.svg`),`Missing article cover for ${p}`)}
 for(const s of ['workshop','research','showcase'])assert(existsSync(`out/materials/scene-${s}.svg`),`Missing article illustration ${s}`);
 assert(existsSync('out/materials/R1.pdf'));

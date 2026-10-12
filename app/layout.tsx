@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { assetUrl } from "@/lib/nexus/assets";
+import { assetUrl, iconUrl } from "@/lib/nexus/assets";
 
 /**
  * Site-wide link-preview tags. A static SPA cannot vary them per article (crawlers don't run JS
@@ -25,10 +25,17 @@ export const metadata: Metadata = {
     ...(SITE_ORIGIN ? { url: SITE_ORIGIN + assetUrl("") } : {}),
   },
   twitter: { card: "summary_large_image", title: "B.E.S.T · 项目推文", description: OG_DESCRIPTION, images: [OG_IMAGE] },
-  manifest: assetUrl("manifest.webmanifest"),
+  manifest: iconUrl("manifest.webmanifest"),
+  // Husky favicon set (public/favicon.ico + PNGs); ?v= busts stale tab icons.
   icons: {
-    icon: assetUrl("favicon.svg"),
-    shortcut: assetUrl("favicon.svg"),
+    icon: [
+      { url: iconUrl("favicon.ico"), sizes: "16x16 32x32 48x48" },
+      { url: iconUrl("favicon-32x32.png"), sizes: "32x32", type: "image/png" },
+      { url: iconUrl("favicon-16x16.png"), sizes: "16x16", type: "image/png" },
+      { url: iconUrl("icon-192.png"), sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: iconUrl("favicon.ico"),
+    apple: [{ url: iconUrl("apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
   },
 };
 

@@ -15,6 +15,6 @@ if (existsSync('.next-static/index.html')) {
 writeFileSync('out/.nojekyll', '');
 const manifest=JSON.parse(readFileSync('public/manifest.webmanifest','utf8'));
 manifest.start_url=(base||'')+'/';manifest.scope=(base||'')+'/';
-manifest.icons=manifest.icons.map(icon=>({...icon,src:(base||'')+'/favicon.svg'}));
+manifest.icons=manifest.icons.map(icon=>({...icon,src:(base||'')+icon.src}));
 writeFileSync('out/manifest.webmanifest', JSON.stringify(manifest,null,2));
 console.log(`Static site ready: out/ (base path ${base || '/'})`);
