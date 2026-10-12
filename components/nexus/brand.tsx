@@ -7,21 +7,28 @@ export const BRAND_NAME = 'B.E.S.T';
 export const BRAND_SUBTITLE = '内部超级管理系统';
 export const BUNNY_WEBP = assetUrl('brand/bunny.webp');
 export const BUNNY_PNG = assetUrl('brand/bunny.png');
+export const HUSKY_AVATAR_WEBP = assetUrl('brand/husky-avatar.webp');
+export const HUSKY_AVATAR_PNG = assetUrl('brand/husky-avatar.png');
 
 /* Deterministic per-letter scatter vectors for the dissolve (px, px, deg). */
 const SCATTER: [number, number, number][] = [[-14, -10, -18], [-4, -16, 30], [6, 12, -26], [-8, 14, 22], [10, -14, 14], [4, 16, -30], [16, -6, 20]];
 
 const noopSubscribe = () => () => {};
 
-type Props = { href?: string; label?: string; subtitle?: boolean; className?: string };
+type Props = { href?: string; label?: string; subtitle?: boolean; className?: string; avatar?: boolean };
+
+/** Sidebar collapsed to icons (or the 80px tablet rail): the round husky avatar replaces the wordmark. */
+const isCompact = (el: HTMLElement) => !!el.closest('.nexus-sidebar') && (!!el.closest('[data-collapsible=icon]') || window.matchMedia('(min-width:768px) and (max-width:1100px)').matches);
 
 /**
  * B.E.S.T wordmark. Hover or keyboard focus dissolves the letters and a bunny
  * pops out. The bunny is portalled to <body> with fixed positioning so the
  * sidebar's overflow/backdrop-filter never clips it, and it is absolutely
  * positioned so the layout never shifts.
+ * `avatar` (sidebar): a round husky head shows while the sidebar is collapsed and crossfades/scales
+ * back to the wordmark on expand (CSS, ~250ms); the bunny only appears on the expanded wordmark.
  */
-export function BrandMark({ href, label, subtitle = true, className = '' }: Props) {
+export function BrandMark({ href, label, subtitle = true, className = '', avatar = false }: Props) {
   preload(BUNNY_WEBP, { as: 'image', type: 'image/webp', fetchPriority: 'low' });
   const ref = useRef<HTMLElement>(null);
   const [active, setActive] = useState(false);
@@ -36,7 +43,7 @@ export function BrandMark({ href, label, subtitle = true, className = '' }: Prop
     // never let the ears leave the top of the viewport.
     setPos({ x: r.left + r.width * 0.5 + 28, y: Math.max(r.bottom + h * 0.45, h + 10), h });
   }, []);
-  const show = useCallback(() => { place(); setActive(true); }, [place]);
+  const show = useCallback(() => { if (ref.current && isCompact(ref.current)) return; place(); setActive(true); }, [place]);
   const hide = useCallback(() => setActive(false), []);
 
   useEffect(() => {
@@ -48,7 +55,9 @@ export function BrandMark({ href, label, subtitle = true, className = '' }: Prop
 
   const letters = BRAND_NAME.split('');
   const body = <>
-    <span className="best-mono" aria-hidden="true">B</span>
+    {avatar
+      ? <span className="best-avatar" aria-hidden="true"><picture><source srcSet={HUSKY_AVATAR_WEBP} type="image/webp" /><img src={HUSKY_AVATAR_PNG} alt="" width={34} height={34} draggable={false} decoding="async" /></picture></span>
+      : <span className="best-mono" aria-hidden="true">B</span>}
     <div className="best-word">
       <b className="best-wordmark" aria-hidden="true">{letters.map((ch, i) => {
         const [dx, dy, rot] = SCATTER[i % SCATTER.length];
@@ -58,7 +67,7 @@ export function BrandMark({ href, label, subtitle = true, className = '' }: Prop
     </div>
   </>;
   const common = {
-    className: `brand best-brand ${className}`.trim(),
+    className: `brand best-brand${avatar ? ' has-avatar' : ''} ${className}`.trim(),
     'data-active': active || undefined,
     onPointerEnter: show, onPointerLeave: hide, onFocus: show, onBlur: hide,
     'aria-label': label || `${BRAND_NAME} ${BRAND_SUBTITLE}`,

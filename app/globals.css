@@ -933,6 +933,23 @@ html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-
 .best-brand[data-active] .best-wordmark span{opacity:0;filter:blur(7px);transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.55)}
 .best-brand[data-active] small{opacity:0;filter:blur(4px);transform:translateY(5px);transition-delay:0s}
 .best-brand[data-active] .best-mono{opacity:0;filter:blur(6px);transform:scale(.7)}
+/* Sidebar brand (BrandMark avatar): round husky head while collapsed <-> B.E.S.T wordmark when expanded.
+   Both share one grid cell; the wordmark never sizes the collapsed rail (min-width:0 column), so nothing clips.
+   Crossfade + scale ~250ms both ways; header padding eases with it so the avatar glides to the rail centre. */
+.nexus-sidebar [data-slot=sidebar-header]{transition:padding .25s var(--best-ease,ease)}
+.best-brand.has-avatar{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;width:100%;min-height:44px}
+.best-brand.has-avatar>.best-word,.best-brand.has-avatar>.best-avatar{grid-area:1/1}
+.best-brand.has-avatar>.best-word{min-width:max-content;transform-origin:0 50%;transition:opacity .25s var(--best-ease),transform .25s var(--best-ease),visibility 0s}
+.best-avatar{justify-self:start;display:block;width:34px;height:34px;border-radius:50%;overflow:hidden;background:#fff;box-shadow:0 0 0 2px #fff,0 0 0 3.5px color-mix(in srgb,var(--best-accent) 42%,transparent),0 4px 10px #59428a26;opacity:0;transform:scale(.55);visibility:hidden;pointer-events:none;transition:opacity .25s var(--best-ease),transform .25s var(--best-ease),visibility 0s .25s}
+.best-avatar picture,.best-avatar img{display:block;width:100%;height:100%;object-fit:cover;user-select:none}
+[data-collapsible=icon] .nexus-sidebar [data-slot=sidebar-header]{padding:25px 0 14px 9px}
+[data-collapsible=icon] .nexus-sidebar .best-brand.has-avatar>.best-word{opacity:0;transform:scale(.8);visibility:hidden;pointer-events:none;transition:opacity .25s var(--best-ease),transform .25s var(--best-ease),visibility 0s .25s}
+[data-collapsible=icon] .nexus-sidebar .best-avatar{opacity:1;transform:none;visibility:visible;transition:opacity .25s var(--best-ease),transform .25s var(--best-ease),visibility 0s}
+@media(min-width:768px) and (max-width:1100px){.nexus-sidebar .best-avatar{justify-self:center;opacity:1;transform:none;visibility:visible}}
+@media(prefers-reduced-motion:reduce){
+  .best-brand.has-avatar>.best-word,.best-brand.has-avatar>.best-avatar{transform:none!important;visibility:visible!important;transition:opacity .2s linear!important}
+  .nexus-sidebar [data-slot=sidebar-header]{transition:none}
+}
 /* Bunny: fixed + portalled to <body>, so it is never clipped and never moves layout. */
 .best-bunny{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;height:var(--bunny-h,190px);aspect-ratio:542/640;translate:-50% -100%;transform-origin:50% 100%;opacity:0;scale:.2;rotate:-10deg;transition:opacity .22s ease .06s,scale .34s cubic-bezier(.5,0,.75,0),rotate .34s ease-in}
 .best-bunny img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 18px rgb(58 34 104 / .22)) drop-shadow(0 2px 4px rgb(58 34 104 / .12));user-select:none}
