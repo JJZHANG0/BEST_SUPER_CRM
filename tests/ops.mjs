@@ -168,6 +168,21 @@ assert.equal(O.LESSON_TEACHING_FEE_PER_HOUR, 150);
 assert.equal(O.myLessonTeachingFee(0), 0);
 assert.equal(O.myLessonTeachingFee(10), 1500);
 assert.equal(O.myLessonTeachingFee(1.5), 225);
+// 「我的课时费用」 counts 授课老师 === self only (跟课-only → 0)
+const feeCourses = [{ id: 'C1', teacher: '李进圣' }, { id: 'C2', teacher: '程雪晴' }];
+const feeRows = [
+  { id: 'L1', date: '2026-10-10', course: 'C1', hours: 2, rate: 30, unit: 'hour', amount: 60, opsTeacher: 'cheng@x', teacher: '李进圣', expectedCount: null, actualCount: null, note: '', createdBy: 'cheng@x' },
+  { id: 'L2', date: '2026-10-11', course: 'C2', hours: 2, rate: 30, unit: 'hour', amount: 60, opsTeacher: 'cheng@x', teacher: '程雪晴', expectedCount: null, actualCount: null, note: '', createdBy: 'cheng@x' },
+  { id: 'L3', date: '2026-10-11', course: 'C1', hours: 4, rate: 30, unit: 'hour', amount: 120, opsTeacher: 'cheng@x', teacher: '', expectedCount: null, actualCount: null, note: '', createdBy: 'cheng@x' },
+];
+assert.equal(O.myTeachingLessonHours(feeRows, feeCourses, '程雪晴', '2026-10'), 2, 'only self as 授课老师');
+assert.equal(O.myLessonTeachingFee(O.myTeachingLessonHours(feeRows, feeCourses, '程雪晴', '2026-10')), 300);
+assert.equal(O.myTeachingLessonHours(feeRows, feeCourses, '程雪晴', '2026-09'), 0);
+assert.equal(O.myLessonTeachingFee(O.myTeachingLessonHours(feeRows, feeCourses, '程雪晴', '2026-09')), 0);
+assert.equal(O.RED_PACKET_YUAN_PER_DAY, 2.4);
+assert.equal(O.redPacketFromUsageMs(0), 0);
+assert.equal(O.redPacketFromUsageMs(24 * 3600_000), 2.4);
+assert.equal(O.redPacketFromUsageMs(12 * 3600_000), 1.2);
 assert.equal(O.isLessonMonth('2026-10'), true);
 assert.equal(O.isLessonMonth('2026-13'), false);
 assert.equal(O.isLessonMonthLocked(['2026-10'], '2026-10-11'), true);
@@ -180,8 +195,19 @@ assert(readFileSync('db/schema.ts','utf8').includes('lessonMonthLocks'));
 assert(readFileSync('server/app.ts','utf8').includes('lesson-month-locks'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('跟课合计'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('我的课时费用'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('myTeachingLessonHours'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('MonthConfirmHold'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('course-cell'));
 assert(readFileSync('app/globals.css','utf8').includes('course-stack'));
+// workbench cards: rename + red packet + weather chrome
+const whCard = readFileSync('components/nexus/work-hours-card.tsx','utf8');
+assert(whCard.includes('本月使用时长') && !whCard.includes('本月累计工时'));
+assert(whCard.includes('本月红包提现') && whCard.includes('牛马不能白当') && whCard.includes('JJ老师'));
+const dashSrc = readFileSync('components/nexus/dashboard.tsx','utf8');
+assert(dashSrc.includes('RedPacketCard') && dashSrc.includes('useMonthlyWorkHours'));
+assert(!dashSrc.includes("'活跃队伍'"), 'workbench no longer shows 活跃队伍 card');
+const gcss = readFileSync('app/globals.css','utf8');
+assert(gcss.includes('.welcome-weather{') && gcss.includes('background:transparent'), 'weather transparent');
+assert(gcss.includes('red-packet-tip'));
 
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

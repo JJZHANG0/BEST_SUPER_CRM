@@ -1,7 +1,7 @@
 'use client';
-import { Users, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet } from 'lucide-react';
+import { Users, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet } from 'lucide-react';
 import { WorkbenchWelcomeTools } from './workbench-chrome';
-import { WorkHoursCard } from './work-hours-card';
+import { WorkHoursCard, RedPacketCard, useMonthlyWorkHours } from './work-hours-card';
 import { PixelChase } from './pixel-chase';
 import { Badge, SectionTitle } from './ui';
 import { TodoHomeCard } from './todos';
@@ -25,21 +25,25 @@ const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 export default function Dashboard({ programs, students, teams, courses, go }: { role: Role; programs: Program[]; students: Student[]; teams: Team[]; courses: Course[]; go: (v: string) => void }) {
   const s = useNexus(), me = useMe(), allowance = useMonthAllowance();
   const today = todayIso(), week = weekOf(today);
-  const attention = teams.filter(t => t.status !== '正常进行' && t.status !== '已完成');
   // Sessions (课程排课) count individually; courses without sessions use their own date/time.
   const occ = occurrences(courses, s.courseSessions);
   const todays = onDate(occ, today);
   const thisWeek = inWeek(occ, today);
   const now = new Date(today + 'T12:00:00');
-  const stats = [
-    { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' },
-    { label: '活跃队伍', value: teams.length, unit: '支', icon: UsersRound, sub: teams.length ? `${attention.length} 支队伍需要关注` : '暂无队伍', tone: 'pink', path: 'teams' },
-    { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' },
-    { label: allowance.team ? '当月教务津贴 · 团队' : '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)}${allowance.team ? ' · 全部老师' : ''} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' },
-  ];
+  const workHours = useMonthlyWorkHours();
+  // L→R: 学生总数 → 本周课程 → 本月使用时长 → 本月红包提现 → 当月教务津贴
+  const studentStat = { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' };
+  const weekStat = { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' };
+  const allowanceStat = { label: allowance.team ? '当月教务津贴 · 团队' : '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)}${allowance.team ? ' · 全部老师' : ''} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' };
   return <>
     <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><WorkbenchWelcomeTools now={now} /></div>
-    <div className="stats-grid five"><button className="stat-card glass" onClick={() => go(stats[0].path)}><div className="stat-top"><span>{stats[0].label}</span><span className={`stat-icon ${stats[0].tone}`}><Users size={19} /></span></div><div className="stat-value">{stats[0].value}{stats[0].unit && <span>{stats[0].unit}</span>}</div><div className="stat-foot"><span>{stats[0].sub}</span><ChevronRight size={14} /></div></button><WorkHoursCard />{stats.slice(1).map(x => <button className="stat-card glass" key={x.label} onClick={() => go(x.path)}><div className="stat-top"><span>{x.label}</span><span className={`stat-icon ${x.tone}`}><x.icon size={19} /></span></div><div className="stat-value">{x.value}{x.unit && <span>{x.unit}</span>}</div><div className="stat-foot"><span>{x.sub}</span><ChevronRight size={14} /></div></button>)}</div>
+    <div className="stats-grid five">
+      <button className="stat-card glass" onClick={() => go(studentStat.path)}><div className="stat-top"><span>{studentStat.label}</span><span className={`stat-icon ${studentStat.tone}`}><Users size={19} /></span></div><div className="stat-value">{studentStat.value}{studentStat.unit && <span>{studentStat.unit}</span>}</div><div className="stat-foot"><span>{studentStat.sub}</span><ChevronRight size={14} /></div></button>
+      <button className="stat-card glass" onClick={() => go(weekStat.path)}><div className="stat-top"><span>{weekStat.label}</span><span className={`stat-icon ${weekStat.tone}`}><CalendarDays size={19} /></span></div><div className="stat-value">{weekStat.value}{weekStat.unit && <span>{weekStat.unit}</span>}</div><div className="stat-foot"><span>{weekStat.sub}</span><ChevronRight size={14} /></div></button>
+      <WorkHoursCard {...workHours} />
+      <RedPacketCard displayMs={workHours.displayMs} month={workHours.month} />
+      <button className="stat-card glass" onClick={() => go(allowanceStat.path)}><div className="stat-top"><span>{allowanceStat.label}</span><span className={`stat-icon ${allowanceStat.tone}`}><Wallet size={19} /></span></div><div className="stat-value">{allowanceStat.value}{allowanceStat.unit && <span>{allowanceStat.unit}</span>}</div><div className="stat-foot"><span>{allowanceStat.sub}</span><ChevronRight size={14} /></div></button>
+    </div>
     {/* Same 5-column grid as the KPI cards: 待办 / 今日课程 span cards 1–4, 快捷操作 / note sit under card 5. */}
     <div className="dashboard-grid">
       <div className="dg-todo"><TodoHomeCard /></div>

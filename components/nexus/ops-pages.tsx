@@ -13,7 +13,7 @@ import { canSeeAllLessons, canManageSystem, isTeacher, type Viewer } from '@/lib
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
   visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
-  isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee,
+  isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
 } from '@/lib/nexus/ops';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -278,11 +278,11 @@ export function LessonsPage() {
   const summary = summarizeByTeacher(rows);
   const typeName = (c?: OpsCourse) => s.classTypes.find(t => t.id === c?.classType)?.name || '—';
   const person = all && teacher !== ALL ? s.staffName(teacher) : '';
-  // 「我的课时费用」: current user's own 跟课 hours that month × ¥150 (else ¥0).
-  const myHours = useMemo(() => {
-    const meEmail = (s.user?.email || '').toLowerCase();
-    return visible.filter(r => (!month || monthOf(r.date) === month) && r.opsTeacher.toLowerCase() === meEmail).reduce((n, r) => n + r.hours, 0);
-  }, [visible, month, s.user?.email]);
+  // 「我的课时费用」: only when 授课老师 === logged-in ops teacher (本人授课) × ¥150; 跟课-only → ¥0.
+  const myHours = useMemo(
+    () => myTeachingLessonHours(visible, s.opsCourses, s.user?.name || '', month),
+    [visible, month, s.opsCourses, s.user?.name],
+  );
   const myFee = myLessonTeachingFee(myHours);
   const canBypassLock = canEditLockedLessonMonth(s.user);
   const exportCsv = () => {

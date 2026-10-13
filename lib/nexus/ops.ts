@@ -330,8 +330,11 @@ export function today(now = new Date(), timeZone = 'Asia/Shanghai') {
 }
 export const monthLabel = (ym: string) => { const [y, m] = ym.split('-'); return y && m ? `${y}年${Number(m)}月` : ym; };
 
-/** ¥/hour for 「我的课时费用」 when the ops teacher has teaching (跟课) hours that month. */
+/** ¥/hour for 「我的课时费用」 when the ops teacher is 授课老师 (本人授课) that month. */
 export const LESSON_TEACHING_FEE_PER_HOUR = 150;
+/** ¥ earned per full 24h of workbench usage (「本月红包提现」). */
+export const RED_PACKET_YUAN_PER_DAY = 2.4;
+const MS_PER_DAY = 24 * 3600_000;
 /** YYYY-MM month key validation (same shape as KPI months). */
 export const isLessonMonth = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 /** Whether `dateOrMonth` (YYYY-MM or YYYY-MM-DD) falls in a confirmed/locked month. */
@@ -346,10 +349,35 @@ export function canEditLockedLessonMonth(user: { name?: string | null; email?: s
   if ((user.name || '').trim() === '张捷嘉') return true;
   return /^zhangjiejia@/i.test(user.email || '');
 }
-/** 「我的课时费用」: hours × ¥150 when hours > 0, else ¥0. */
+/**
+ * Hours where 授课老师 === the logged-in ops teacher (本人授课).
+ * Follow-class rows (教务老师 only / other 授课老师) do NOT count. month '' = all months.
+ */
+export function myTeachingLessonHours(
+  records: readonly LessonRecord[],
+  courses: readonly { id: string; teacher: string }[],
+  teacherName: string,
+  month = '',
+) {
+  const name = (teacherName || '').trim();
+  if (!name) return 0;
+  let hours = 0;
+  for (const r of records) {
+    if (month && monthOf(r.date) !== month) continue;
+    if (!sameTeacherName(lessonTeacher(r, courses), name)) continue;
+    hours += r.hours;
+  }
+  return round2(hours);
+}
+/** 「我的课时费用」: 本人授课 hours × ¥150 when hours > 0, else ¥0. */
 export function myLessonTeachingFee(hours: number) {
   const h = Math.max(0, Number(hours) || 0);
   return h > 0 ? round2(h * LESSON_TEACHING_FEE_PER_HOUR) : 0;
+}
+/** 「本月红包提现」: usageMs / 24h × ¥2.4. */
+export function redPacketFromUsageMs(ms: number) {
+  const m = Math.max(0, Number(ms) || 0);
+  return round2((m / MS_PER_DAY) * RED_PACKET_YUAN_PER_DAY);
 }
 
 /** Records the viewer may see: the 部门负责人 (leader flag) sees all, everyone else only their own. */

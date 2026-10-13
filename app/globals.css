@@ -1997,8 +1997,8 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 
 /* —— Workbench weather + calendar chrome —— */
 .welcome-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
-.welcome-weather{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 12px;border-radius:12px;border:1px solid #ebe4f4;background:#ffffffaa;color:#6f6285;font-size:.75rem;min-height:48px;transition:background .18s,border-color .18s,box-shadow .18s}
-.welcome-weather:hover{background:#fff;border-color:#dccff0;box-shadow:0 4px 14px #7a5bb012}
+.welcome-weather{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 12px;border-radius:12px;border:1px solid transparent;background:transparent;color:#6f6285;font-size:.75rem;min-height:48px;transition:background .18s,border-color .18s}
+.welcome-weather:hover{background:#ffffffaa;border-color:#ebe4f4}
 .welcome-weather .wx-glyph{font-size:1.25rem;line-height:1}
 .welcome-weather .wx-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .welcome-weather .wx-text strong{font-size:.9375rem;font-weight:650;color:#3d3550;letter-spacing:-.3px}
@@ -2035,6 +2035,11 @@ button.welcome-date>div>span{display:block;font-size:.625rem;color:#9685a5;margi
 .work-hours-card .wh-digits{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1.55rem;font-weight:650;color:#2f3f62;letter-spacing:1px}
 .work-hours-card .stat-icon.live{animation:wh-pulse 1.6s ease-in-out infinite}
 @keyframes wh-pulse{0%,100%{box-shadow:0 0 0 0 #688bc955}50%{box-shadow:0 0 0 6px #688bc900}}
+.red-packet-card{cursor:help}
+.red-packet-tip{display:flex!important;align-items:center;gap:8px;max-width:260px;font-size:.8125rem!important;line-height:1.45;padding:10px 12px!important;background:linear-gradient(135deg,#3d3550,#5a4068)!important;animation:rp-tip-pop .35s cubic-bezier(.2,1.4,.4,1)}
+.red-packet-tip .rp-tip-bounce{display:inline-block;animation:rp-wiggle 1.1s ease-in-out infinite;font-size:1.1rem}
+@keyframes rp-tip-pop{from{opacity:0;transform:translateY(6px) scale(.92)}to{opacity:1;transform:none}}
+@keyframes rp-wiggle{0%,100%{transform:rotate(-8deg) translateY(0)}40%{transform:rotate(10deg) translateY(-2px)}70%{transform:rotate(-4deg) translateY(1px)}}
 /* Collapsed sidebar: never show portal switch (belt + suspenders with React). */
 [data-collapsible=icon] .nexus-sidebar .portal-switch,
 .nexus-sidebar[data-collapsible=icon] .portal-switch{display:none!important}

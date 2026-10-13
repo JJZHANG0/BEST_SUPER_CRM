@@ -1,13 +1,15 @@
 'use client';
 /**
- * Workbench KPI card: 本月累计工时 — digital clock that accumulates while the user
- * is on the dashboard with the tab visible. Persists to the API (or localStorage in demo).
+ * Workbench KPI cards tied to monthly usage timer:
+ * - 本月使用时长 — digital clock that accumulates while the user is on the dashboard
+ * - 本月红包提现 — usage/24h × ¥2.4 (牛马不能白当 vibe on hover)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Timer, ChevronRight } from 'lucide-react';
+import { Timer, Gift, ChevronRight } from 'lucide-react';
 import { useNexus } from '@/lib/nexus/store';
 import { api, API_ENABLED } from '@/lib/nexus/api';
-import { monthLabel } from '@/lib/nexus/ops';
+import { monthLabel, money2, redPacketFromUsageMs } from '@/lib/nexus/ops';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const DEMO_KEY = 'nexus.demo.work-hours.v1';
 
@@ -46,7 +48,14 @@ function writeDemo(month: string, email: string, totalMs: number) {
   } catch { /* ignore */ }
 }
 
-export function WorkHoursCard() {
+export type MonthlyWorkHours = {
+  displayMs: number;
+  running: boolean;
+  month: string;
+};
+
+/** Shared monthly usage timer — mount once on the workbench so both cards stay in sync. */
+export function useMonthlyWorkHours(): MonthlyWorkHours {
   const s = useNexus();
   const month = shanghaiMonth();
   const [displayMs, setDisplayMs] = useState(0);
@@ -157,15 +166,19 @@ export function WorkHoursCard() {
     return () => { clearInterval(tick); clearInterval(save); };
   }, [running, flush]);
 
+  return { displayMs, running, month };
+}
+
+export function WorkHoursCard({ displayMs, running, month }: MonthlyWorkHours) {
   const hours = Math.floor(displayMs / 3_600_000);
   const sub = running
     ? `${monthLabel(month)} · 计时中`
     : `${monthLabel(month)} · 离开工作台已暂停`;
 
   return (
-    <div className="stat-card glass work-hours-card" role="status" aria-live="polite" aria-label="本月累计工时">
+    <div className="stat-card glass work-hours-card" role="status" aria-live="polite" aria-label="本月使用时长">
       <div className="stat-top">
-        <span>本月累计工时</span>
+        <span>本月使用时长</span>
         <span className={`stat-icon blue${running ? ' live' : ''}`}><Timer size={19} /></span>
       </div>
       <div className="stat-value work-hours-clock">
@@ -176,5 +189,41 @@ export function WorkHoursCard() {
         <ChevronRight size={14} className="opacity-0" aria-hidden />
       </div>
     </div>
+  );
+}
+
+/** 本月红包提现 — amount from usage; 牛马不能白当 vibe via subtitle + cheeky hover tip. */
+export function RedPacketCard({ displayMs, month }: Pick<MonthlyWorkHours, 'displayMs' | 'month'>) {
+  const amount = redPacketFromUsageMs(displayMs);
+  const days = displayMs / (24 * 3600_000);
+  const sub = `${monthLabel(month)} · 牛马不能白当 · ${days < 0.01 ? '还没攒够红包' : `约 ${days.toFixed(2)} 天`}`;
+
+  return (
+    <TooltipProvider delayDuration={120}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="stat-card glass red-packet-card"
+            role="status"
+            aria-label="本月红包提现"
+            tabIndex={0}
+          >
+            <div className="stat-top">
+              <span>本月红包提现</span>
+              <span className="stat-icon pink"><Gift size={19} /></span>
+            </div>
+            <div className="stat-value">{money2(amount)}</div>
+            <div className="stat-foot">
+              <span>{sub}</span>
+              <ChevronRight size={14} className="opacity-0" aria-hidden />
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="red-packet-tip" sideOffset={8}>
+          <span className="rp-tip-bounce" aria-hidden>🧧</span>
+          <span>别装了，快去找 JJ老师 领红包～ 摸鱼也算工时哦 ♪</span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
