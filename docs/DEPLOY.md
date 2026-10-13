@@ -105,6 +105,14 @@ The demo accounts from the README are seeded in both environments. Production is
 replace them (or change their passwords in `users`) before storing real data. Real students' data should not
 be entered until HTTPS (a domain + certificate) is in place.
 
+Staff (seeded, login by 姓名): 张捷嘉 (`superadmin` + `leader`), 程雪晴 (`superadmin`), 张雪航 / 许瑾 / 方彦淇 (`ops`).
+Migration `0009` keeps 张雪航 as `ops` (not superadmin).
+
+授课老师 / 教练 (`role=teacher`, metallic-gray / `theme=steel` portal): created on prod/dev via admin API or DB
+insert (username = 姓名, email = 拼音@nexus.local, `must_change_password=true`). Ops/superadmin who also coach
+keep their existing role — they already appear in the 授课老师 picker; do not demote them to `teacher`.
+Initial passwords are delivered out of band (see `/workspace/coach-accounts.md` for the coach roster batch).
+
 ## 推文 public links and link previews
 
 Published 推文 (article posts) have a public, login-free reader:

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
 import { useNexus } from '@/lib/nexus/store';
-import { canSeeAllLessons, canManageSystem, type Viewer } from '@/lib/nexus/roles';
+import { canSeeAllLessons, canManageSystem, isTeacher, type Viewer } from '@/lib/nexus/roles';
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
   visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
@@ -55,8 +55,12 @@ function useOpsFilters() {
 }
 
 /** Courses the signed-in user may log against: own + unassigned (superadmin: all). */
-function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string) {
+function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string, teacherName = '') {
   if (canSeeAllLessons(viewer)) return courses;
+  if (isTeacher(viewer.role)) {
+    const n = teacherName.trim();
+    return n ? courses.filter(c => c.teacher === n || c.teacher.includes(n)) : courses;
+  }
   const me = email.toLowerCase();
   return courses.filter(c => !c.opsTeacher || c.opsTeacher.toLowerCase() === me);
 }
@@ -75,7 +79,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const s = useNexus();
   const me = s.user?.email || '';
   const all = canSeeAllLessons(s.viewer);
-  const options = loggableCourses(s.opsCourses, s.viewer, me);
+  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '');
   const linked = record ? s.lessonFeedbacks.find(f => f.lesson === record.id) ?? null : null;
   const [courseId, setCourseId] = useState(record?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || today());
@@ -250,7 +254,7 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
   const s = useNexus();
   const me = s.user?.email || '';
   const all = canSeeAllLessons(s.viewer);
-  const options = loggableCourses(s.opsCourses, s.viewer, me);
+  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '');
   const fromLesson = lessonId ? s.lessons.find(l => l.id === lessonId) : undefined;
   const [courseId, setCourseId] = useState(record?.course || fromLesson?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || fromLesson?.date || today());

@@ -216,6 +216,8 @@ export const monthLabel = (ym: string) => { const [y, m] = ym.split('-'); return
 /** Records the viewer may see: the 部门负责人 (leader flag) sees all, everyone else only their own. */
 export function visibleLessons<T extends { opsTeacher: string }>(list: readonly T[], viewer: { role: unknown; leader?: boolean | null }, email: string): T[] {
   if (viewer && viewer.leader === true && (viewer.role === 'ops' || viewer.role === 'superadmin' || viewer.role === 'admin')) return list.slice();
+  // Teacher portal bootstrap already scopes to the 授课老师's courses; show that list as-is.
+  if (viewer && viewer.role === 'teacher') return list.slice();
   const me = (email || '').toLowerCase();
   return list.filter(r => r.opsTeacher.toLowerCase() === me);
 }

@@ -16,7 +16,7 @@ import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
-import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, normalizeLesson, isUnit } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
@@ -174,7 +174,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const salesName = body.role === 'sales' ? (typeof body.salesName === 'string' && body.salesName.trim() ? body.salesName.trim().slice(0, 80) : '顾问 ' + name) : null;
     const password = generatePassword();
     try {
-      const [row] = await db.insert(schema.users).values({ email, username, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true }).returning();
+      const [row] = await db.insert(schema.users).values({ email, username, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true, theme: body.role === 'teacher' ? 'steel' : DEFAULT_THEME }).returning();
       return c.json({ user: adminUser(row), password }, 201);
     } catch (err) {
       if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: conflictMessage(err) }, 409);
@@ -396,6 +396,24 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const todos = await todosFor(user);
     const postList = visiblePosts(await posts.list(), user.role);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
+    // 授课老师: own courses + 课情反馈 on those courses (metallic-gray portal). Not ops workspace data.
+    if (isTeacher(user.role)) {
+      const name = user.name || '';
+      const teach = (t: unknown) => { const s = String(t || '').trim(); return !!name && (s === name || s.includes(name)); };
+      const myOps = opsCourses.filter(c => teach(c.teacher));
+      const opsIds = new Set(myOps.map(c => c.id as string));
+      const myCourses = courses.filter(c => teach(c.teacher));
+      const courseIds = new Set(myCourses.map(c => c.id as string));
+      return c.json({
+        user: publicUser(user), programs, teams: [], teamLogs: [], students: [], enrollments: [],
+        courses: myCourses, feedbacks: [], resources: resources.filter(r => r.public), assignments: [],
+        articles: [], posts: postList, todos: [], classTypes: [], projects: [], teachers: [],
+        opsCourses: myOps,
+        lessons: lessons.filter(r => opsIds.has(r.course as string) || teach(r.teacher)),
+        lessonFeedbacks: lessonFeedbacks.filter(r => opsIds.has(r.course as string)),
+        staff: [], courseSessions: courseSessions.filter(x => courseIds.has(x.course as string)),
+      });
+    }
     if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
@@ -488,7 +506,10 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   app.put('/:collection/:id', async c => {
     const user = c.get('user'), name = c.req.param('collection'), id = c.req.param('id');
     if (name !== 'articles' && !isCollection(name)) return c.json({ error: 'not_found' }, 404);
-    if (!canWrite(user)) return forbidden(c);
+    // Teachers may only upsert 课情反馈 on courses where they are the 授课老师; everything else stays ops-only.
+    if (isTeacher(user.role)) {
+      if (name !== 'lessonFeedbacks') return forbidden(c);
+    } else if (!canWrite(user)) return forbidden(c);
     const body = await c.req.json().catch(() => null);
     if (name === 'articles') {
       if (!isValidArticle(body) || body.program !== id) return c.json({ error: 'invalid' }, 400);
@@ -511,11 +532,20 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (systemCollections.includes(name) && !canManageSystem(user.role)) return onlySuperadmin(c);
     if (ownedCollections.includes(name)) {
       const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
-      if (!canEditOwned(user, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
-      data.opsTeacher = String(data.opsTeacher).toLowerCase();
-      data.createdBy = current ? current.createdBy : user.email;
       const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(data.course))).limit(1);
       if (!course) return c.json({ error: 'invalid', message: '课程不存在' }, 400);
+      if (isTeacher(user.role)) {
+        const tn = user.name || '';
+        const ct = String(course.teacher || '').trim();
+        if (!tn || (ct !== tn && !ct.includes(tn))) return c.json({ error: 'forbidden', message: '只能记录自己授课课程的课情反馈' }, 403);
+        if (name !== 'lessonFeedbacks') return c.json({ error: 'forbidden', message: '授课老师仅可记录课情反馈' }, 403);
+        data.opsTeacher = user.email.toLowerCase();
+        data.createdBy = current ? current.createdBy : user.email;
+      } else {
+        if (!canEditOwned(user, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
+        data.opsTeacher = String(data.opsTeacher).toLowerCase();
+        data.createdBy = current ? current.createdBy : user.email;
+      }
       if (name === 'lessons') {
         // Snapshot the class type's rate when the record is created or moved to another course; the API computes the amount.
         let rate = current ? Number(current.rate) : NaN, unit = current ? String(current.unit) : '';
@@ -560,7 +590,15 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const t = tables[name] as typeof schema.teams;
     const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
     if (!current) return c.json({ error: 'not_found' }, 404);
-    const allowed = systemCollections.includes(name) ? canManageSystem(user.role) : scheduleCollections.includes(name) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
+    let allowed = systemCollections.includes(name) ? canManageSystem(user.role) : scheduleCollections.includes(name) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
+    if (isTeacher(user.role)) {
+      allowed = false;
+      if (name === 'lessonFeedbacks' && String(current.opsTeacher || '').toLowerCase() === user.email.toLowerCase()) {
+        const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(current.course))).limit(1);
+        const tn = user.name || '', ct = String(course?.teacher || '').trim();
+        allowed = !!tn && (ct === tn || ct.includes(tn));
+      }
+    }
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
