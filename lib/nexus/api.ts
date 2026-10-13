@@ -12,6 +12,7 @@ export const APP_ENV = process.env.NEXT_PUBLIC_NEXUS_ENV || '';
 export type ApiUser = { id: number; email: string; username?: string | null; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean;
   /** 部门负责人 (only 张捷嘉): sees all teachers' 课时/津贴, reviews 绩效, assigns tasks. */ leader?: boolean; avatar?: string | null; theme?: string | null;
   /** Preferred weather city for the workbench header (default 杭州). */ weatherCity?: string | null;
+  /** Floating desktop pet id (rabbit|cat|carrot|pig). */ pixelPet?: string | null;
   /** users.role, active portal and portals this account may open (multi-role: ops + teacher). */ baseRole?: Role; portal?: 'ops' | 'teacher' | 'sales'; portals?: ('ops' | 'teacher' | 'sales')[] };
 /** Ops teachers listed for 教务老师 pickers and name lookups. */
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
@@ -76,6 +77,7 @@ export const api = {
   updateAvatar: (avatar: string | null) => request<{ user: ApiUser }>('/auth/avatar', { method: 'POST', body: JSON.stringify({ avatar }) }),
   updateTheme: (theme: string) => request<{ user: ApiUser }>('/auth/theme', { method: 'POST', body: JSON.stringify({ theme }) }),
   updateWeatherCity: (city: string) => request<{ user: ApiUser }>('/auth/weather-city', { method: 'POST', body: JSON.stringify({ city }) }),
+  updatePixelPet: (pet: string) => request<{ user: ApiUser }>('/auth/pixel-pet', { method: 'POST', body: JSON.stringify({ pet }) }),
   weather: (city?: string) => request<import('./weather').WeatherPayload>('/weather' + (city ? `?city=${encodeURIComponent(city)}` : '')),
   workHours: (month?: string) => request<{ month: string; totalMs: number }>('/work-hours' + (month ? `?month=${encodeURIComponent(month)}` : '')),
   reportWorkHours: (month: string, deltaMs: number) => request<{ month: string; totalMs: number }>('/work-hours', { method: 'POST', body: JSON.stringify({ month, deltaMs }) }),

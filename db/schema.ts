@@ -33,6 +33,8 @@ export const users = pgTable('users', {
   theme: text('theme').notNull().default('amethyst'),
   /** Preferred city for workbench weather (default 杭州). */
   weatherCity: text('weather_city').notNull().default('杭州'),
+  /** Floating desktop pet id (see lib/nexus/pets.ts). */
+  pixelPet: text('pixel_pet').notNull().default('rabbit'),
   /** 销售区域 (sales users): 销售大部 | 商务拓展一区 | 商务拓展二区 | 商务拓展三区 (lib/nexus/roles.ts SALES_REGIONS). */
   salesRegion: text('sales_region'),
   /** 销售负责人 (区/部 manager, e.g. 杨巍, 胡晓贇) — informational for stats; grants no extra rights. */

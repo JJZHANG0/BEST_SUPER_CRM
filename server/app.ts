@@ -26,16 +26,17 @@ import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShar
 import { buildOkrMessages, parseOkr, rateLimiter } from '../lib/nexus/okr';
 import { monthKeyOf } from '../lib/nexus/todos';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
+import { isPetId, DEFAULT_PET } from '../lib/nexus/pets';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
 export type Portal = 'ops' | 'teacher' | 'sales';
 /** `role` is the EFFECTIVE role for the active portal (teacher portal ⇒ 'teacher' even for a superadmin); `baseRole` is users.role. */
-export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string; weatherCity: string; baseRole?: Role; portal?: Portal; portals?: Portal[] };
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string; weatherCity: string; pixelPet: string; baseRole?: Role; portal?: Portal; portals?: Portal[] };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme, weatherCity: u.weatherCity || '杭州', baseRole: u.baseRole ?? u.role, portal: u.portal ?? basePortal(u.baseRole ?? u.role), portals: u.portals ?? [basePortal(u.baseRole ?? u.role)] });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme, weatherCity: u.weatherCity || '杭州', pixelPet: isPetId(u.pixelPet) ? u.pixelPet : DEFAULT_PET, baseRole: u.baseRole ?? u.role, portal: u.portal ?? basePortal(u.baseRole ?? u.role), portals: u.portals ?? [basePortal(u.baseRole ?? u.role)] });
 const basePortal = (r: Role): Portal => r === 'sales' ? 'sales' : r === 'teacher' ? 'teacher' : 'ops';
 const isPortal = (v: unknown): v is Portal => v === 'ops' || v === 'teacher' || v === 'sales';
 const portalLabel: Record<Portal, string> = { ops: '运营老师', teacher: '授课老师', sales: '销售顾问' };
@@ -45,7 +46,7 @@ function inPortal(base: SessionUser, portal: Portal, portals: Portal[]): Session
   if (portal === 'teacher' && base.role !== 'teacher') return { ...s, role: 'teacher', leader: false, theme: 'steel' };
   return s;
 }
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME, weatherCity: (row as { weatherCity?: string | null }).weatherCity || '杭州' });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME, weatherCity: (row as { weatherCity?: string | null }).weatherCity || '杭州', pixelPet: isPetId((row as { pixelPet?: string | null }).pixelPet) ? (row as { pixelPet: string }).pixelPet : DEFAULT_PET });
 const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true, salesRegion: row.salesRegion ?? null, salesLead: row.salesLead === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
 /** Human message for a unique violation on users (username vs email). */
@@ -189,6 +190,16 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const [row] = await db.update(schema.users).set({ weatherCity: city, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
     return c.json({ user: publicUser(toSession(row)) });
   });
+
+  app.post('/auth/pixel-pet', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { pet?: unknown } | null;
+    const pet = typeof body?.pet === 'string' ? body.pet : undefined;
+    if (!isPetId(pet)) return c.json({ error: 'invalid', message: '请选择有效的桌宠' }, 400);
+    const [row] = await db.update(schema.users).set({ pixelPet: pet, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
+    return c.json({ user: publicUser(toSession(row)) });
+  });
+
 
   /** Open-Meteo proxy (no API key). ?city=杭州 */
   app.get('/weather', async c => {

@@ -1643,6 +1643,35 @@ html[data-workspace=public] body{background:#f4f2f7}
 }
 .theme-swatch.active svg{color:var(--nx-accent-ink);flex-shrink:0}
 
+/* Desktop pet picker (个人设置) */
+.pet-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.pet-swatch{
+  display:flex;align-items:center;gap:12px;
+  min-height:72px;padding:10px 14px;
+  border-radius:14px;border:1px solid var(--nx-accent-border);
+  background:#fff9;color:#4a3d61;font:inherit;font-weight:550;
+  cursor:pointer;text-align:left;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .12s ease, background .15s ease;
+}
+.pet-swatch-canvas{
+  width:48px;height:60px;flex-shrink:0;
+  image-rendering:pixelated;image-rendering:crisp-edges;
+  background:transparent;
+}
+.pet-swatch-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pet-swatch-text>strong{font-size:.8125rem;font-weight:600}
+.pet-swatch-text>small{font-size:.7rem;font-weight:450;color:#8a7e98;line-height:1.35}
+.pet-swatch:hover{border-color:var(--nx-accent-muted);background:#fff;transform:translateY(-1px)}
+.pet-swatch.active{
+  border-color:var(--nx-accent);
+  background:var(--nx-accent-soft);
+  color:var(--nx-accent-ink);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--nx-accent) 18%, transparent);
+}
+.pet-swatch.active svg{color:var(--nx-accent-ink);flex-shrink:0}
+.pet-swatch.active .pet-swatch-text>small{color:var(--nx-accent-ink);opacity:.75}
+
+
 /* Sidebar active + text-button follow theme */
 .nexus-sidebar .nav-button[data-active=true]{
   background:var(--nx-accent-soft);

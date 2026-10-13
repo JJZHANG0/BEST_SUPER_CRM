@@ -127,6 +127,13 @@
       "when": 1791780000000,
       "tag": "0017_session_lesson_content",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791790000000,
+      "tag": "0017_user_pixel_pet",
+      "breakpoints": true
     }
   ]
 }
