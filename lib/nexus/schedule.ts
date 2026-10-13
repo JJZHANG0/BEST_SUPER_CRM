@@ -164,3 +164,56 @@ export function termLabel(d: string) {
   const [y, m] = d.split('-').map(Number);
   return m >= 8 ? `${y}–${y + 1} 秋季学期` : m === 1 ? `${y - 1}–${y} 秋季学期` : `${y - 1}–${y} 春季学期`;
 }
+
+// ---------- 课程编号 & 排课冲突 (shared by the 新建课程 form and the API) ----------
+/** 课程编号 format: letters + digits, optional dash segments (WS2026017-1-22, COND02501-11A, BEST2025001). */
+export const COURSE_CODE_RE = /^[A-Z]{2,6}\d{3,10}[A-Z]?(?:-[A-Z0-9]{1,6}){0,4}$/;
+export const normalizeCourseCode = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, '').toUpperCase();
+/** null when `code` is a well-formed 课程编号 not used by another timetable course ('' is allowed: the code is optional). */
+export function courseCodeIssue(code: string, courses: readonly { id: string; code?: string | null }[], selfId = ''): string | null {
+  const c = normalizeCourseCode(code);
+  if (!c) return null;
+  if (!COURSE_CODE_RE.test(c)) return `课程编号「${String(code).trim()}」格式不正确，应类似 WS2026017-1-22 或 COND02501-11A`;
+  const dup = courses.find(x => x.id !== selfId && normalizeCourseCode(x.code) === c);
+  if (dup) return `课程编号 ${c} 已被其他课程使用`;
+  return null;
+}
+export type ConflictReason = 'teacher' | 'team' | 'room';
+export const conflictReasonLabel: Record<ConflictReason, string> = { teacher: '同一老师', team: '同一队伍', room: '同一教室' };
+export type ScheduleConflict = { key: string; courseId: string; courseName: string; code: string; teacher: string; date: string; start: string; end: string; location: string; reasons: ConflictReason[] };
+type ConflictCourse = CourseLike;
+const ONLINE = /^(线上|线上直播|线上课程|online|待定|待通知|—|-)$/i;
+/** Room key for conflict checks: '' (never conflicts) for empty / generic online / TBD. */
+export const roomKey = (v: unknown) => { const s = String(v ?? '').trim().toLowerCase().replace(/\s+/g, ''); return !s || ONLINE.test(s) ? '' : s; };
+/**
+ * Meetings of other courses that overlap any of `slots` and share the teacher, the team or the room.
+ * Back-to-back meetings (end == start) do not conflict.
+ */
+export function scheduleConflicts<C extends ConflictCourse>(
+  slots: readonly { date: string; start: string; end: string; location?: string | null }[],
+  ctx: { courseId?: string; teacher: string; team?: string; location?: string | null },
+  courses: readonly C[], sessions: readonly CourseSession[],
+): ScheduleConflict[] {
+  const teacher = String(ctx.teacher || '').trim(), team = String(ctx.team || '').trim();
+  const out: ScheduleConflict[] = [];
+  const others = occurrences(courses.filter(c => c.id !== ctx.courseId), sessions.filter(x => x.course !== ctx.courseId));
+  for (const slot of slots) {
+    const a = minutes(slot.start), b = minutes(slot.end);
+    if (Number.isNaN(a) || Number.isNaN(b)) continue;
+    const room = roomKey(slot.location || ctx.location);
+    for (const o of others) {
+      if (o.date !== slot.date) continue;
+      const s = minutes(o.start), e = minutes(o.end) > s ? minutes(o.end) : s + 60;
+      if (Number.isNaN(s) || !(s < b && a < e)) continue;
+      const reasons: ConflictReason[] = [];
+      if (teacher && String(o.course.teacher || '').trim() === teacher) reasons.push('teacher');
+      if (team && String(o.course.team || '').trim() === team) reasons.push('team');
+      if (room && roomKey(o.location) === room) reasons.push('room');
+      if (!reasons.length || out.some(x => x.key === o.key)) continue;
+      out.push({ key: o.key, courseId: o.course.id, courseName: o.course.name, code: o.course.code || '', teacher: o.course.teacher, date: o.date, start: o.start, end: o.end, location: o.location, reasons });
+    }
+  }
+  return out.sort((x, y) => x.date.localeCompare(y.date) || x.start.localeCompare(y.start));
+}
+export const conflictSummary = (list: readonly ScheduleConflict[], max = 3) =>
+  list.slice(0, max).map(x => `${x.date} ${x.start}–${x.end} ${x.courseName}（${x.reasons.map(r => conflictReasonLabel[r]).join('、')}）`).join('；') + (list.length > max ? ` 等 ${list.length} 节` : '');

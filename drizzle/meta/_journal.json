@@ -78,6 +78,13 @@
       "when": 1791710000000,
       "tag": "0010_user_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791720000000,
+      "tag": "0011_course_conflict_override",
+      "breakpoints": true
     }
   ]
 }

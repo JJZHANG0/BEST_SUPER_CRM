@@ -120,6 +120,8 @@ export const courses = pgTable('courses', {
   time: text('time').notNull(),
   status: text('status').notNull(),
   /** 课程编号 / 教室或线上 (optional; shown on the exported timetable). */
+  /** 「仍然保存」: saved despite 排课冲突 (teacher / team / room overlap). */
+  conflictOverride: boolean('conflict_override'),
   code: text('code'),
   location: text('location'),
   sortOrder: integer('sort_order').notNull().default(0),

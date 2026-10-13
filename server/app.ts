@@ -23,6 +23,7 @@ import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
+import { courseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
 export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string };
@@ -450,6 +451,36 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   });
 
 
+  /** 课程编号 format / uniqueness and 排课冲突 (same teacher, team or room) unless the course was saved with 「仍然保存」. */
+  async function scheduleGuard(name: 'courses' | 'courseSessions', data: Record<string, unknown>, id: string): Promise<{ status: 400 | 409; body: { error: string; message: string; conflicts?: unknown[] } } | null> {
+    const clean = (r: Record<string, unknown>) => { const o: Record<string, unknown> = {}; for (const [k, v] of Object.entries(r)) if (v !== null) o[k] = v; return o; };
+    const courses = (await db.select().from(schema.courses)).map(r => clean(r as unknown as Record<string, unknown>)) as unknown as (CourseLike & { conflictOverride?: boolean })[];
+    const sessions = (await db.select().from(schema.courseSessions)).map(r => clean(r as unknown as Record<string, unknown>)) as unknown as CourseSession[];
+    if (name === 'courses') {
+      const current = courses.find(x => x.id === id);
+      const code = typeof data.code === 'string' ? data.code : '';
+      if (code && normalizeCourseCode(code) !== normalizeCourseCode(current?.code)) {
+        const issue = courseCodeIssue(code, courses, id);
+        if (issue) return { status: issue.includes('已被') ? 409 : 400, body: { error: issue.includes('已被') ? 'conflict' : 'invalid', message: issue } };
+        data.code = normalizeCourseCode(code);
+      }
+      if (data.conflictOverride === true) return null;
+      const changed = !current || current.teacher !== data.teacher || current.team !== data.team || (current.location || '') !== (data.location || '');
+      if (!changed) return null;
+      const own = sessions.filter(x => x.course === id);
+      const t = String(data.time || '').split(/[–—~-]/).map(x => x.trim());
+      const slots = own.length ? own : (t.length === 2 ? [{ date: String(data.date), start: t[0], end: t[1] }] : []);
+      const hits = scheduleConflicts(slots, { courseId: id, teacher: String(data.teacher || ''), team: String(data.team || ''), location: String(data.location || '') }, courses, sessions);
+      return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。如确需安排，请在表单中选择「仍然保存」。', conflicts: hits } } : null;
+    }
+    const course = courses.find(x => x.id === data.course);
+    if (!course || course.conflictOverride) return null; // the course PUT re-checks its sessions when it arrives
+    const current = sessions.find(x => x.id === id);
+    if (current && current.date === data.date && current.start === data.start && current.end === data.end && (current.location || '') === (data.location || '')) return null;
+    const hits = scheduleConflicts([{ date: String(data.date), start: String(data.start), end: String(data.end), location: (data.location as string) || course.location }], { courseId: course.id, teacher: course.teacher, team: course.team, location: course.location }, courses, sessions);
+    return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。如确需安排，请在表单中选择「仍然保存」。', conflicts: hits } } : null;
+  }
+
   /** Upsert one record of a collection (ops/admin). The body is the full frontend record. */
   app.put('/:collection/:id', async c => {
     const user = c.get('user'), name = c.req.param('collection'), id = c.req.param('id');
@@ -494,6 +525,10 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         if (unit === 'person_hour' && !(Number(data.actualCount) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写实到人数' }, 400);
         data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.actualCount as number | null);
       }
+    }
+    if (name === 'courses' || name === 'courseSessions') {
+      const blocked = await scheduleGuard(name, data, id);
+      if (blocked) return c.json(blocked.body, blocked.status);
     }
     for (const [k, v] of Object.entries(recordSchemas[name].shape)) if ((v as { isOptional(): boolean }).isOptional() && data[k] === undefined) data[k] = null;
     const now = new Date();
