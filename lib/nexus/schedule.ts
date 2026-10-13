@@ -188,23 +188,27 @@ export function knownCourseCodeIssue(code: string, known: readonly { code?: stri
   if (!known.some(x => normalizeCourseCode(x.code) === c)) return `课程编号「${String(code).trim()}」匹配不上 / 编号不存在，无法创建`;
   return null;
 }
-export type ConflictReason = 'teacher' | 'team' | 'room';
-export const conflictReasonLabel: Record<ConflictReason, string> = { teacher: '同一老师', team: '同一队伍', room: '同一教室' };
+export type ConflictReason = 'teacher' | 'ops' | 'team' | 'room';
+export const conflictReasonLabel: Record<ConflictReason, string> = { teacher: '授课老师', ops: '运营老师', team: '同一队伍', room: '同一教室' };
 export type ScheduleConflict = { key: string; courseId: string; courseName: string; code: string; teacher: string; date: string; start: string; end: string; location: string; reasons: ConflictReason[] };
 type ConflictCourse = CourseLike;
 const ONLINE = /^(线上|线上直播|线上课程|online|待定|待通知|—|-)$/i;
 /** Room key for conflict checks: '' (never conflicts) for empty / generic online / TBD. */
 export const roomKey = (v: unknown) => { const s = String(v ?? '').trim().toLowerCase().replace(/\s+/g, ''); return !s || ONLINE.test(s) ? '' : s; };
+const teacherName = (v: unknown) => String(v ?? '').trim();
 /**
- * Meetings of other courses that overlap any of `slots` and share the teacher, the team or the room.
- * Back-to-back meetings (end == start) do not conflict.
+ * Meetings of other courses that overlap any of `slots` and share the 授课老师, the current 运营老师
+ * (ops may also teach), the team or the room. Back-to-back meetings (end == start) do not conflict.
+ * `opsTeacher` is checked separately so creating a course for someone else still flags the ops person's own teaching slots.
  */
 export function scheduleConflicts<C extends ConflictCourse>(
   slots: readonly { date: string; start: string; end: string; location?: string | null }[],
-  ctx: { courseId?: string; teacher: string; team?: string; location?: string | null },
+  ctx: { courseId?: string; teacher: string; opsTeacher?: string; team?: string; location?: string | null },
   courses: readonly C[], sessions: readonly CourseSession[],
 ): ScheduleConflict[] {
-  const teacher = String(ctx.teacher || '').trim(), team = String(ctx.team || '').trim();
+  const teacher = teacherName(ctx.teacher), team = String(ctx.team || '').trim();
+  const ops = teacherName(ctx.opsTeacher);
+  const opsDistinct = !!ops && ops !== teacher;
   const out: ScheduleConflict[] = [];
   const others = occurrences(courses.filter(c => c.id !== ctx.courseId), sessions.filter(x => x.course !== ctx.courseId));
   for (const slot of slots) {
@@ -215,8 +219,10 @@ export function scheduleConflicts<C extends ConflictCourse>(
       if (o.date !== slot.date) continue;
       const s = minutes(o.start), e = minutes(o.end) > s ? minutes(o.end) : s + 60;
       if (Number.isNaN(s) || !(s < b && a < e)) continue;
+      const otherTeacher = teacherName(o.course.teacher);
       const reasons: ConflictReason[] = [];
-      if (teacher && String(o.course.teacher || '').trim() === teacher) reasons.push('teacher');
+      if (teacher && otherTeacher === teacher) reasons.push('teacher');
+      if (opsDistinct && otherTeacher === ops) reasons.push('ops');
       if (team && String(o.course.team || '').trim() === team) reasons.push('team');
       if (room && roomKey(o.location) === room) reasons.push('room');
       if (!reasons.length || out.some(x => x.key === o.key)) continue;

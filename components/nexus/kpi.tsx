@@ -1,7 +1,7 @@
 'use client';
 /** 当月绩效 (teacher self-fill, in 待办事项) and 绩效考核 (reviewer page under 管理中心). */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ClipboardCheck, FileCheck2, ListPlus, Lock, LockOpen, Save, Send, Undo2, ChevronRight, Award, Check, Inbox } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, FileCheck2, ListPlus, Lock, LockOpen, Save, Send, Undo2, ChevronRight, Check, Inbox, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
@@ -17,6 +17,7 @@ import type { KpiReviewRow } from '@/lib/nexus/api';
 import { PageTitle, EmptyState, Back, Notice } from './ui';
 import { readOkrDraft, clearOkrDraft } from './okr';
 import { okrToKpiItems, hasOkrContent, type OkrDraft } from '@/lib/nexus/okr';
+import { buildKpiExportRows, renderKpiMonthPdf } from '@/lib/nexus/kpi-pdf';
 import { Sparkles, X } from 'lucide-react';
 
 type Mode = 'self' | 'review' | 'readonly';
@@ -95,6 +96,31 @@ function TodoPickDialog({ open, onClose, todos, month, items, target, onPick }: 
     </div>
     <div className="actions"><button type="button" className="secondary" onClick={onClose}>完成</button></div>
   </DialogContent></Dialog>;
+}
+
+
+/** 当月领导评分 card: score / 100 + 张捷嘉评语 — sits between status bar and 绩效评分 table. */
+export function KpiLeaderScoreCard({ sheet, month }: { sheet: KpiSheet | null; month: string }) {
+  const status: KpiStatus | 'none' = sheet?.status ?? 'none';
+  const leader = sheet?.reviewedByName || '张捷嘉';
+  const finalized = status === 'finalized';
+  const total = finalized ? (sheet?.total ?? scoreSheet(sheet!.items).total) : null;
+  const note = (sheet?.reviewNote || '').trim();
+  const returned = status === 'draft' && !!note;
+  return <section className="glass panel kpi-leader-card" aria-label="当月领导评分">
+    <div className="kpi-leader-top">
+      <div className="kpi-leader-who">
+        <span className="avatar" aria-hidden="true">{leader.slice(0, 1)}</span>
+        <div><strong>{leader} · 当月领导评分</strong><small>{monthKeyLabel(month)}绩效考核{finalized ? ` · 定稿于 ${stamp(sheet?.finalizedAt)}` : status === 'submitted' ? ' · 待定稿后可见得分' : returned ? ' · 已退回修改' : ' · 提交审核并定稿后显示'}</small></div>
+      </div>
+      <div className="kpi-leader-score" aria-live="polite">
+        {finalized && total != null ? <><b>{fmt(total)}</b><small>/ 100</small></> : <b className="pending">{returned ? '已退回' : status === 'submitted' ? '待定稿' : '—'}</b>}
+      </div>
+    </div>
+    {finalized && note ? <p className="kpi-leader-comment"><b>领导评语</b>{note}</p>
+      : returned ? <p className="kpi-leader-comment"><b>{leader} 退回意见</b>{note}</p>
+      : <p className="kpi-leader-empty">{finalized ? '定稿时未填写评语。' : '领导评分与评语在部门负责人（张捷嘉）定稿后显示在这里。'}</p>}
+  </section>;
 }
 
 /** 当月绩效 tab: the signed-in teacher fills their KRs, saves a draft and submits for review. */
@@ -179,12 +205,10 @@ export function KpiSelfPanel() {
         <button type="button" className="primary compact" disabled={busy} onClick={confirmAi}><Check size={15} />确认保存</button>
       </div>
     </section>}
-    {status === 'draft' && sheet?.reviewNote && sheet.reviewedByName && <Notice>{sheet.reviewedByName} 退回了本月绩效：{sheet.reviewNote}</Notice>}
-    {status === 'submitted' && <Notice>已提交审核，等待 {sheet?.reviewedByName || '审核人'} 评分。如需修改，请联系审核人退回。</Notice>}
+    {status === 'submitted' && <Notice>已提交审核，等待审核人评分。如需修改，请联系审核人退回。</Notice>}
+    {!loading && <KpiLeaderScoreCard sheet={sheet} month={month} />}
     {status === 'finalized' && sheet && <section className="glass panel kpi-final">
-      <div className="kpi-final-score"><Award size={22} /><div><span>{monthKeyLabel(month)} 最终得分</span><b>{fmt(sheet.total ?? scoreSheet(sheet.items).total)}<small> / 100</small></b></div></div>
-      <KpiScoreSummary items={sheet.items} title="加权总分" />
-      {sheet.reviewNote && <p className="kpi-final-note"><b>审核意见</b>{sheet.reviewNote}</p>}
+      <KpiScoreSummary items={sheet.items} title="分类加权明细" />
     </section>}
     <section className="glass panel kpi-sheet-panel">
       <div className="kpi-sheet-head"><div><h2>绩效评分</h2><span>每个 KR 对应满分 5 分。举例：教务管理 30 分需要 6 个 KR；客诉反馈默认满分，由项目经理填写扣分事项。</span></div></div>
@@ -193,6 +217,24 @@ export function KpiSelfPanel() {
     </section>
     {pick && <TodoPickDialog open={!!pick} onClose={() => setPick(null)} todos={own} month={month} items={items} target={pick} onPick={insert} />}
   </div>;
+}
+
+
+async function exportKpiPdf(month: string, rows: KpiReviewRow[], reviewer: string) {
+  try {
+    const data = buildKpiExportRows(rows);
+    const generatedAt = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+    const pdf = await renderKpiMonthPdf(month, data, { generatedAt, reviewer });
+    const blob = new Blob([pdf as BlobPart], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `B.E.S.T-${month}-绩效考核.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast.success(`已导出 ${monthKeyLabel(month)} 绩效考核 PDF（单页）`);
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '导出失败');
+  }
 }
 
 /** 绩效考核 (reviewer): list of ops teachers for a month → score each KR → finalize. Route: #/kpi-review?month=…&user=… */
@@ -221,8 +263,13 @@ export function KpiReviewPage() {
       <div className="glass"><span>未填写</span><b>{count('none')}<small> 人</small></b></div>
     </div>
     <section className="glass panel">
-      <div className="filter-toolbar ops-filters"><MonthField value={month} onChange={m => go(m)} /></div>
-      <div className="results-meta">{monthKeyLabel(month)} · {rows?.length ?? 0} 位老师<span>点击一行进入评分</span></div>
+      <div className="filter-toolbar ops-filters kpi-export-bar">
+        <MonthField value={month} onChange={m => go(m)} />
+        <button type="button" className="primary compact export-button" disabled={!rows?.length} onClick={() => void exportKpiPdf(month, rows || [], s.user?.name || '张捷嘉')}>
+          <FileDown size={15} />一键导出
+        </button>
+      </div>
+      <div className="results-meta">{monthKeyLabel(month)} · {rows?.length ?? 0} 位老师<span>点击一行进入评分 · 可一键导出当月 OKR 得分 PDF</span></div>
       {!rows ? <div className="kpi-loading">正在读取…</div> : rows.length ? <div className="ops-table-wrap"><Table className="ops-table kpi-review-table"><TableHeader><TableRow>{['老师', '状态', '已填 KR', '提交时间', '加权总分', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
         <TableBody>{rows.map(r => {
           const st = r.sheet?.status ?? 'none';

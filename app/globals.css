@@ -959,6 +959,35 @@ html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-
   .best-brand .best-wordmark span,.best-brand small,.best-brand .best-mono{transition:opacity .2s linear!important;transform:none!important;filter:none!important}
   .best-bunny,.best-bunny[data-active]{scale:1;rotate:0deg;transition:opacity .2s linear!important}
 }
+/* ---- Course conflict modal (强制设定) ---- */
+.conflict-modal-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px;max-height:min(50vh,420px);overflow:auto}
+.conflict-modal-list li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;padding:10px 12px;border-radius:12px;background:#fff8f1;border:1px solid #f3c9a8}
+.conflict-modal-list time{font-variant-numeric:tabular-nums;font-weight:650;font-size:.8125rem;color:#8a4615;white-space:nowrap}
+.conflict-modal-list strong{font-size:.875rem;color:#4d3a2a}
+.conflict-modal-list small{grid-column:2;font-size:.75rem;color:#a2836b}
+.conflict-modal-list em{grid-column:2;font-style:normal;font-size:.6875rem;font-weight:700;color:#c2410c;justify-self:start;background:#ffedd5;border-radius:999px;padding:2px 8px}
+.conflict-modal .actions{margin-top:16px;justify-content:flex-end}
+.conflict-modal .primary.danger-soft,.conflict-actions .danger-soft{background:linear-gradient(180deg,#fff1e8,#ffe4d4);border-color:#f0b48a;color:#9a3412}
+.conflict-modal .primary.danger-soft:hover{filter:brightness(.98)}
+
+/* ---- OKR leadership score card (当月绩效) ---- */
+.kpi-leader-card{display:flex;flex-direction:column;gap:14px;padding:18px 20px}
+.kpi-leader-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.kpi-leader-who{display:flex;align-items:center;gap:12px;min-width:0}
+.kpi-leader-who .avatar{width:40px;height:40px;font-size:1rem;background:linear-gradient(135deg,#c4a3e8,#8b6bc7);color:#fff}
+.kpi-leader-who strong{display:block;font-size:.9375rem;color:#2b2236}
+.kpi-leader-who small{display:block;font-size:.75rem;color:#8d7f9b;margin-top:2px}
+.kpi-leader-score{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.kpi-leader-score b{font-size:1.75rem;font-weight:700;color:#7a5bc0;line-height:1}
+.kpi-leader-score b.pending{color:#a093ad;font-size:1.25rem;font-weight:600}
+.kpi-leader-score small{font-size:.85rem;color:#a093ad}
+.kpi-leader-comment{margin:0;padding:12px 14px;border-radius:12px;background:linear-gradient(180deg,#faf7fd,#f3edf9);border:1px solid #ebe3f4;font-size:.8125rem;line-height:1.8;color:#4d4259}
+.kpi-leader-comment b{display:block;margin-bottom:4px;font-size:.75rem;color:#7a5bc0;font-weight:650}
+.kpi-leader-empty{margin:0;font-size:.8125rem;color:#9b87a9;line-height:1.7}
+
+/* ---- KPI review one-click PDF export ---- */
+.kpi-export-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+
 /* ---- 待办: 一键导出 / 指派 / 当月绩效 / 绩效考核 ---- */
 .done-meta{align-items:center}
 .done-meta>span{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}

@@ -30,7 +30,7 @@ export type Team = {id:string;name:string;program:string;teacher:string;stage:nu
 /** A course (课程安排). date/time are its first meeting; repeated meetings live in course_sessions (lib/nexus/schedule.ts). */
 export type Course = {id:string;name:string;program:string;team:string;teacher:string;date:string;time:string;status:string;
   /** 课程编号 (optional; e.g. the 课时记录 course code) and 教室 / 线上 shown on the timetable. */ code?:string;location?:string;
-  /** Saved with 「仍然保存」 despite 排课冲突. */ conflictOverride?:boolean};
+  /** Saved with 「强制设定」 despite 排课冲突. */ conflictOverride?:boolean};
 export type Feedback = {id:string;student:string;course:string;content:string;next:string;visible:boolean;date:string};
 export const stages=['项目启动','研究与开发','中期审核','成果完善','最终提交'];
 export const programs:Program[]=[

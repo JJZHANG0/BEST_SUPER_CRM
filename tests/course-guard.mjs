@@ -32,5 +32,5 @@ assert.deepEqual(S.scheduleConflicts([slot('2026-10-13','15:00','16:00')],{teach
 assert.equal(S.scheduleConflicts([slot('2026-10-14','09:30','10:30')],{teacher:'X',location:'线上直播'},courses,sessions).length,0,'online never clashes by room');
 assert.equal(S.scheduleConflicts([slot('2026-10-14','09:30','10:30')],{teacher:'李老师'},courses,sessions).length,1,'course without sessions uses date/time');
 assert.equal(S.scheduleConflicts([slot('2026-10-13','14:00','15:00')],{courseId:'A',teacher:'王钰'},courses,sessions).length,0,'own sessions ignored');
-assert.match(S.conflictSummary(t),/2026-10-20 14:00–15:30 商业计划（同一老师）/);
+assert.match(S.conflictSummary(t),/2026-10-20 14:00–15:30 商业计划（授课老师）/);
 console.log('course-guard ok');

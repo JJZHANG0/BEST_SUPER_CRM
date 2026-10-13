@@ -86,3 +86,10 @@ assert(readFileSync('components/nexus/kpi.tsx','utf8').includes('if (!canReviewK
 assert(readFileSync('drizzle/0004_kpi_assign_teachers.sql','utf8').includes('CREATE TABLE "kpi_sheets"'));
 assert(readFileSync('drizzle/0004_kpi_assign_teachers.sql','utf8').includes('ADD COLUMN "assigned_by" integer'));
 console.log('KPI: sheet structure, scoring math, edit rules, review workflow, permissions and gating passed.');
+const kpiUi=readFileSync('components/nexus/kpi.tsx','utf8');
+assert(kpiUi.includes('KpiLeaderScoreCard')&&kpiUi.includes('当月领导评分'),'leadership score card on 当月绩效');
+assert(kpiUi.includes('一键导出')&&kpiUi.includes('renderKpiMonthPdf'),'leader PDF export on 绩效考核');
+assert(readFileSync('lib/nexus/kpi-pdf.ts','utf8').includes('B.E.S.T')&&readFileSync('lib/nexus/kpi-pdf.ts','utf8').includes('imagesToPdf'));
+assert(readFileSync('components/nexus/modules.tsx','utf8').includes('强制设定')&&readFileSync('components/nexus/modules.tsx','utf8').includes('opsTeacher'));
+assert(readFileSync('lib/nexus/schedule.ts','utf8').includes("ops: '运营老师'"));
+console.log('KPI UI: leadership card + PDF export + course ops conflict wiring checked.');

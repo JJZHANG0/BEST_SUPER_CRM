@@ -33,5 +33,11 @@ assert.equal(S.scheduleConflicts([{date:'2026-10-14',start:'09:30',end:'10:30'}]
 assert.equal(S.scheduleConflicts([{date:'2026-10-14',start:'09:30',end:'10:30'}],{teacher:'李老师'},courses,sessions).length,1);
 // The course itself (editing) is excluded.
 assert.equal(S.scheduleConflicts([{date:'2026-10-13',start:'14:00',end:'15:00'}],{courseId:'A',teacher:'王钰'},courses,sessions).length,0);
-assert.match(S.conflictSummary(S.scheduleConflicts([{date:'2026-10-13',start:'14:00',end:'15:00'}],{teacher:'王钰'},courses,sessions)),/2026-10-13 14:00–15:30 健康 App（同一老师）/);
+assert.match(S.conflictSummary(S.scheduleConflicts([{date:'2026-10-13',start:'14:00',end:'15:00'}],{teacher:'王钰'},courses,sessions)),/2026-10-13 14:00–15:30 健康 App（授课老师）/);
+
+// 运营老师 (ops may also teach): conflict even when selected 授课老师 differs.
+hits=S.scheduleConflicts([{date:'2026-10-13',start:'14:30',end:'15:30'}],{teacher:'新人',opsTeacher:'王钰'},courses,sessions);
+assert.equal(hits.length,1);assert.deepEqual(hits[0].reasons,['ops']);
+assert.equal(S.scheduleConflicts([{date:'2026-10-13',start:'14:30',end:'15:30'}],{teacher:'王钰',opsTeacher:'王钰'},courses,sessions)[0].reasons.includes('teacher'),true);
+assert.equal(S.conflictReasonLabel.ops,'运营老师');
 console.log('course-conflicts: ok');
