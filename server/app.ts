@@ -18,7 +18,7 @@ import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { computeAllowance, normalizeLesson, isUnit } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -396,22 +396,33 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const todos = await todosFor(user);
     const postList = visiblePosts(await posts.list(), user.role);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    // 授课老师: own courses + 课情反馈 on those courses (metallic-gray portal). Not ops workspace data.
+    // 授课老师: only own teams / courses / students (derived from ops 课程编号 + teams.teacher + 课程安排).
     if (isTeacher(user.role)) {
-      const name = user.name || '';
-      const teach = (t: unknown) => { const s = String(t || '').trim(); return !!name && (s === name || s.includes(name)); };
-      const myOps = opsCourses.filter(c => teach(c.teacher));
-      const opsIds = new Set(myOps.map(c => c.id as string));
-      const myCourses = courses.filter(c => teach(c.teacher));
-      const courseIds = new Set(myCourses.map(c => c.id as string));
+      const scope = teacherRosterScope(user.name || '', {
+        opsCourses: opsCourses as { id: string; code: string; name: string; teacher: string }[],
+        courses: courses as { id: string; teacher: string; team: string; code?: string }[],
+        teams: teams as { id: string; name: string; program: string; teacher?: string }[],
+        enrollments: enrollments as { student: string; team: string; status: string }[],
+        students: students as { id: string; team: string; status: string }[],
+      });
+      const myTeams = teams.filter(t => scope.teamIds.has(t.id as string));
+      const myStudents = students.filter(s => scope.studentIds.has(s.id as string));
+      const myEnroll = enrollments.filter(e => scope.teamIds.has(e.team as string) || scope.studentIds.has(e.student as string));
       return c.json({
-        user: publicUser(user), programs, teams: [], teamLogs: [], students: [], enrollments: [],
-        courses: myCourses, feedbacks: [], resources: resources.filter(r => r.public), assignments: [],
+        user: publicUser(user), programs,
+        teams: myTeams,
+        teamLogs: teamLogs.filter(l => scope.teamIds.has(l.team as string)),
+        students: myStudents,
+        enrollments: myEnroll,
+        courses: scope.courses,
+        feedbacks: feedbacks.filter(f => scope.studentIds.has(f.student as string)),
+        resources: resources.filter(r => r.public),
+        assignments: assignments.filter(a => scope.studentIds.has(a.student as string)),
         articles: [], posts: postList, todos: [], classTypes: [], projects: [], teachers: [],
-        opsCourses: myOps,
-        lessons: lessons.filter(r => opsIds.has(r.course as string) || teach(r.teacher)),
-        lessonFeedbacks: lessonFeedbacks.filter(r => opsIds.has(r.course as string)),
-        staff: [], courseSessions: courseSessions.filter(x => courseIds.has(x.course as string)),
+        opsCourses: scope.opsCourses,
+        lessons: lessons.filter(r => scope.opsCourseIds.has(r.course as string) || sameTeacherName(r.teacher, scope.name)),
+        lessonFeedbacks: lessonFeedbacks.filter(r => scope.opsCourseIds.has(r.course as string)),
+        staff: [], courseSessions: courseSessions.filter(x => scope.courseIds.has(x.course as string)),
       });
     }
     if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
@@ -434,7 +445,21 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   app.get('/students/:id/history', async c => {
     const user = c.get('user'), id = c.req.param('id');
     const [student] = await db.select().from(schema.students).where(eq(schema.students.id, id)).limit(1);
-    if (!student || (user.role === 'sales' && student.sales !== user.salesName)) return c.json({ error: 'not_found' }, 404);
+    if (!student) return c.json({ error: 'not_found' }, 404);
+    if (user.role === 'sales' && student.sales !== user.salesName) return c.json({ error: 'not_found' }, 404);
+    if (isTeacher(user.role)) {
+      const [tTeams, tEnroll, tOps, tCourses, tStudents] = await Promise.all(
+        (['teams', 'enrollments', 'opsCourses', 'courses', 'students'] as const).map(list),
+      );
+      const scope = teacherRosterScope(user.name || '', {
+        opsCourses: tOps as { id: string; code: string; name: string; teacher: string }[],
+        courses: tCourses as { id: string; teacher: string; team: string }[],
+        teams: tTeams as { id: string; name: string; program: string; teacher?: string }[],
+        enrollments: tEnroll as { student: string; team: string; status: string }[],
+        students: tStudents as { id: string; team: string; status: string }[],
+      });
+      if (!scope.studentIds.has(student.id)) return c.json({ error: 'not_found' }, 404);
+    }
     const rows = await db.select().from(schema.studentStatusHistory).where(eq(schema.studentStatusHistory.studentId, id)).orderBy(desc(schema.studentStatusHistory.changedAt)).limit(50);
     return c.json({ history: rows.map(r => ({ health: r.health, healthNote: r.healthNote, previousHealth: r.previousHealth, by: r.changedByName, at: r.changedAt })) });
   });
@@ -535,9 +560,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(data.course))).limit(1);
       if (!course) return c.json({ error: 'invalid', message: '课程不存在' }, 400);
       if (isTeacher(user.role)) {
-        const tn = user.name || '';
-        const ct = String(course.teacher || '').trim();
-        if (!tn || (ct !== tn && !ct.includes(tn))) return c.json({ error: 'forbidden', message: '只能记录自己授课课程的课情反馈' }, 403);
+        if (!sameTeacherName(course.teacher, user.name)) return c.json({ error: 'forbidden', message: '只能记录自己授课课程的课情反馈' }, 403);
         if (name !== 'lessonFeedbacks') return c.json({ error: 'forbidden', message: '授课老师仅可记录课情反馈' }, 403);
         data.opsTeacher = user.email.toLowerCase();
         data.createdBy = current ? current.createdBy : user.email;
@@ -595,8 +618,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       allowed = false;
       if (name === 'lessonFeedbacks' && String(current.opsTeacher || '').toLowerCase() === user.email.toLowerCase()) {
         const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(current.course))).limit(1);
-        const tn = user.name || '', ct = String(course?.teacher || '').trim();
-        allowed = !!tn && (ct === tn || ct.includes(tn));
+        allowed = sameTeacherName(course?.teacher, user.name);
       }
     }
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);

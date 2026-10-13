@@ -141,4 +141,25 @@ const cc=readFileSync('components/nexus/course-combobox.tsx','utf8');assert(cc.i
 const css=readFileSync('app/globals.css','utf8');
 assert(css.includes('.ops-table .num{text-align:left')&&css.includes('.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}'),'ops tables left-aligned');
 assert(css.includes('clip-path:inset(-60% -60% var(--husky-clip,0px) -60%)')&&readFileSync('components/nexus/brand.tsx','utf8').includes("'--husky-clip'"),'husky peeks from behind the tab');
+
+// Coach portal roster scope: ops course TEAM… → teams + prefer teams.teacher.
+assert.equal(O.canonicalTeacherName('郝震焜'),'郝震昆');
+assert(O.sameTeacherName('郝震焜','郝震昆'));
+assert(O.sameTeacherName('李进坚','李进坚'));
+assert(!O.sameTeacherName('李进坚','董之恒'));
+const scopeTeams=[{id:'T1',name:'TEAM 「云驿」',program:'conrad',teacher:'程雪晴'},{id:'T2',name:'TEAM「听障」',program:'conrad',teacher:'张雪航'},{id:'T3',name:'TEAM 「蓝域」',program:'conrad',teacher:'王皓萱'}];
+const scopeOps=[{id:'OC1',code:'A',name:'康莱德 「航空」TEAM 云驿 第一阶段',teacher:'李进坚'},{id:'OC2',code:'B',name:'康莱德 「网络」TEAM 听障 第一阶段',teacher:'董之恒'},{id:'OC3',code:'C',name:'康莱德「水源」TEAM 蓝域 第一阶段',teacher:'王皓萱'}];
+const scopeEnr=[{student:'s1',team:'T1',status:'进行中'},{student:'s2',team:'T2',status:'进行中'},{student:'s3',team:'T3',status:'进行中'},{student:'s4',team:'T1',status:'已退费'}];
+const scopeStu=[{id:'s1',team:'T1',status:'进行中'},{id:'s2',team:'T2',status:'进行中'},{id:'s3',team:'T3',status:'进行中'},{id:'sx',team:'T9',status:'进行中'}];
+const sc=O.teacherRosterScope('李进坚',{opsCourses:scopeOps,teams:scopeTeams,enrollments:scopeEnr,students:scopeStu});
+assert.deepEqual([...sc.teamIds].sort(),['T1']);
+assert.deepEqual([...sc.studentIds].sort(),['s1','s4']);
+assert.equal(sc.opsCourses.length,1);
+const sc2=O.teacherRosterScope('王皓萱',{opsCourses:scopeOps,teams:scopeTeams,enrollments:scopeEnr,students:scopeStu});
+assert.deepEqual([...sc2.teamIds].sort(),['T3'],'ops course + operational teams.teacher');
+assert.deepEqual([...sc2.studentIds].sort(),['s3']);
+const sc3=O.teacherRosterScope('郝震昆',{opsCourses:[{id:'OC',code:'X',name:'康莱德 「航空」TEAM 隼卫 第一阶段',teacher:'郝震焜'}],teams:[{id:'TH',name:'TEAM 「隼卫」',program:'conrad',teacher:'许瑾'}],enrollments:[],students:[]});
+assert.deepEqual([...sc3.teamIds],['TH'],'alias 郝震焜→郝震昆 matches course teacher');
+assert(readFileSync('server/app.ts','utf8').includes('teacherRosterScope')&&readFileSync('lib/nexus/store.tsx','utf8').includes('teacherRosterScope'),'API + Pages scope wired');
+
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

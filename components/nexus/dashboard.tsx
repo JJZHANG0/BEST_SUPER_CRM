@@ -6,7 +6,7 @@ import { TodoHomeCard } from './todos';
 import { useMonthAllowance } from './ops-pages';
 import { greeting } from './recruitment';
 import { useNexus, useMe } from '@/lib/nexus/store';
-import { money2, monthLabel, today as todayIso } from '@/lib/nexus/ops';
+import { money2, monthLabel, today as todayIso, teacherRosterScope } from '@/lib/nexus/ops';
 import { type Program, type Student, type Team, type Course, type Role } from '@/lib/nexus/data';
 import { occurrences, onDate, inWeek } from '@/lib/nexus/schedule';
 
@@ -57,24 +57,25 @@ export function TeacherHome() {
   const s = useNexus(), me = useMe();
   const today = todayIso(), week = weekOf(today);
   const name = me.name || s.user?.name || '';
-  const teach = (t: string) => !!name && (t === name || (!!t && t.includes(name)));
+  const scope = teacherRosterScope(name, { opsCourses: s.opsCourses, courses: s.courses, teams: s.teams, enrollments: s.enrollments, students: s.students });
   // Prefer 课程安排 (courses + sessions); fall back to 课程编号 (opsCourses) when schedule is empty.
-  const mine = s.courses.filter(c => teach(c.teacher));
-  const myOps = s.opsCourses.filter(c => teach(c.teacher));
+  const mine = scope.courses;
+  const myOps = scope.opsCourses;
   const occ = occurrences(mine, s.courseSessions);
   const todays = onDate(occ, today);
   const thisWeek = inWeek(occ, today);
   const now = new Date(today + 'T12:00:00');
-  const fb = s.lessonFeedbacks.filter(f => {
-    const c = s.opsCourses.find(x => x.id === f.course);
-    return c && teach(c.teacher);
-  }).slice(0, 5);
+  const fb = s.lessonFeedbacks.filter(f => scope.opsCourseIds.has(f.course)).slice(0, 5);
   const courseCount = mine.length || myOps.length;
+  const teamCount = scope.teamIds.size;
+  const studentCount = scope.studentIds.size;
   return <>
-    <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>查看你的课程、课表与学情反馈。</p></div>
+    <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>仅显示你负责的队伍、课程与学生。</p></div>
       <div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>授课老师工作台 · 金属灰</span></div></div></div>
     <div className="stats-grid teacher-stats">
       {[{ label: '我的课程', value: courseCount, unit: '门', path: 'courses' },
+        { label: '我的队伍', value: teamCount, unit: '支', path: 'teams' },
+        { label: '我的学生', value: studentCount, unit: '位', path: 'students' },
         { label: '本周课次', value: thisWeek.length, unit: '节', path: 'courses' },
         { label: '今日课程', value: todays.length, unit: '节', path: 'courses' },
         { label: '近期反馈', value: fb.length, unit: '条', path: 'lesson-feedback' }].map(x =>

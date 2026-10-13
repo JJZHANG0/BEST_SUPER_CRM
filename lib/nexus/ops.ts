@@ -113,6 +113,62 @@ export function courseTeams(course: { code: string; name: string }, ctx: RosterC
   }
   return { ids, via: ids.length ? 'team' : null };
 }
+/**
+ * 授课老师 name aliases (花名册 / 课程表 spelling vs login account).
+ * Match both directions so ACL and rematch stay consistent.
+ */
+export const TEACHER_NAME_ALIASES: Readonly<Record<string, string>> = {
+  '郝震焜': '郝震昆',
+};
+/** Canonical display / match key for a 授课老师 name. */
+export function canonicalTeacherName(name: unknown): string {
+  const n = String(name || '').normalize('NFKC').trim();
+  return TEACHER_NAME_ALIASES[n] || n;
+}
+/** True when two 授课老师 labels refer to the same person (exact, alias, or containment). */
+export function sameTeacherName(a: unknown, b: unknown): boolean {
+  const x = canonicalTeacherName(a), y = canonicalTeacherName(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+}
+export type TeacherScopeInput = {
+  opsCourses: readonly { id: string; code: string; name: string; teacher: string }[];
+  courses?: readonly { id: string; teacher: string; team: string; code?: string }[];
+  teams: readonly { id: string; name: string; program: string; teacher?: string }[];
+  enrollments: readonly { id?: string; student: string; team: string; status: string }[];
+  students: readonly { id: string; team: string; status: string }[];
+};
+/**
+ * Coach portal roster scope derived from existing data (no invented assignments):
+ * 1. Prefer operational `teams.teacher` when it already names this coach;
+ * 2. Plus teams linked from their ops 课程编号 via courseTeams (TEAM … in course name / schedule code);
+ * 3. Plus teams on 课程安排 rows where they are 授课老师;
+ * 4. Students = enrollments ∪ students.team for those team ids.
+ */
+export function teacherRosterScope(teacherName: string, input: TeacherScopeInput) {
+  const name = canonicalTeacherName(teacherName);
+  const mineOps = input.opsCourses.filter(c => sameTeacherName(c.teacher, name));
+  const mineCourses = (input.courses || []).filter(c => sameTeacherName(c.teacher, name));
+  const teamIds = new Set<string>();
+  for (const t of input.teams) if (sameTeacherName(t.teacher, name)) teamIds.add(t.id);
+  const ctx: RosterContext = {
+    courses: input.courses, teams: input.teams, enrollments: input.enrollments, students: input.students,
+  };
+  for (const c of mineOps) for (const id of courseTeams(c, ctx).ids) teamIds.add(id);
+  for (const c of mineCourses) if (c.team) teamIds.add(c.team);
+  const studentIds = new Set<string>();
+  for (const e of input.enrollments) if (teamIds.has(e.team)) studentIds.add(e.student);
+  for (const s of input.students) if (teamIds.has(s.team)) studentIds.add(s.id);
+  return {
+    name,
+    opsCourses: mineOps,
+    courses: mineCourses,
+    teamIds,
+    studentIds,
+    opsCourseIds: new Set(mineOps.map(c => c.id)),
+    courseIds: new Set(mineCourses.map(c => c.id)),
+  };
+}
 /** Fixed class size from a class type name (「线下8人班型」 → 8); ranges / 「及以上」 → null. */
 export function classTypeSize(name: string): number | null {
   const n = String(name || '');

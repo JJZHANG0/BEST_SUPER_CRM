@@ -12,7 +12,7 @@ import { applyTheme, writeStoredTheme, readStoredTheme, isThemeId, DEFAULT_THEME
 import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson } from './ops';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
@@ -355,6 +355,32 @@ export function Provider({children}:{children:ReactNode}){
  };
 return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
-export function useVisible(){const s=useNexus();const salesName=s.user?.salesName||'';const myName=s.user?.name||'';const students=s.students.filter(x=>s.role!=='sales'||x.sales===salesName);const teams=s.teams;const courses=s.courses.filter(c=>{if(s.role==='sales')return teams.some(t=>t.id===c.team)&&!!s.programs.find(p=>p.id===c.program)?.published;if(s.role==='teacher')return !myName||c.teacher===myName||c.teacher.includes(myName);return true});return {students,teams,courses,files:s.files.filter(f=>s.role!=='sales'||f.public),feedbacks:s.feedbacks.filter(f=>s.role!=='sales'||(f.visible&&students.some(x=>x.id===f.student)))};}
+export function useVisible(){
+  const s=useNexus();
+  const salesName=s.user?.salesName||'';
+  const myName=s.user?.name||'';
+  // Pages / localStorage bootstrap: mirror API teacher scope from ops courses + team.teacher.
+  const teacherScope=s.role==='teacher'?teacherRosterScope(myName,{
+    opsCourses:s.opsCourses,courses:s.courses,teams:s.teams,enrollments:s.enrollments,students:s.students,
+  }):null;
+  const students=s.role==='sales'?s.students.filter(x=>x.sales===salesName)
+    :s.role==='teacher'?s.students.filter(x=>teacherScope!.studentIds.has(x.id))
+    :s.students;
+  const teams=s.role==='teacher'?s.teams.filter(t=>teacherScope!.teamIds.has(t.id)):s.teams;
+  const courses=s.courses.filter(c=>{
+    if(s.role==='sales')return teams.some(t=>t.id===c.team)&&!!s.programs.find(p=>p.id===c.program)?.published;
+    if(s.role==='teacher')return teacherScope!.courseIds.has(c.id)||teacherScope!.teamIds.has(c.team);
+    return true;
+  });
+  return {
+    students,teams,courses,
+    files:s.files.filter(f=>s.role!=='sales'||f.public),
+    feedbacks:s.feedbacks.filter(f=>{
+      if(s.role==='sales')return f.visible&&students.some(x=>x.id===f.student);
+      if(s.role==='teacher')return students.some(x=>x.id===f.student);
+      return true;
+    }),
+  };
+}
 /** Display name of the signed-in user. */
 export function useMe(){const s=useNexus();const name=s.user?.name||'';return {name,initial:name.slice(0,1)||'我',email:s.user?.email||''}}
