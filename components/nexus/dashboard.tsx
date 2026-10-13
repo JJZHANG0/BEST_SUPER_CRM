@@ -68,40 +68,33 @@ export function TeacherHome() {
   const todays = onDate(occ, today);
   const thisWeek = inWeek(occ, today);
   const now = new Date(today + 'T12:00:00');
-  const fb = s.lessonFeedbacks.filter(f => scope.opsCourseIds.has(f.course)).slice(0, 5);
-  const courseCount = mine.length || myOps.length;
   const teamCount = scope.teamIds.size;
   const studentCount = scope.studentIds.size;
   return <>
-    <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>仅显示你负责的队伍、课程与学生。</p></div>
+    <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>今日课表优先；学情反馈由运营填写。</p></div>
       <WorkbenchWelcomeTools now={now} subtitle="授课老师工作台 · 金属灰" /></div>
     <div className="stats-grid teacher-stats">
-      {[{ label: '我的课程', value: courseCount, unit: '门', path: 'courses' },
-        { label: '我的队伍', value: teamCount, unit: '支', path: 'teams' },
-        { label: '我的学生', value: studentCount, unit: '位', path: 'students' },
+      {[{ label: '我的队伍', value: teamCount, unit: '支', path: 'courses' },
+        { label: '我的学生', value: studentCount, unit: '位', path: 'courses' },
         { label: '本周课次', value: thisWeek.length, unit: '节', path: 'courses' },
-        { label: '今日课程', value: todays.length, unit: '节', path: 'courses' },
-        { label: '近期反馈', value: fb.length, unit: '条', path: 'lesson-feedback' }].map(x =>
+        { label: '今日课程', value: todays.length, unit: '节', path: 'courses' }].map(x =>
         <button key={x.label} className="glass stat-card" onClick={() => s.go(x.path)}><div className="stat-top"><span>{x.label}</span></div><div className="stat-value">{x.value}<span>{x.unit}</span></div><div className="stat-foot">查看详情<ChevronRight size={13} /></div></button>)}
     </div>
-    <div className="detail-grid">
-      <section className="glass panel"><SectionTitle title={mine.length ? '今日课表' : '我的授课课程'} action="全部课程" onClick={() => s.go('courses')} />
-        {mine.length ? <>
-          <div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => s.go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
-          {todays.map(o => <button key={o.key} className="course-row" onClick={() => s.go('courses/' + o.course.id)}><span className="course-time">{o.start || o.course.time.split('–')[0]}<small>{o.date.slice(5)}</small></span><div><h3>{o.course.name}</h3><p>{o.course.teacher}{o.location ? ' · ' + o.location : ''}</p></div><ChevronRight size={17} /></button>)}
-          {!todays.length && <p className="muted">今天暂无你的课程</p>}
-        </> : <>
-          {myOps.slice(0, 8).map(c => <button key={c.id} className="course-row" onClick={() => s.go('lesson-feedback')}><span className="course-time"><small>{c.status}</small>{(c.code || '').slice(-6) || '—'}</span><div><h3>{c.name}</h3><p>{c.code}{c.startDate ? ` · ${c.startDate}` : ''}{c.endDate ? `–${c.endDate}` : ''}</p></div><ChevronRight size={17} /></button>)}
-          {!myOps.length && <p className="muted">暂未分配给你的授课课程；运营老师在系统管理中指定授课老师后会出现在这里。</p>}
-          {myOps.length > 8 && <button className="full-link" onClick={() => s.go('courses')}>查看全部 {myOps.length} 门课程 <ChevronRight size={15} /></button>}
-        </>}
-      </section>
-      <section className="glass panel"><SectionTitle title="学情反馈" action="课情反馈" onClick={() => s.go('lesson-feedback')} />
-        {fb.map(f => { const c = s.opsCourses.find(x => x.id === f.course); return <article key={f.id} className="feedback-card"><small>{f.date} · {c?.code}</small><h3>{c?.name || '课程'}</h3><p>{f.content || f.performance || '（无内容）'}</p></article>; })}
-        {!fb.length && <p className="muted">暂无关联到你授课课程的反馈；可在课情反馈中查看或补充。</p>}
-        <div className="actions" style={{ marginTop: 12 }}><button className="secondary" onClick={() => s.go('lesson-feedback?new')}><MessageSquare size={16} />写学情反馈</button></div>
-      </section>
-    </div>
+    <section className="glass panel teacher-schedule-panel">
+      <SectionTitle title={mine.length ? '今日课表' : '我的授课课程'} action="课程管理" onClick={() => s.go('courses')} />
+      {mine.length ? <>
+        <div className="mini-date teacher-week-strip"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => s.go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
+        <div className="teacher-today-list">
+          {todays.map(o => <button key={o.key} className="course-row teacher-today-row" onClick={() => s.go('courses/' + o.course.id)}><span className="course-time">{o.start || o.course.time.split('–')[0]}<small>{o.date.slice(5)}</small></span><div><h3>{o.course.name}</h3><p>{o.course.teacher}{o.location ? ' · ' + o.location : ''}{o.end ? ` · 至 ${o.end}` : ''}</p></div><ChevronRight size={17} /></button>)}
+          {!todays.length && <p className="muted today-empty">今天暂无你的课程</p>}
+        </div>
+      </> : <>
+        {myOps.slice(0, 8).map(c => <button key={c.id} className="course-row" onClick={() => s.go('courses')}><span className="course-time"><small>{c.status}</small>{(c.code || '').slice(-6) || '—'}</span><div><h3>{c.name}</h3><p>{c.code}{c.startDate ? ` · ${c.startDate}` : ''}{c.endDate ? `–${c.endDate}` : ''}</p></div><ChevronRight size={17} /></button>)}
+        {!myOps.length && <p className="muted">暂未分配给你的授课课程；运营老师在系统管理中指定授课老师后会出现在这里。</p>}
+        {myOps.length > 8 && <button className="full-link" onClick={() => s.go('courses')}>查看全部 {myOps.length} 门课程 <ChevronRight size={15} /></button>}
+      </>}
+      <button className="full-link" onClick={() => s.go('courses')}>打开课程管理 <ChevronRight size={15} /></button>
+    </section>
     <footer className="page-footer"><span>B.E.S.T · 授课老师工作空间</span><span>{s.apiMode ? '实时数据' : '预览站'}</span></footer>
   </>;
 }

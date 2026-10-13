@@ -6,6 +6,12 @@
 export type CourseSession = {
   id: string; course: string; date: string; start: string; end: string;
   /** 教室 / 线上 for this session ('' = the course's default). */ location?: string;
+  /** 课次标题（教案抽屉优先字段）. */ title?: string;
+  /** 本节课内容. */ content?: string;
+  /** 讲义 / 发放材料. */ handouts?: string;
+  /** 课后作业. */ homework?: string;
+  /** 课件 / slides. */ slides?: string;
+  /** 参考资料. */ references?: string;
 };
 /** Weekly rule: weekdays are 1 = 周一 … 7 = 周日. Ends after `count` sessions or on `until` (inclusive). */
 export type WeeklyRule = { startDate: string; weekdays: readonly number[]; start: string; end: string; count?: number | null; until?: string | null };

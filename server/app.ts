@@ -930,9 +930,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   app.put('/:collection/:id', async c => {
     const user = c.get('user'), name = c.req.param('collection'), id = c.req.param('id');
     if (name !== 'articles' && !isCollection(name)) return c.json({ error: 'not_found' }, 404);
-    // Teachers may only upsert 课情反馈 on courses where they are the 授课老师; everything else stays ops-only.
+    // Teachers may update 排课 content (title/content/…) on their own courses; 学情反馈 is ops-only.
     if (isTeacher(user.role)) {
-      if (name !== 'lessonFeedbacks') return forbidden(c);
+      if (name !== 'courseSessions') return forbidden(c);
     } else if (!canWrite(user)) return forbidden(c);
     const body = await c.req.json().catch(() => null);
     if (name === 'articles') {
@@ -958,16 +958,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
       const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(data.course))).limit(1);
       if (!course) return c.json({ error: 'invalid', message: '课程不存在' }, 400);
-      if (isTeacher(user.role)) {
-        if (!sameTeacherName(course.teacher, user.name)) return c.json({ error: 'forbidden', message: '只能记录自己授课课程的课情反馈' }, 403);
-        if (name !== 'lessonFeedbacks') return c.json({ error: 'forbidden', message: '授课老师仅可记录课情反馈' }, 403);
-        data.opsTeacher = user.email.toLowerCase();
-        data.createdBy = current ? current.createdBy : user.email;
-      } else {
-        if (!canEditOwned(user, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
-        data.opsTeacher = String(data.opsTeacher).toLowerCase();
-        data.createdBy = current ? current.createdBy : user.email;
-      }
+      if (!canEditOwned(user, user.email, String(data.opsTeacher)) || (current && !canEditOwned(user, user.email, String(current.opsTeacher)))) return c.json({ error: 'forbidden', message: '只能记录或修改自己的课时与反馈' }, 403);
+      data.opsTeacher = String(data.opsTeacher).toLowerCase();
+      data.createdBy = current ? current.createdBy : user.email;
       if (name === 'lessons' && !canEditLockedLessonMonth(user)) {
         const dates = [String(data.date || '')];
         if (current) dates.push(String(current.date || ''));
@@ -988,6 +981,18 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         if (unit === 'person_hour' && !(Number(data.actualCount) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写实到人数' }, 400);
         data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.actualCount as number | null);
       }
+    }
+    if (isTeacher(user.role) && name === 'courseSessions') {
+      const [course] = await db.select().from(schema.courses).where(eq(schema.courses.id, String(data.course))).limit(1);
+      if (!course || !sameTeacherName(course.teacher, user.name)) return c.json({ error: 'forbidden', message: '只能编辑自己授课课程的课次' }, 403);
+      const [current] = await db.select().from(schema.courseSessions).where(eq(schema.courseSessions.id, id)).limit(1);
+      if (!current) return c.json({ error: 'not_found', message: '课次不存在' }, 404);
+      // Teachers may edit lesson content only — keep schedule fields locked to the existing row.
+      data.date = current.date;
+      data.start = current.start;
+      data.end = current.end;
+      data.location = current.location ?? undefined;
+      data.course = current.course;
     }
     if (name === 'courses' || name === 'courseSessions') {
       const blocked = await scheduleGuard(name, data, id, user.name);
@@ -1022,11 +1027,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!current) return c.json({ error: 'not_found' }, 404);
     let allowed = systemCollections.includes(name) ? canManageSystem(user.role) : (scheduleCollections.includes(name) || folderCollections.includes(name)) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
     if (isTeacher(user.role)) {
-      allowed = false;
-      if (name === 'lessonFeedbacks' && String(current.opsTeacher || '').toLowerCase() === user.email.toLowerCase()) {
-        const [course] = await db.select().from(schema.opsCourses).where(eq(schema.opsCourses.id, String(current.course))).limit(1);
-        allowed = sameTeacherName(course?.teacher, user.name);
-      }
+      allowed = false; // 授课老师不可删除课时/学情反馈/排课
     }
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     if (name === 'lessons' && !canEditLockedLessonMonth(user)) {

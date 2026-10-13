@@ -120,6 +120,13 @@
       "when": 1791770000000,
       "tag": "0016_weather_work_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791780000000,
+      "tag": "0017_session_lesson_content",
+      "breakpoints": true
     }
   ]
 }

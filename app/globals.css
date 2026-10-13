@@ -2030,3 +2030,39 @@ button.welcome-date>div>span{display:block;font-size:.625rem;color:#9685a5;margi
 [data-collapsible=icon] .nexus-sidebar .portal-switch,
 .nexus-sidebar[data-collapsible=icon] .portal-switch{display:none!important}
 .portal-switch{width:100%;margin-top:8px;justify-content:center;font-size:.75rem;min-height:36px;padding:8px 10px;white-space:normal;line-height:1.35}
+
+/* teacher-portal-2026-10-13 */
+.stats-grid.teacher-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+.stats-grid.teacher-stats .stat-value{font-size:1.85rem}
+@media(max-width:1100px){.stats-grid.teacher-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.teacher-schedule-panel{padding:22px 24px 18px;margin-bottom:20px}
+.teacher-schedule-panel .section-title h2{font-size:1.125rem}
+.teacher-week-strip{margin:6px 0 16px}
+.teacher-week-strip button{min-width:48px;min-height:54px;font-size:.875rem}
+.teacher-today-list{display:flex;flex-direction:column;gap:4px}
+.teacher-today-row{padding:14px 8px;border-radius:12px}
+.teacher-today-row:hover{background:#f3f4f680}
+.teacher-today-row h3{font-size:1.05rem}
+.teacher-today-row .course-time{font-size:1.35rem}
+.teacher-course-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.teacher-course-card{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;text-align:left;padding:16px 18px;border-radius:14px;border:1px solid #e5e7eb;background:#fff9;transition:border-color .18s,box-shadow .18s,background .18s}
+.teacher-course-card:hover{border-color:#9ca3af;box-shadow:0 6px 18px #1118270d;background:#fff}
+.tcc-main{min-width:0;flex:1}
+.tcc-main strong{display:block;font-size:.95rem;font-weight:600;color:#1f2937}
+.tcc-main small{display:block;margin-top:6px;font-size:.75rem;color:#6b7280}
+.tcc-meta{display:flex;align-items:center;gap:10px;flex-shrink:0;color:#9ca3af}
+.tcc-sessions{font-size:.75rem;color:#4b5563;font-variant-numeric:tabular-nums;white-space:nowrap}
+.session-chip-clickable{padding:0!important;overflow:hidden}
+.session-chip-main{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;border-radius:8px}
+.session-chip-main:hover{background:#ebe4f6}
+html[data-workspace=teacher] .session-chip-main:hover{background:#e5e7eb}
+.session-chip-title{font-weight:600;font-size:.7rem;color:#5b3bb0;margin-left:4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-workspace=teacher] .session-chip-title{color:#374151}
+.lesson-drawer{width:min(440px,100vw)!important;max-width:440px;padding:0 0 20px;overflow-y:auto}
+.lesson-drawer-form{padding:4px 20px 8px}
+.lesson-drawer-form textarea{min-height:72px;resize:vertical}
+.timetable-name-mode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 14px}
+.timetable-name-mode button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:12px 14px;border-radius:12px;border:1px solid #e4dcf0;background:#faf8fd;color:#5a4a72;font-size:.8125rem;font-weight:600}
+.timetable-name-mode button span{font-size:.6875rem;font-weight:500;color:#9a8bb0}
+.timetable-name-mode button.selected{border-color:#8b5cf6;background:#f3edff;color:#4a3480;box-shadow:inset 0 0 0 1px #c4b0f0}
+@media(max-width:560px){.timetable-name-mode{grid-template-columns:1fr}.teacher-course-card{flex-direction:column;align-items:flex-start}.tcc-meta{width:100%;justify-content:space-between}}

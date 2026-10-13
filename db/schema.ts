@@ -163,6 +163,12 @@ export const courseSessions = pgTable('course_sessions', {
   start: text('start_time').notNull(),
   end: text('end_time').notNull(),
   location: text('location'),
+  title: text('title'),
+  content: text('content'),
+  handouts: text('handouts'),
+  homework: text('homework'),
+  slides: text('slides'),
+  references: text('reference_materials'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('course_sessions_course_idx').on(t.course), index('course_sessions_date_idx').on(t.date)]);

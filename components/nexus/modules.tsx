@@ -28,7 +28,7 @@ import {LessonsPage,LessonFeedbackPage} from './ops-pages';
 import AdminPage from './admin';
 import {ChangePasswordForm} from './password';
 import {roleLabels} from '@/lib/nexus/roles';
-import {today as todayIso,courseTeams,programOfCourseName,snapTo15,endFromDuration,durationFromRange,TIME_OPTIONS_15,DURATION_OPTIONS_MIN,minutesLabel,timeRangeIssue} from '@/lib/nexus/ops';
+import {today as todayIso,courseTeams,programOfCourseName,snapTo15,endFromDuration,durationFromRange,TIME_OPTIONS_15,DURATION_OPTIONS_MIN,minutesLabel,timeRangeIssue,teacherRosterScope} from '@/lib/nexus/ops';
 import {resizeAvatar} from '@/lib/nexus/avatar';
 import {TeacherPicker} from './teacher-picker';
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from '@/components/ui/select';
@@ -105,16 +105,49 @@ export function TeamDetail({id}:{id:string}){const s=useNexus(),v=useVisible(),t
 export function CourseRow({id}:{id:string}){const s=useNexus(),c=s.courses.find(x=>x.id===id);if(!c)return null;return <button className="course-row" onClick={()=>s.go('courses/'+id)}><span className="course-time">{c.time.split('–')[0]}<small>{c.date.slice(5)}</small></span><div><h3>{c.name}</h3><p>{s.programs.find(p=>p.id===c.program)?.short} · {s.teams.find(t=>t.id===c.team)?.name} · {c.teacher}</p></div><Badge tone={c.status==='已完成'?'green':'violet'}>{c.status}</Badge><ChevronRight size={17}/></button>}
 /** One meeting row (a session, or a course without sessions). */
 export function OccurrenceRow({o}:{o:Occurrence<Course>}){const s=useNexus(),c=o.course;return <button className="course-row" onClick={()=>s.go('courses/'+c.id)}><span className="course-time">{o.start||c.time.split('–')[0]}<small>{o.date.slice(5)}</small></span><div><h3>{c.name}{c.code&&<em className="course-code">{c.code}</em>}</h3><p>{s.programs.find(p=>p.id===c.program)?.short} · {s.teams.find(t=>t.id===c.team)?.name||'未关联队伍'} · {c.teacher}{o.location?' · '+o.location:''}</p></div><Badge tone={c.status==='已完成'?'green':'violet'}>{o.start&&o.end?`${o.start}–${o.end}`:c.status}</Badge><ChevronRight size={17}/></button>}
-export function Courses(){const s=useNexus(),v=useVisible();const initial=new URLSearchParams(s.route.split('?')[1]).get('date')||todayIso();const [date,setDate]=useState(initial),[mode,setMode]=useState('周视图'),[exporting,setExporting]=useState(false);const teacherName=s.user?.name||'';const teacherOps=s.role==='teacher'?s.opsCourses.filter(c=>c.teacher===teacherName||(!!teacherName&&c.teacher.includes(teacherName))):[];const occ=occurrences(v.courses,s.courseSessions);const on=(d:string)=>occ.filter(o=>o.date===d);const list=on(date);const ym=date.slice(0,7),[yy,mm]=ym.split('-').map(Number);const days=new Date(yy,mm,0).getDate();const dates=Array.from({length:days},(_,i)=>`${ym}-${String(i+1).padStart(2,'0')}`);const lead=new Date(yy,mm-1,1).getDay();const di=Math.max(0,dates.indexOf(date));const weekStart=Math.max(0,Math.min(dates.length-7,di-((new Date(date+'T12:00:00').getDay()+6)%7)));return <><PageTitle title="课程安排" en="COURSE CALENDAR" description="把每一节课，变成向前的一步。支持每周重复排课；可导出给学生/家长/销售的友好课表。" action={s.role!=='sales'&&s.role!=='teacher'?'新建课程':undefined} onAction={()=>s.go('courses/new')}/><section className="glass panel"><div className="calendar-toolbar"><h2>{yy} 年 {mm} 月</h2><label className="date-picker">选择日期<input aria-label="选择课程日期" type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><div className="desktop-filters"><Choice value={mode} onChange={setMode} options={['月视图','周视图','列表视图']} label="日历视图"/></div><button type="button" className="secondary compact export-timetable" onClick={()=>setExporting(true)}><Download size={15}/>导出课表 · 学生/家长</button></div><div className={'desktop-calendar '+(mode==='月视图'?'month':'week')}>{mode==='月视图'&&Array.from({length:lead},(_,i)=><div className="calendar-blank" key={'blank'+i}/>)}{mode!=='列表视图'&&(mode==='月视图'?dates:dates.slice(weekStart,weekStart+7)).map(d=><button key={d} className={d===date?'selected':''} onClick={()=>setDate(d)}><b>{Number(d.slice(-2))}</b><small>{['周日','周一','周二','周三','周四','周五','周六'][new Date(d+'T12:00:00').getDay()]}</small>{on(d).map(o=><span key={o.key}>{(o.start||o.course.time).slice(0,5)} {o.course.name}</span>)}</button>)}</div><div className="mobile-date-strip">{dates.map(d=><button key={d} ref={el=>{if(el&&d===date&&el.parentElement)el.parentElement.scrollLeft=el.offsetLeft-el.parentElement.offsetLeft-el.parentElement.clientWidth/2+22}} className={d===date?'selected':''} onClick={()=>setDate(d)}><small>{['日','一','二','三','四','五','六'][new Date(d+'T12:00:00').getDay()]}</small><b>{Number(d.slice(-2))}</b><i className={occ.some(o=>o.date===d)?'has-course':''}/></button>)}</div><SectionTitle title={`${date} · ${list.length} 节课程`}/>{list.map(o=><OccurrenceRow key={o.key} o={o}/>)}{!list.length&&!(s.role==='teacher'&&!v.courses.length&&teacherOps.length)&&<div className="empty-calendar"><CalendarDays size={32}/><h3>当天暂无课程</h3><p>{s.role!=='sales'&&s.role!=='teacher'?'切换日期，或新建一节课程。':'切换日期，查看其他课程安排。'}</p></div>}{s.role==='teacher'&&!v.courses.length&&!!teacherOps.length&&<div className="ops-table-wrap" style={{marginTop:12}}><Table className="ops-table"><TableHeader><TableRow>{['课程编号','课程名称','状态','起止'].map(h=><TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{teacherOps.map(c=><TableRow key={c.id}><TableCell className="mono">{c.code}</TableCell><TableCell><strong className="cell-title">{c.name}</strong></TableCell><TableCell>{c.status}</TableCell><TableCell>{[c.startDate,c.endDate].filter(Boolean).join(' – ')||'—'}</TableCell></TableRow>)}</TableBody></Table></div>}</section>{exporting&&<TimetableExportDialog open={exporting} onClose={()=>setExporting(false)} initialDate={date}/>}</>}
+export function Courses(){
+  const s=useNexus(),v=useVisible();
+  if(s.role==='teacher')return <TeacherCourseList/>;
+  const initial=new URLSearchParams(s.route.split('?')[1]).get('date')||todayIso();
+  const [date,setDate]=useState(initial),[mode,setMode]=useState('周视图'),[exporting,setExporting]=useState(false);
+  const occ=occurrences(v.courses,s.courseSessions);const on=(d:string)=>occ.filter(o=>o.date===d);const list=on(date);
+  const ym=date.slice(0,7),[yy,mm]=ym.split('-').map(Number);const days=new Date(yy,mm,0).getDate();
+  const dates=Array.from({length:days},(_,i)=>`${ym}-${String(i+1).padStart(2,'0')}`);
+  const lead=new Date(yy,mm-1,1).getDay();const di=Math.max(0,dates.indexOf(date));
+  const weekStart=Math.max(0,Math.min(dates.length-7,di-((new Date(date+'T12:00:00').getDay()+6)%7)));
+  return <><PageTitle title="课程安排" en="COURSE CALENDAR" description="把每一节课，变成向前的一步。支持每周重复排课；可导出给学生/家长/销售的友好课表。" action={s.role!=='sales'?'新建课程':undefined} onAction={()=>s.go('courses/new')}/><section className="glass panel"><div className="calendar-toolbar"><h2>{yy} 年 {mm} 月</h2><label className="date-picker">选择日期<input aria-label="选择课程日期" type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><div className="desktop-filters"><Choice value={mode} onChange={setMode} options={['月视图','周视图','列表视图']} label="日历视图"/></div><button type="button" className="secondary compact export-timetable" onClick={()=>setExporting(true)}><Download size={15}/>导出课表 · 学生/家长</button></div><div className={'desktop-calendar '+(mode==='月视图'?'month':'week')}>{mode==='月视图'&&Array.from({length:lead},(_,i)=><div className="calendar-blank" key={'blank'+i}/>)}{mode!=='列表视图'&&(mode==='月视图'?dates:dates.slice(weekStart,weekStart+7)).map(d=><button key={d} className={d===date?'selected':''} onClick={()=>setDate(d)}><b>{Number(d.slice(-2))}</b><small>{['周日','周一','周二','周三','周四','周五','周六'][new Date(d+'T12:00:00').getDay()]}</small>{on(d).map(o=><span key={o.key}>{(o.start||o.course.time).slice(0,5)} {o.course.name}</span>)}</button>)}</div><div className="mobile-date-strip">{dates.map(d=><button key={d} ref={el=>{if(el&&d===date&&el.parentElement)el.parentElement.scrollLeft=el.offsetLeft-el.parentElement.offsetLeft-el.parentElement.clientWidth/2+22}} className={d===date?'selected':''} onClick={()=>setDate(d)}><small>{['日','一','二','三','四','五','六'][new Date(d+'T12:00:00').getDay()]}</small><b>{Number(d.slice(-2))}</b><i className={occ.some(o=>o.date===d)?'has-course':''}/></button>)}</div><SectionTitle title={`${date} · ${list.length} 节课程`}/>{list.map(o=><OccurrenceRow key={o.key} o={o}/>)}{!list.length&&<div className="empty-calendar"><CalendarDays size={32}/><h3>当天暂无课程</h3><p>{s.role!=='sales'?'切换日期，或新建一节课程。':'切换日期，查看其他课程安排。'}</p></div>}</section>{exporting&&<TimetableExportDialog open={exporting} onClose={()=>setExporting(false)} initialDate={date}/>}</>;
+}
+/** 授课老师 · 课程管理：系列/队伍课程列表 → 班级详情. */
+function TeacherCourseList(){
+  const s=useNexus(),v=useVisible();
+  const name=s.user?.name||'';
+  const scope=teacherRosterScope(name,{opsCourses:s.opsCourses,courses:s.courses,teams:s.teams,enrollments:s.enrollments,students:s.students});
+  const list=[...v.courses].sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')||(a.code||'').localeCompare(b.code||''));
+  const sessionCount=(id:string)=>s.courseSessions.filter(x=>x.course===id).length;
+  return <><PageTitle title="课程管理" en="MY CLASSES" description="你负责的系列 / 队伍课程。点击进入班级详情，在排课中编辑课次教案。"/>
+    <section className="glass panel">
+      <div className="results-meta">{list.length} 门课程<span>按名称排序 · 点击进入班级详情</span></div>
+      {list.length? <div className="teacher-course-list">{list.map(c=>{
+        const team=s.teams.find(t=>t.id===c.team);const prog=s.programs.find(p=>p.id===c.program);const n=sessionCount(c.id);
+        return <button key={c.id} type="button" className="teacher-course-card" onClick={()=>s.go('courses/'+c.id)}>
+          <div className="tcc-main"><strong>{c.name}</strong><small>{[prog?.short||prog?.name,team?.name,c.code].filter(Boolean).join(' · ')||'未关联项目'}</small></div>
+          <div className="tcc-meta"><Badge tone={c.status==='已完成'?'green':'violet'}>{c.status}</Badge><span className="tcc-sessions">排课 {n} 节</span><ChevronRight size={17}/></div>
+        </button>;
+      })}</div> : <EmptyState icon={CalendarDays} title="暂无授课课程" description={scope.opsCourses.length?'运营已指定课程编号，但尚未在课程安排中排课。':'运营老师在系统管理中指定你为授课老师后，系列课程会出现在这里。'}/>}
+    </section></>;
+}
 export function CourseDetail({id}:{id:string}){
   const s=useNexus(),v=useVisible(),c=v.courses.find(x=>x.id===id);
   const [exporting,setExporting]=useState(false);
   const [editSession,setEditSession]=useState<CourseSession|null>(null);
   const [draft,setDraft]=useState({date:'',start:'',end:'',duration:90});
   const [pickDelete,setPickDelete]=useState(false);
+  const [lessonSession,setLessonSession]=useState<CourseSession|null>(null);
+  const [lessonDraft,setLessonDraft]=useState({title:'',content:'',handouts:'',homework:'',slides:'',references:''});
   if(!c)return <NoResults/>;
   const ss=s.courseSessions.filter(x=>x.course===c.id).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
   const canEdit=s.role!=='sales'&&s.role!=='teacher';
+  const canEditLesson=s.role!=='sales';
 
   const syncCourseAnchor=(sessions:CourseSession[])=>{
     if(!sessions.length)return;
@@ -167,6 +200,18 @@ export function CourseDetail({id}:{id:string}){
     setDraft({date:x.date,start:snapTo15(x.start)||x.start,end:endFromDuration(snapTo15(x.start)||x.start,dur)||x.end,duration:dur});
     setEditSession(x);
   };
+  const openLesson=(x:CourseSession)=>{
+    setLessonDraft({title:x.title||'',content:x.content||'',handouts:x.handouts||'',homework:x.homework||'',slides:x.slides||'',references:x.references||''});
+    setLessonSession(x);
+  };
+  const saveLesson=()=>{
+    if(!lessonSession)return;
+    const next={...lessonSession,title:lessonDraft.title.trim(),content:lessonDraft.content.trim(),handouts:lessonDraft.handouts.trim(),homework:lessonDraft.homework.trim(),slides:lessonDraft.slides.trim(),references:lessonDraft.references.trim()};
+    s.setCourseSessions(a=>a.map(x=>x.id===lessonSession.id?next:x));
+    s.log(`编辑课次教案：${c.name} · ${next.date} ${next.start}–${next.end}${next.title?' · '+next.title:''}`);
+    toast.success('课次教案已保存');
+    setLessonSession(null);
+  };
   const saveSession=()=>{
     if(!editSession)return;
     const start=snapTo15(draft.start)||draft.start;
@@ -175,10 +220,7 @@ export function CourseDetail({id}:{id:string}){
     if(!draft.date)return toast.error('请选择上课日期');
     if(issue)return toast.error(issue);
     const next={...editSession,date:draft.date,start,end};
-    // Conflict check against other courses (ignore own course sessions except this one stays under same courseId filter in scheduleConflicts via courseId).
     const hits=scheduleConflicts([{date:next.date,start:next.start,end:next.end,location:next.location||c.location}],{courseId:c.id,teacher:c.teacher,opsTeacher:s.user?.name||'',team:c.team,location:c.location},s.courses,s.courseSessions.filter(x=>x.id!==editSession.id));
-    // Note: scheduleConflicts filters out all sessions of courseId, so sibling sessions of the same cycle are not checked.
-    // Check siblings manually:
     const sibling=ss.find(x=>x.id!==editSession.id&&x.date===next.date&&!(x.end<=next.start||next.end<=x.start));
     if(sibling)return toast.error(`与本周期其他课次时间重叠（${sibling.date} ${sibling.start}–${sibling.end}）`);
     if(hits.length&&!window.confirm(`与已有课程时间冲突：${hits[0].courseName}（${hits[0].date} ${hits[0].start}–${hits[0].end} · ${hits[0].reasons.map(r=>conflictReasonLabel[r]).join('、')}）。仍要强制设定本课次？`))return;
@@ -190,37 +232,36 @@ export function CourseDetail({id}:{id:string}){
     setEditSession(null);
   };
 
-  return <><Back to="courses"/><div className="page-title"><div><div className="eyebrow">COURSE DETAILS</div><h1>{c.name}</h1><p>{s.programs.find(p=>p.id===c.program)?.name}</p></div><Badge>{c.status}</Badge></div>
+  return <><Back to="courses"/><div className="page-title"><div><div className="eyebrow">班级详情</div><h1>{c.name}</h1><p>{s.programs.find(p=>p.id===c.program)?.name}{s.teams.find(t=>t.id===c.team)?` · ${s.teams.find(t=>t.id===c.team)!.name}`:''}</p></div><Badge>{c.status}</Badge></div>
   <div className="detail-grid"><section className="glass panel prose">
     <Info items={[["上课时间",`${c.date} ${c.time}`],["授课老师",c.teacher],["所属队伍",s.teams.find(t=>t.id===c.team)?.name||'未关联'],['教室 / 线上',c.location||'线上直播'],...(c.code?[['课程编号',c.code] as [string,string]]:[])]}/>
-    {ss.length>0&&<><h2>排课 · 共 {ss.length} 节{canEdit?' · 可编辑单节':''}</h2>
-      <div className="session-list">{ss.map((x,i)=><span key={x.id} className={(x.date<todayIso()?'past':'')+(canEdit?' session-chip-editable':'')}>
-        <em>{i+1}</em>{x.date.slice(5).replace('-','/')} {weekdayLabels[isoWeekday(x.date)-1]} {x.start}–{x.end}
-        {canEdit&&<><button type="button" className="session-chip-btn" aria-label={`编辑第 ${i+1} 节`} title="编辑本课次" onClick={()=>openEdit(x)}><Pencil size={12}/></button>
+    {ss.length>0&&<><h2>排课 · 共 {ss.length} 节{canEditLesson?' · 点击课次编辑教案':''}</h2>
+      <div className="session-list">{ss.map((x,i)=><span key={x.id} className={(x.date<todayIso()?'past':'')+' session-chip-clickable'+(canEdit?' session-chip-editable':'')+(x.title?' has-title':'')}>
+        <button type="button" className="session-chip-main" onClick={()=>openLesson(x)} title={x.title||'编辑课次教案'}>
+          <em>{i+1}</em>{x.date.slice(5).replace('-','/')} {weekdayLabels[isoWeekday(x.date)-1]} {x.start}–{x.end}{x.title?<b className="session-chip-title">{x.title}</b>:null}
+        </button>
+        {canEdit&&<><button type="button" className="session-chip-btn" aria-label={`调整第 ${i+1} 节时间`} title="调整上课时间" onClick={()=>openEdit(x)}><Pencil size={12}/></button>
         <button type="button" className="session-chip-btn danger" aria-label={`删除第 ${i+1} 节`} title="删除本课次" onClick={()=>deleteOneSession(x)}><Trash2 size={12}/></button></>}
       </span>)}</div></>}
-    <h2>教学目标</h2><p>梳理当前研究与实践进展，讨论关键问题，并明确下一阶段任务。</p>
-    <h2>课前准备</h2><p>请提前阅读项目资料，整理小组问题清单与当前成果。</p>
-    <h2>课后任务</h2><p>根据课堂建议完善本阶段成果，在下次课程前完成组内讨论。</p>
+    {!ss.length&&<p className="muted">尚未排课。</p>}
   </section>
   <section className="glass panel form-stack"><h2>课程记录</h2>
     <button className="primary export-timetable" onClick={()=>setExporting(true)}><CalendarHeart size={17}/>导出课表 · 学生/家长</button>
     {canEdit?<><button className="primary" onClick={()=>s.go('courses/'+id+'/edit')}>编辑课程</button>
-      <button className="secondary" onClick={()=>s.go('feedback/new?course='+id)}>记录课程反馈</button>
       <button className="secondary" disabled={c.status==='已完成'} onClick={()=>{s.setCourses(a=>a.map(x=>x.id===id?{...x,status:'已完成'}:x));s.log('完成课程：'+c.name);toast.success('课程已标记为完成')}}><Check size={17}/>{c.status==='已完成'?'课程已完成':'标记课程完成'}</button>
       <div className="course-danger-actions">
         <button type="button" className="secondary danger-soft" onClick={deleteThisCourse}><Trash2 size={16}/>删除本课程</button>
         <button type="button" className="secondary danger-soft" onClick={deleteCycle}><Trash2 size={16}/>删除本周期课程</button>
         <small className="muted">{ss.length>1?'「删除本课程」可删单节；「删除本周期课程」将删除全部课次。':'删除本课程与删除本周期效果相同（仅一节）。'}</small>
       </div>
-    </>:<p className="muted">可在学生详情中查看老师发布的教学反馈。</p>}
+    </>:s.role==='teacher'?<p className="muted">点击左侧排课课次，在右侧抽屉中编辑课次标题、内容、讲义、作业、课件与参考资料。</p>:<p className="muted">可在学生详情中查看老师发布的教学反馈。</p>}
   </section></div>
   {exporting&&<ParentTimetableDialog courseId={id} onClose={()=>setExporting(false)}/>}
   {pickDelete&&<Dialog open onOpenChange={open=>{if(!open)setPickDelete(false)}}><DialogContent className="session-pick-dialog"><DialogTitle>选择要删除的课次</DialogTitle><DialogDescription>删除单节后，其余课次仍保留在本周期中。</DialogDescription>
     <div className="session-pick-list">{ss.map((x,i)=><button key={x.id} type="button" className="session-pick-row" onClick={()=>deleteOneSession(x)}><em>{i+1}</em><span>{x.date} {weekdayLabels[isoWeekday(x.date)-1]} {x.start}–{x.end}</span><Trash2 size={15}/></button>)}</div>
     <button type="button" className="secondary" onClick={()=>setPickDelete(false)}>取消</button>
   </DialogContent></Dialog>}
-  {editSession&&<Dialog open onOpenChange={open=>{if(!open)setEditSession(null)}}><DialogContent className="session-edit-dialog"><DialogTitle>编辑本课次</DialogTitle><DialogDescription>仅修改这一节，不影响本周期其他课次。</DialogDescription>
+  {editSession&&<Dialog open onOpenChange={open=>{if(!open)setEditSession(null)}}><DialogContent className="session-edit-dialog"><DialogTitle>调整上课时间</DialogTitle><DialogDescription>仅修改这一节的日期与时间，不影响教案内容。</DialogDescription>
     <div className="form-stack session-edit-form">
       <FormField label="上课日期"><input type="date" required value={draft.date} onChange={e=>setDraft(d=>({...d,date:e.target.value}))}/></FormField>
       <div className="time-range time-range-duration">
@@ -231,6 +272,23 @@ export function CourseDetail({id}:{id:string}){
       <div className="actions"><button type="button" className="secondary" onClick={()=>setEditSession(null)}>取消</button><button type="button" className="primary" onClick={saveSession}>保存本课次</button></div>
     </div>
   </DialogContent></Dialog>}
+  <Sheet open={!!lessonSession} onOpenChange={open=>{if(!open)setLessonSession(null)}}>
+    <SheetContent side="right" className="lesson-drawer">
+      <SheetHeader>
+        <SheetTitle>编辑课次教案</SheetTitle>
+        <SheetDescription>{lessonSession?`${lessonSession.date} ${weekdayLabels[isoWeekday(lessonSession.date)-1]} ${lessonSession.start}–${lessonSession.end}`:'课次'} · {c.name}</SheetDescription>
+      </SheetHeader>
+      {canEditLesson?<div className="form-stack lesson-drawer-form">
+        <FormField label="课次标题"><input autoFocus value={lessonDraft.title} onChange={e=>setLessonDraft(d=>({...d,title:e.target.value}))} placeholder="例如：PESTEL 与行业分析入门" maxLength={200}/></FormField>
+        <FormField label="本节课内容"><textarea rows={5} value={lessonDraft.content} onChange={e=>setLessonDraft(d=>({...d,content:e.target.value}))} placeholder="课堂流程、核心知识点…"/></FormField>
+        <FormField label="讲义 / 发放材料"><textarea rows={3} value={lessonDraft.handouts} onChange={e=>setLessonDraft(d=>({...d,handouts:e.target.value}))} placeholder="讲义链接或说明…"/></FormField>
+        <FormField label="课后作业"><textarea rows={3} value={lessonDraft.homework} onChange={e=>setLessonDraft(d=>({...d,homework:e.target.value}))} placeholder="作业要求与截止…"/></FormField>
+        <FormField label="课件 / Slides"><textarea rows={3} value={lessonDraft.slides} onChange={e=>setLessonDraft(d=>({...d,slides:e.target.value}))} placeholder="课件链接或页码…"/></FormField>
+        <FormField label="参考资料"><textarea rows={3} value={lessonDraft.references} onChange={e=>setLessonDraft(d=>({...d,references:e.target.value}))} placeholder="延伸阅读、案例来源…"/></FormField>
+        <div className="actions"><button type="button" className="secondary" onClick={()=>setLessonSession(null)}>取消</button><button type="button" className="primary" onClick={saveLesson}>保存教案</button></div>
+      </div>:<p className="muted" style={{padding:'0 16px'}}>当前身份无法编辑课次教案。</p>}
+    </SheetContent>
+  </Sheet>
 </>;
 }
 
@@ -318,7 +376,7 @@ export function EditForm({kind, editId}:{kind:string; editId?:string}){const s=u
   </>}
 export function Analytics(){const s=useNexus(),v=useVisible();return <><PageTitle title="运营概览" en="OPERATIONS ANALYTICS" description="从数据出发，看见项目的整体进展。"/><div className="mini-stats">{[['学生总数',v.students.length],['活跃队伍',v.teams.length],['已完成课程',v.courses.filter(x=>x.status==='已完成').length],['待完成课程',v.courses.filter(x=>x.status!=='已完成').length]].map(([a,b])=><div className="glass" key={a}><span>{a}</span><b>{b}</b></div>)}</div><div className="detail-grid"><section className="glass panel"><SectionTitle title="项目学生分布" sub="按当前记录统计"/>{s.programs.map(p=>{const n=v.students.filter(x=>x.program===p.id).length;return <div className="distribution" key={p.id}><span>{p.short}</span><Meter value={n/(v.students.length||1)*100}/><b>{n} 人</b></div>})}</section><section className="glass panel"><SectionTitle title="最近操作记录"/>{s.logs.map((l,i)=><div className="log-row" key={i}><span/><p>{l}</p><small>本次登录</small></div>)}</section></div></>}
 
-export function Profile(){const s=useNexus();const [pw,setPw]=useState(false);const [city,setCity]=useState(s.user?.weatherCity||'杭州');const [cityBusy,setCityBusy]=useState(false);const name=s.user?.name||'';const avatar=s.user?.avatar;const demo=s.user?.email==='sales@nexus.demo';const scope=s.leader?'查看全部老师的课时记录与教务津贴（按老师分开）、审核绩效、指派任务；不填写当月绩效。':s.role==='superadmin'?'可在系统管理中维护账号、项目、课程与津贴标准；课时记录、津贴与绩效只看自己的。':s.role==='sales'?'查看项目资料与自己负责的学生。':s.role==='teacher'?'查看本人授课课程、课表与学情反馈。':'维护运营数据，记录自己负责课程的课时与课情反馈。';
+export function Profile(){const s=useNexus();const [pw,setPw]=useState(false);const [city,setCity]=useState(s.user?.weatherCity||'杭州');const [cityBusy,setCityBusy]=useState(false);const name=s.user?.name||'';const avatar=s.user?.avatar;const demo=s.user?.email==='sales@nexus.demo';const scope=s.leader?'查看全部老师的课时记录与教务津贴（按老师分开）、审核绩效、指派任务；不填写当月绩效。':s.role==='superadmin'?'可在系统管理中维护账号、项目、课程与津贴标准；课时记录、津贴与绩效只看自己的。':s.role==='sales'?'查看项目资料与自己负责的学生。':s.role==='teacher'?'查看本人授课课程与课表；学情反馈由运营填写。':'维护运营数据，记录自己负责课程的课时与课情反馈。';
 const pick=async(e:React.ChangeEvent<HTMLInputElement>)=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;try{const url=await resizeAvatar(f);const err=await s.updateAvatar(url);if(err)toast.error(err);else toast.success('头像已更新')}catch(err){toast.error(err instanceof Error?err.message:'头像处理失败')}};
 const saveCity=async()=>{setCityBusy(true);const err=await s.updateWeatherCity(city);setCityBusy(false);if(err)toast.error(err);else toast.success('天气城市已更新')};
 useEffect(()=>{setCity(s.user?.weatherCity||'杭州')},[s.user?.weatherCity]);
@@ -333,6 +391,6 @@ return <><PageTitle title="个人设置" en="PROFILE & ACCOUNT" description="你
 {!s.apiMode&&<p className="settings-note"><ShieldCheck size={13}/>预览站：数据与改密只保存在当前浏览器。</p>}</div>
 <Dialog open={pw} onOpenChange={setPw}><DialogContent className="password-dialog"><DialogTitle>修改密码</DialogTitle><DialogDescription>建议定期更换，至少 10 位并包含字母和数字。</DialogDescription><ChangePasswordForm onDone={()=>setPw(false)}/></DialogContent></Dialog></>}
 export function Announcements(){return <AnnouncementsPage/>}
-export default function Modules(){const s=useNexus();const [path,id,action]=s.route.split('?')[0].split('/');if(s.role==='sales'&&!['programs','articles','students','resources','profile'].includes(path))return <NoResults/>;if(s.role==='teacher'&&!['courses','lesson-feedback','profile','feedback'].includes(path))return <NoResults/>;if(path==='articles')return id?(action==='edit'?<PostEditor key={id} id={id}/>:<PostReader id={id}/>):<PostsPage/>;if(path==='lessons')return <LessonsPage/>;if(path==='lesson-feedback')return <LessonFeedbackPage/>;if(path==='admin')return <AdminPage/>;if(path==='kpi-review')return <KpiReviewPage/>;if(path==='todos-done')return <TodosDoneRedirect/>;if(path==='todos')return <TodosPage/>;if(path==='students'&&action==='edit')return <StudentEditor id={id}/>;if(path==='courses'&&action==='edit'&&id)return <EditForm kind="courses" editId={id}/>;if(path==='students'&&action==='enroll')return <EnrollmentForm id={id}/>;if(id==='new'||id==='upload')return <EditForm kind={path}/>;if(path==='programs'&&id&&action==='article')return <ArticleReader id={id}/>;if(path==='programs'&&id&&action==='compose')return <ArticleEditor id={id}/>;if(path==='programs')return id?<ProgramDetail id={id}/>:<ProgramHub/>;if(path==='students')return id?<StudentDetail id={id}/>:<Students/>;if(path==='teams')return id?<TeamDetail id={id}/>:<Teams/>;if(path==='courses')return id?<CourseDetail id={id}/>:<Courses/>;if(path==='resources')return <Resources/>;if(path==='feedback'){s.go('lesson-feedback');return null;}if(path==='analytics')return <Analytics/>;if(path==='announcements')return <Announcements/>;if(path==='profile')return <Profile/>;return <NoResults/>}
+export default function Modules(){const s=useNexus();const [path,id,action]=s.route.split('?')[0].split('/');if(s.role==='sales'&&!['programs','articles','students','resources','profile'].includes(path))return <NoResults/>;if(s.role==='teacher'&&!['courses','profile'].includes(path))return <NoResults/>;if(path==='articles')return id?(action==='edit'?<PostEditor key={id} id={id}/>:<PostReader id={id}/>):<PostsPage/>;if(path==='lessons')return <LessonsPage/>;if(path==='lesson-feedback')return <LessonFeedbackPage/>;if(path==='admin')return <AdminPage/>;if(path==='kpi-review')return <KpiReviewPage/>;if(path==='todos-done')return <TodosDoneRedirect/>;if(path==='todos')return <TodosPage/>;if(path==='students'&&action==='edit')return <StudentEditor id={id}/>;if(path==='courses'&&action==='edit'&&id)return <EditForm kind="courses" editId={id}/>;if(path==='students'&&action==='enroll')return <EnrollmentForm id={id}/>;if(id==='new'||id==='upload')return <EditForm kind={path}/>;if(path==='programs'&&id&&action==='article')return <ArticleReader id={id}/>;if(path==='programs'&&id&&action==='compose')return <ArticleEditor id={id}/>;if(path==='programs')return id?<ProgramDetail id={id}/>:<ProgramHub/>;if(path==='students')return id?<StudentDetail id={id}/>:<Students/>;if(path==='teams')return id?<TeamDetail id={id}/>:<Teams/>;if(path==='courses')return id?<CourseDetail id={id}/>:<Courses/>;if(path==='resources')return <Resources/>;if(path==='feedback'||(path==='lesson-feedback'&&s.role==='teacher')){s.go(s.role==='teacher'?'courses':'lesson-feedback');return null;}if(path==='analytics')return <Analytics/>;if(path==='announcements')return <Announcements/>;if(path==='profile')return <Profile/>;return <NoResults/>}
 export function StudentEditor({id}:{id:string}){const s=useNexus(),x=s.students.find(x=>x.id===id);const [name,setName]=useState(x?.name??''),[grade,setGrade]=useState(x?.grade??'高一'),[sales,setSales]=useState(x?.sales??''),[team,setTeam]=useState(s.teams.find(t=>t.id===x?.team)?.name||'待分配');if(!x||s.role==='sales')return <NoResults/>;return <><Back to={'students/'+id}/><PageTitle title="编辑学生档案" en="STUDENT PROFILE" description="维护学生档案与负责人的协作关系。"/><form className="glass panel form-page form-stack" onSubmit={e=>{e.preventDefault();const t=s.teams.find(t=>t.name===team);s.setStudents(a=>a.map(i=>i.id===id?{...i,name:name.trim(),grade,sales:sales.trim(),team:t?.id||'',updated:'刚刚'}:i));s.setEnrollments(a=>a.map(i=>i.student===id&&i.program===x.program?{...i,team:t?.id||''}:i));s.log('编辑学生档案：'+name);toast.success('学生档案已更新');s.go('students/'+id)}}><FormField label="学生姓名"><input autoFocus required maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></FormField><FormField label="年级"><Choice label="年级" value={grade} onChange={setGrade} options={['初三','高一','高二','高三']}/></FormField><FormField label="负责销售"><input maxLength={80} value={sales} onChange={e=>setSales(e.target.value)} placeholder="顾问 Alex"/></FormField><FormField label="当前项目队伍"><Choice label="当前项目队伍" value={team} onChange={setTeam} options={['待分配',...s.teams.filter(t=>t.program===x.program).map(t=>t.name)]}/></FormField><button className="primary self-start" type="submit">保存档案</button></form></>}
 export function EnrollmentForm({id}:{id:string}){const s=useNexus(),x=s.students.find(x=>x.id===id);const available=s.programs.filter(p=>!s.enrollments.some(e=>e.student===id&&e.program===p.id));const [program,setProgram]=useState(available[0]?.name??''),[team,setTeam]=useState('待分配'),[status,setStatus]=useState('待开课');if(!x||s.role==='sales')return <NoResults/>;return <><Back to={'students/'+id}/><PageTitle title="关联新项目" en="PROGRAM ENROLLMENT" description={x.name+' · 为每一个项目保留独立的参与记录。'}/>{!available.length?<Notice>此学生已关联全部项目。</Notice>:<form className="glass panel form-page form-stack" onSubmit={e=>{e.preventDefault();const p=s.programs.find(p=>p.name===program)!;if(s.enrollments.some(e=>e.student===id&&e.program===p.id))return toast.error('已关联此项目');s.setEnrollments(a=>[...a,{id:'E-'+Date.now(),student:id,program:p.id,team:s.teams.find(t=>t.name===team)?.id||'',status}]);s.log(x.name+' 关联项目：'+p.name);toast.success('项目参与记录已创建');s.go('students/'+id)}}><FormField label="报名项目"><Choice label="报名项目" value={program} onChange={v=>{setProgram(v);setTeam('待分配')}} options={available.map(p=>p.name)}/></FormField><FormField label="关联队伍"><Choice label="关联队伍" value={team} onChange={setTeam} options={['待分配',...s.teams.filter(t=>t.program===s.programs.find(p=>p.name===program)?.id).map(t=>t.name)]}/></FormField><FormField label="项目参与状态"><Choice label="项目参与状态" value={status} onChange={setStatus} options={['待分配','待开课','进行中','暂停中','已结项','已退出']}/></FormField><button type="submit" className="primary self-start">保存项目关联</button></form>}</>}
