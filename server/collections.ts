@@ -15,7 +15,8 @@ const unit = z.enum(['hour', 'person_hour', 'session']);
 const status = z.enum(courseStatuses as unknown as [string, ...string[]]);
 export const recordSchemas = {
   programs: z.object({ id, name: s(), en: s(), short: s(40), type: s(40), color: s(20), description: s(1000), date: s(20), status: s(40), curriculum: s(5000), draft: s(5000).optional(), published: z.boolean() }),
-  teams: z.object({ id, name: s(), program: id, teacher: s(80), stage: z.number().int().min(0).max(10), status: s(40), note: s(2000) }),
+  teams: z.object({ id, name: s(), program: id, teacher: s(80), stage: z.number().int().min(0).max(10), status: s(40), note: s(2000), progress: z.object({ summary: s(4000).optional(), milestones: s(4000).optional(), risks: s(4000).optional(), updated: s(40).optional(), updatedBy: s(80).optional() }).optional(), materials: z.object({ checklist: s(4000).optional(), links: s(4000).optional(), notes: s(4000).optional(), updated: s(40).optional(), updatedBy: s(80).optional() }).optional() }),
+  teamLogs: z.object({ id, team: id, at: s(40), by: s(120), byName: s(80), action: s(120), detail: s(4000) }),
   students: z.object({ id, name: s(), program: id, team: s(80), status: s(40), sales: s(80), updated: s(40), grade: s(20), health: z.enum(healthLevels as unknown as [string, ...string[]]), healthNote: s(1000), healthUpdated: s(40), healthBy: s(80), profile: z.record(z.string()).optional() }),
   enrollments: z.object({ id, student: id, program: id, team: s(80), status: s(40) }),
   courses: z.object({ id, name: s(), program: id, team: s(80), teacher: s(80), date: s(20), time: s(40), status: s(40), code: s(60).optional(), location: s(80).optional(), conflictOverride: z.boolean().optional() }),
@@ -32,7 +33,7 @@ export const recordSchemas = {
 } as const;
 export type CollectionName = keyof typeof recordSchemas;
 export const tables = {
-  programs: schema.programs, teams: schema.teams, students: schema.students, enrollments: schema.enrollments,
+  programs: schema.programs, teams: schema.teams, teamLogs: schema.teamLogs, students: schema.students, enrollments: schema.enrollments,
   courses: schema.courses, courseSessions: schema.courseSessions, feedbacks: schema.feedbacks, resources: schema.resources, assignments: schema.assignments,
   classTypes: schema.classTypes, projects: schema.projects, teachers: schema.teachers, opsCourses: schema.opsCourses, lessons: schema.lessonRecords, lessonFeedbacks: schema.lessonFeedbacks,
 } as const;

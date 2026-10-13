@@ -1,21 +1,21 @@
 'use client';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
-import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, UserRound, Sparkles, UsersRound, Layers3} from 'lucide-react';
+import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, UserRound, Sparkles, UsersRound, Layers3, GraduationCap} from 'lucide-react';
 import {useNexus} from '@/lib/nexus/store';
 import {BrandMark} from '@/components/nexus/brand';
 import {salesDemo} from '@/lib/nexus/auth';
 import {APP_ENV} from '@/lib/nexus/api';
-const workspaces=[{role:'sales',label:'销售顾问'},{role:'ops',label:'运营老师'}] as const;
+const workspaces=[{role:'sales',label:'销售顾问',tone:'蓝'},{role:'ops',label:'运营老师',tone:'紫'},{role:'teacher',label:'授课老师',tone:'金属灰'}] as const;
 
 export default function Login() {
   const s=useNexus();
-  const sales=s.role==='sales';
+  const sales=s.role==='sales';const teacher=s.role==='teacher';
   // Production server: the public sales demo account is disabled, so its fill-in button is not offered.
   const noDemo=s.apiMode&&APP_ENV==='production';
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[show,setShow]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[help,setHelp]=useState(false),[caps,setCaps]=useState(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current)},[]);
-  const choose=(role:'sales'|'ops')=>{s.setRole(role);setEmail('');setPassword('');setError('');setHelp(false)};
+  const choose=(role:'sales'|'ops'|'teacher')=>{s.setRole(role);setEmail('');setPassword('');setError('');setHelp(false)};
   const submit=(event:FormEvent)=>{
     event.preventDefault();if(busy)return;
     // API build: verified by the server. Pages build: verified in the browser against hashed accounts.
@@ -29,7 +29,7 @@ export default function Login() {
       <section className="access-story" aria-label="平台介绍">
         <div className="access-kicker"><span/> CONNECT PEOPLE. INSPIRE POSSIBILITIES.</div>
         <h1>连接每一份热爱，<br/>让成长<span>有迹可循。</span></h1>
-        <p className="access-intro">从第一次了解，到每一次进步。<br/>让销售与运营，在同一个空间高效协作。</p>
+        <p className="access-intro">从第一次了解，到每一次进步。<br/>让销售、运营与授课老师，在同一个空间高效协作。</p>
         <div className="crystal-scene" aria-hidden="true">
           <div className="crystal-orbit orbit-one"/><div className="crystal-orbit orbit-two"/>
           <div className="crystal-halo"/>
@@ -44,7 +44,7 @@ export default function Login() {
         <div className="access-card-top"><span className="access-symbol"><KeyRound size={22}/></span><span><i/> INVITATION ONLY</span></div>
         <div className="access-welcome">WELCOME TO YOUR WORKSPACE</div>
         <h2 id="access-title">欢迎回来</h2><p className="access-subtitle">使用内部授权账号，开启今天的协作。</p>
-        <fieldset className="access-role" disabled={busy}><legend className="sr-only">选择工作空间</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:!sales;return <button type="button" key={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span>{on&&<Check size={14}/>}</button>})}</fieldset>
+        <fieldset className="access-role access-role-3" disabled={busy}><legend className="sr-only">选择工作空间</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:a.role==='teacher'?teacher:!sales&&!teacher;return <button type="button" key={a.role} data-ws={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:a.role==='teacher'?<GraduationCap size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span><small>{a.tone}</small>{on&&<Check size={14}/>}</button>})}</fieldset>
         <form onSubmit={submit} className="access-form" aria-busy={busy}>
           <label htmlFor="access-email">用户名（姓名）</label><div className="access-input"><UserRound size={18}/><input id="access-email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={120} placeholder={sales&&!noDemo?salesDemo.email:'例如：张捷嘉'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}}/></div>
           <div className="access-password-label"><label htmlFor="access-password">登录密码</label><button type="button" disabled={busy} onClick={()=>setHelp(!help)} aria-expanded={help}>需要帮助？</button></div>
@@ -56,7 +56,7 @@ export default function Login() {
         </form>
         <div className="access-authorized"><ShieldCheck size={15}/><span>仅限已授权成员 · 无需自行注册</span></div>
         {sales&&!noDemo?<div className="access-demo"><div><Sparkles size={16}/><strong>体验销售顾问工作空间</strong><span>冰晶蓝</span></div><p>示例账号</p><button type="button" disabled={busy} onClick={()=>{setEmail(salesDemo.email);setPassword(salesDemo.password);setError('')}}>填入销售示例账号<ArrowUpRight size={16}/></button></div>
-        :<div className="access-demo"><div><Sparkles size={16}/><strong>{sales?'销售顾问工作空间':'运营老师工作空间'}</strong><span>{sales?'冰晶蓝':'冰晶紫'}</span></div><p>使用管理员分配的账号登录，首次登录需修改初始密码。</p></div>}
+        :<div className="access-demo"><div><Sparkles size={16}/><strong>{sales?'销售顾问工作空间':teacher?'授课老师工作空间':'运营老师工作空间'}</strong><span>{sales?'冰晶蓝':teacher?'金属灰':'冰晶紫'}</span></div><p>使用管理员分配的账号登录，首次登录需修改初始密码。</p></div>}
         {!s.apiMode&&<p className="access-demo-note">当前为预览站：数据只保存在本浏览器，不与他人同步。</p>}
       </section>
     </div>

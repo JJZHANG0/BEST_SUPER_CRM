@@ -1748,3 +1748,58 @@ button:focus-visible,a:focus-visible{outline-color:color-mix(in srgb,var(--nx-ac
 [data-collapsible=icon] .nexus-sidebar .nav-button{margin-inline:auto}
 /* 18px icons in the 16px content box of the 32px pill: split the overflow so the glyph stays centred. */
 [data-collapsible=icon] .nexus-sidebar .nav-button>svg{margin-inline:-1px}
+
+
+/* Login: 3 workspaces (销售蓝 / 运营紫 / 教师金属灰) */
+.access-role.access-role-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.access-role.access-role-3 button{flex-direction:column;gap:4px;padding:10px 6px;min-height:64px;position:relative}
+.access-role.access-role-3 button>span{font-size:.72rem}
+.access-role.access-role-3 button>small{font-size:.58rem;color:#9a93a3;font-weight:500}
+.access-role.access-role-3 button[aria-pressed=true]>small{color:inherit;opacity:.85}
+.access-role.access-role-3 button[data-ws=teacher][aria-pressed=true]{--access:#6b7280;--access-deep:#374151;--access-soft:#e8eaed;border-color:#9ca3af;color:#374151;background:linear-gradient(145deg,#f3f4f6,#e5e7eb);box-shadow:inset 0 1px 0 #fff,0 1px 2px #00000014}
+html[data-workspace=teacher] .access-page{--access:#6b7280;--access-deep:#374151;--access-soft:#e8eaed;--access-faint:#f3f4f6;background:radial-gradient(circle at 18% 18%,#e5e7eb 0,transparent 32%),radial-gradient(circle at 88% 82%,#d1d5db55 0,transparent 34%),linear-gradient(135deg,#f8f9fb,#eef0f3 55%,#f6f7f9)}
+
+/* Teacher workspace — metallic gray premium shell */
+html[data-workspace=teacher]{
+  --nx-blue:#6b7280;
+  --nx-ink:#1f2937;
+  --nx-ink-soft:#374151;
+  --nx-muted:#6b7280;
+  --nx-line:#d1d5db;
+  --nx-page:#f3f4f6;
+  --nx-accent:#6b7280;
+  --nx-accent-2:#4b5563;
+  --nx-accent-hi:#9ca3af;
+  --nx-accent-soft:#e5e7eb;
+  --nx-accent-softer:#f3f4f6;
+  --nx-accent-ink:#374151;
+  --nx-accent-muted:#9ca3af;
+  --nx-glow:#6b728028;
+}
+html[data-workspace=teacher] body{background:
+  radial-gradient(ellipse at 12% 0%,#c5c9d033,transparent 42%),
+  radial-gradient(ellipse at 90% 100%,#9ca3af22,transparent 40%),
+  linear-gradient(165deg,#e8eaee,#f3f4f6 45%,#eceef2);color:var(--nx-ink-soft)}
+html[data-workspace=teacher] .nexus-sidebar [data-slot=sidebar-inner]{
+  background:linear-gradient(165deg,#f9fafb,#e5e7eb 70%,#d1d5db);
+  border:1px solid #9ca3af88;
+  box-shadow:0 8px 28px #11182714, inset 0 1px 0 #ffffffcc;
+  backdrop-filter:blur(12px)}
+html[data-workspace=teacher] .nexus-sidebar .nav-button{color:#4b5563}
+html[data-workspace=teacher] .nexus-sidebar .nav-button[data-active=true]{
+  background:linear-gradient(100deg,#e5e7eb,#f3f4f6);
+  color:#111827;box-shadow:inset 0 0 0 1px #9ca3af66;font-weight:600}
+html[data-workspace=teacher] .brand-icon{
+  background:linear-gradient(145deg,#9ca3af,#4b5563);
+  border:1px solid #d1d5db;box-shadow:0 3px 10px #11182722, inset 0 1px 0 #ffffff55}
+html[data-workspace=teacher] .primary{
+  background:linear-gradient(135deg,#9ca3af,#4b5563);
+  border:1px solid #6b7280;box-shadow:0 3px 10px #11182722, inset 0 1px 0 #ffffff44}
+html[data-workspace=teacher] .glass{
+  background:linear-gradient(160deg,#ffffffd9,#f3f4f6cc);
+  border:1px solid #d1d5db99;
+  box-shadow:0 6px 24px #1118270d, inset 0 1px 0 #ffffffaa}
+html[data-workspace=teacher] .teacher-welcome .hello-spark{color:#6b7280}
+html[data-workspace=teacher] .avatar{background:linear-gradient(135deg,#e5e7eb,#d1d5db);color:#374151;border-color:#fff}
+html[data-workspace=teacher] .bottom-nav{background:linear-gradient(180deg,#f9fafb,#e5e7eb);border:1px solid #d1d5db;box-shadow:0 -4px 20px #1118270a}
+html[data-workspace=teacher] .bottom-nav button.active{color:#111827}

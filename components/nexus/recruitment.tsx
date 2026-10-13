@@ -94,14 +94,18 @@ export function ProgramOfferSummary({program}:{program:string}) {
     <div className="actions"><Poster program={program}/><button className="secondary" onClick={()=>s.go('teams?program='+program)}><Users size={17}/>查看开班队伍</button></div>
   </section>;
 }
-export function TeamOfferSummary({team}:{team:Team}) {
+export function TeamOfferSummary({team, courses}:{team:Team; /** Bound 课程管理 courses for this team */ courses?: {id:string;name:string;date:string;time:string;teacher:string;status:string;code?:string}[]}) {
   const s=useNexus(),p=s.programs.find(p=>p.id===team.program)!,offer=offerFor(p.id),cohort=cohortOffers[team.id],a=cohortAvailability(team,s.enrollments);
+  const bound=courses??s.courses.filter(c=>c.team===team.id);
   const copy=async()=>{const text=`${p.name}｜${team.name}\n项目编号：${offer.code} / ${team.id}\n招生：${a.status}，已报 ${a.confirmed}/${a.capacity} 人${a.status==='招生中'?`，剩余 ${a.remaining} 席`:''}\n参考价：${priceText(offer.fee)}\n计划开课：${cohort?.opens||'待安排'}\n课程：${planText(offer)}\n授课老师：${team.teacher}\n运营对接：${offer.operations||'待指定'}\n以正式报价为准。`;try{await navigator.clipboard.writeText(text);toast.success('招生摘要已复制')}catch{toast.error('浏览器限制了复制，可直接选择页面文字复制。')}};
-  return <><section className="glass panel offer-summary"><SectionTitle title="招生与开班信息" sub="对销售开放的信息 · 与内部运营备注分开"/>
-    <div className="offer-metrics"><div><span>招生进度</span><b>{a.confirmed}<small> / {a.capacity} 人</small></b></div><div><span>{a.status==='招生中'?'剩余名额':'招生状态'}</span><b>{a.status==='招生中'?a.remaining:a.status}</b></div><div><span>项目参考价</span><b>{priceText(offer.fee)}{offer.fee>0&&<small> / 人</small>}</b></div></div><Meter value={a.progress}/>
+  return <><section className="glass panel offer-summary"><SectionTitle title="招生与开班信息" sub="只读 · 招生进度 / 招生状态 / 项目参考价不可在此编辑"/>
+    <div className="offer-metrics" aria-label="招生指标（只读）"><div><span>招生进度</span><b>{a.confirmed}<small> / {a.capacity} 人</small></b></div><div><span>{a.status==='招生中'?'剩余名额':'招生状态'}</span><b>{a.status==='招生中'?a.remaining:a.status}</b></div><div><span>项目参考价</span><b>{priceText(offer.fee)}{offer.fee>0&&<small> / 人</small>}</b></div></div><Meter value={a.progress}/>
     <dl className="info-grid"><div><dt>项目编号 / 队伍编号</dt><dd>{offer.code} / {team.id}</dd></div><div><dt>运营对接人</dt><dd>{offer.operations||'待指定'}</dd></div><div><dt>授课老师</dt><dd>{team.teacher}</dd></div><div><dt>老师介绍</dt><dd>{offer.teacherBio||'待补充'}</dd></div><div><dt>计划开课 / 报名截止</dt><dd>{cohort?.opens||'待安排'} / {cohort?.deadline||'待发布'}</dd></div><div><dt>上课时间</dt><dd>{cohort?.schedule||'待安排'}</dd></div><div><dt>课程总量</dt><dd>{planText(offer)}</dd></div><div><dt>费用与包含内容</dt><dd>{offer.feeNote}</dd></div></dl>
     <div className="actions"><Poster program={team.program}/><button className="secondary" onClick={copy}><Copy size={16}/>复制招生摘要</button><button className="secondary" onClick={()=>s.go('programs/'+team.program)}>查看完整项目与资料</button></div>
-  </section><section className="glass panel course-plan"><SectionTitle title="课程计划" sub="具体排课见课程安排"/>{p.published?<ol className="curriculum">{p.curriculum.split('\n').map((name,i)=><li key={i}><span>{String(i+1).padStart(2,'0')}</span><div><h3>{name}</h3><p>导师指导 · 小组实践 · 阶段产出</p></div></li>)}</ol>:<p className="muted">课程计划尚未发布，具体安排由运营对接人确认。</p>}</section></>;
+  </section><section className="glass panel course-plan"><SectionTitle title="课程计划" sub="绑定自「课程管理」· 本队伍关联课程" action={s.role!=='sales'?'去课程管理':undefined} onClick={()=>s.go('courses')}/>
+    {bound.length? <div className="stack-list">{bound.map(c=><button key={c.id} type="button" className="record-link" onClick={()=>s.go('courses/'+c.id)}><span className="course-time">{c.time.split('–')[0]}<small>{c.date.slice(5)}</small></span><div><h3>{c.name}{c.code&&<em className="course-code"> {c.code}</em>}</h3><p>{c.teacher} · {c.status}</p></div></button>)}</div>
+    : <p className="muted">尚未关联课程。请在「课程管理」中新建或编辑课程并选择本队伍。</p>}
+  </section></>;
 }
 export function TeamRoster({team}:{team:Team}) {
   const s=useNexus();const entries=s.enrollments.filter(e=>e.team===team.id&&e.status!=='已退出');

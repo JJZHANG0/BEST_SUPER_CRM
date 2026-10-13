@@ -2,16 +2,18 @@
  * Role model. Kept free of runtime imports so tests and the API server can load it directly.
  *   sales      — read-only sales workspace (own students only)
  *   ops        — 项目运营老师: edits operations data, logs own 课时 / 课情反馈
+ *   teacher    — 授课老师 portal: own courses, schedule, lesson feedback (metallic-gray shell)
  *   superadmin — everything ops can do, plus 系统管理 (users, 项目, 课程, 班型与津贴)
  *   leader flag — 部门负责人 (张捷嘉): all teachers' 课时/津贴, 绩效考核, 任务指派; does not fill 当月绩效
  *   admin      — legacy role, treated like ops for writes (kept for existing databases)
  */
-export type Role = 'ops' | 'sales' | 'admin' | 'superadmin';
-export const roles: readonly Role[] = ['superadmin', 'ops', 'sales', 'admin'];
-export const roleLabels: Record<Role, string> = { superadmin: '超级管理员', ops: '项目运营老师', sales: '销售顾问', admin: '系统管理员' };
+export type Role = 'ops' | 'sales' | 'teacher' | 'admin' | 'superadmin';
+export const roles: readonly Role[] = ['superadmin', 'ops', 'teacher', 'sales', 'admin'];
+export const roleLabels: Record<Role, string> = { superadmin: '超级管理员', ops: '项目运营老师', teacher: '授课老师', sales: '销售顾问', admin: '系统管理员' };
 export const isRole = (v: unknown): v is Role => typeof v === 'string' && (roles as readonly string[]).includes(v);
 /** Ops workspace (anything that is not sales). */
 export const isOpsLike = (role: unknown) => role === 'ops' || role === 'superadmin' || role === 'admin';
+export const isTeacher = (role: unknown) => role === 'teacher';
 export const isSuperadmin = (role: unknown) => role === 'superadmin';
 /** May write shared operations data (students, teams, articles…). */
 export const canWrite = (role: unknown) => isOpsLike(role);

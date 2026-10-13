@@ -85,6 +85,13 @@
       "when": 1791720000000,
       "tag": "0011_course_conflict_override",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1760320000000,
+      "tag": "0012_team_progress_logs",
+      "breakpoints": true
     }
   ]
 }

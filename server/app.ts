@@ -387,7 +387,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
-    const [programs, teams, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
+    const [programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'teamLogs', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
     // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
@@ -396,7 +396,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const todos = await todosFor(user);
     const postList = visiblePosts(await posts.list(), user.role);
     let articles = articleRows.map(a => ({ program: a.program, author: a.author, draft: a.draft, published: a.published ?? null, updated: a.updated, publishedAt: a.publishedAt ?? null })) as ProgramArticle[];
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -404,7 +404,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json({
       user: publicUser(user),
       programs: programs.map(p => { const rest = { ...p }; delete rest.draft; return rest; }),
-      teams, students: mine,
+      teams, teamLogs: [], students: mine,
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
       resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, posts: postList, todos,

@@ -51,3 +51,43 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
     <footer className="page-footer"><span>B.E.S.T <i>·</i> Innovation, connected.</span><span><span className="live-dot" /> {s.apiMode ? '工作空间 · 数据实时同步' : '预览站 · 数据保存在本浏览器'}</span></footer>
   </>;
 }
+
+/** 教师端首页：本人课程、本周课表、课情反馈入口（金属灰壳）。 */
+export function TeacherHome() {
+  const s = useNexus(), me = useMe();
+  const today = todayIso(), week = weekOf(today);
+  const name = me.name || s.user?.name || '';
+  const mine = s.courses.filter(c => !name || c.teacher === name || (c.teacher && name && c.teacher.includes(name)));
+  const occ = occurrences(mine.length ? mine : s.courses.filter(c => c.teacher), s.courseSessions);
+  const todays = onDate(occ, today);
+  const thisWeek = inWeek(occ, today);
+  const now = new Date(today + 'T12:00:00');
+  const fb = s.lessonFeedbacks.filter(f => {
+    const c = s.opsCourses.find(x => x.id === f.course);
+    return c && name && (c.teacher === name || c.teacher.includes(name));
+  }).slice(0, 5);
+  return <>
+    <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>查看你的课程、课表与学情反馈。</p></div>
+      <div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>授课老师工作台 · 金属灰</span></div></div></div>
+    <div className="stats-grid teacher-stats">
+      {[{ label: '我的课程', value: mine.length || s.courses.filter(c => c.teacher === name).length, unit: '门', path: 'courses' },
+        { label: '本周课次', value: thisWeek.length, unit: '节', path: 'courses' },
+        { label: '今日课程', value: todays.length, unit: '节', path: 'courses' },
+        { label: '近期反馈', value: fb.length, unit: '条', path: 'lesson-feedback' }].map(x =>
+        <button key={x.label} className="glass stat-card" onClick={() => s.go(x.path)}><div className="stat-top"><span>{x.label}</span></div><div className="stat-value">{x.value}<span>{x.unit}</span></div><div className="stat-foot">查看详情<ChevronRight size={13} /></div></button>)}
+    </div>
+    <div className="detail-grid">
+      <section className="glass panel"><SectionTitle title="今日课表" action="全部课程" onClick={() => s.go('courses')} />
+        <div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => s.go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
+        {todays.map(o => <button key={o.key} className="course-row" onClick={() => s.go('courses/' + o.course.id)}><span className="course-time">{o.start || o.course.time.split('–')[0]}<small>{o.date.slice(5)}</small></span><div><h3>{o.course.name}</h3><p>{o.course.teacher}{o.location ? ' · ' + o.location : ''}</p></div><ChevronRight size={17} /></button>)}
+        {!todays.length && <p className="muted">今天暂无你的课程</p>}
+      </section>
+      <section className="glass panel"><SectionTitle title="学情反馈" action="课情反馈" onClick={() => s.go('lesson-feedback')} />
+        {fb.map(f => { const c = s.opsCourses.find(x => x.id === f.course); return <article key={f.id} className="feedback-card"><small>{f.date} · {c?.code}</small><h3>{c?.name || '课程'}</h3><p>{f.content || f.performance || '（无内容）'}</p></article>; })}
+        {!fb.length && <p className="muted">暂无关联到你授课课程的反馈；可在课情反馈中查看或补充。</p>}
+        <div className="actions" style={{ marginTop: 12 }}><button className="secondary" onClick={() => s.go('lesson-feedback?new')}><MessageSquare size={16} />写学情反馈</button></div>
+      </section>
+    </div>
+    <footer className="page-footer"><span>B.E.S.T · 授课老师工作空间</span><span>{s.apiMode ? '实时数据' : '预览站'}</span></footer>
+  </>;
+}

@@ -24,7 +24,7 @@ const tabs = [
 ] as const;
 type Tab = typeof tabs[number]['id'];
 const statusTone = (st: string) => st === '进行中' ? 'green' : st === '已结束' ? 'neutral' : 'violet';
-const roleOptions = (['superadmin', 'ops', 'sales'] as Role[]).map(r => ({ value: r, label: roleLabels[r] }));
+const roleOptions = (['superadmin', 'ops', 'teacher', 'sales'] as Role[]).map(r => ({ value: r, label: roleLabels[r] }));
 function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click();

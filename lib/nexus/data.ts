@@ -15,7 +15,13 @@ export type Student = {id:string;name:string;program:string;team:string;status:s
   /** Extra fields from 花名册 import (union schema). */
   profile?:StudentProfile};
 export type Enrollment = {id:string;student:string;program:string;team:string;status:string};
-export type Team = {id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string};
+export type TeamProgress = {summary:string;milestones:string;risks:string;updated?:string;updatedBy?:string};
+export type TeamMaterials = {checklist:string;links:string;notes:string;updated?:string;updatedBy?:string};
+export type TeamLog = {id:string;team:string;at:string;by:string;byName:string;action:string;detail:string};
+export type Team = {id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string;
+  /** 队伍进度 — PM 定义字段，队伍老师/运营老师后续填写 */ progress?:TeamProgress;
+  /** 成果材料 */ materials?:TeamMaterials};
+
 /** A course (课程安排). date/time are its first meeting; repeated meetings live in course_sessions (lib/nexus/schedule.ts). */
 export type Course = {id:string;name:string;program:string;team:string;teacher:string;date:string;time:string;status:string;
   /** 课程编号 (optional; e.g. the 课时记录 course code) and 教室 / 线上 shown on the timetable. */ code?:string;location?:string;

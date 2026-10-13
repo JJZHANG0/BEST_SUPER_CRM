@@ -9,7 +9,8 @@ export type ThemeId =
   | 'sand'     // 暖沙
   | 'rose'     // 玫瑰
   | 'pine'     // 墨绿
-  | 'charcoal'; // 炭黑浅色
+  | 'charcoal' // 炭黑浅色
+  | 'steel';   // 金属灰 · 教师端
 
 export type ThemeVars = {
   id: ThemeId;
@@ -183,6 +184,29 @@ export const THEMES: readonly ThemeVars[] = [
       '--ring': '#8a93a3',
       '--sidebar-accent': '#e8eaee',
       '--sidebar-accent-foreground': '#2d3748',
+    },
+  },
+  {
+    id: 'steel',
+    label: '金属灰',
+    swatch: '#6b7280',
+    vars: {
+      '--nx-accent': '#6b7280',
+      '--nx-accent-2': '#525860',
+      '--nx-accent-hi': '#9ca3af',
+      '--nx-accent-soft': '#e8eaed',
+      '--nx-accent-softer': '#f3f4f6',
+      '--nx-accent-ink': '#374151',
+      '--nx-accent-muted': '#9ca3af',
+      '--nx-accent-border': '#d1d5db',
+      '--nx-page': '#f4f5f7',
+      '--nx-glow': '#6b728026',
+      '--nx-grad-a': '#e5e7eb',
+      '--nx-grad-b': '#f4f5f7',
+      '--primary': '#6b7280',
+      '--ring': '#9ca3af',
+      '--sidebar-accent': '#e8eaed',
+      '--sidebar-accent-foreground': '#374151',
     },
   },
 ] as const;

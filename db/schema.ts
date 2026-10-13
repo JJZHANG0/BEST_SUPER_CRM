@@ -58,12 +58,30 @@ export const teams = pgTable('teams', {
   name: text('name').notNull(),
   program: text('program').notNull().references(() => programs.id),
   teacher: text('teacher').notNull(),
+  /** 0 = 未设定（仅部门负责人/项目经理后续创建阶段） */
   stage: integer('stage').notNull(),
   status: text('status').notNull(),
   note: text('note').notNull().default(''),
+  /** 队伍进度 fields filled by 队伍老师 / 运营老师 */
+  progress: jsonb('progress').$type<{ summary?: string; milestones?: string; risks?: string; updated?: string; updatedBy?: string }>(),
+  /** 成果材料 */
+  materials: jsonb('materials').$type<{ checklist?: string; links?: string; notes?: string; updated?: string; updatedBy?: string }>(),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
+
+/** Immutable 运营记录 for team changes (who / when / what). */
+export const teamLogs = pgTable('team_logs', {
+  id: text('id').primaryKey(),
+  team: text('team').notNull().references(() => teams.id),
+  at: text('at').notNull(),
+  by: text('by').notNull().default(''),
+  byName: text('by_name').notNull(),
+  action: text('action').notNull(),
+  detail: text('detail').notNull().default(''),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [index('team_logs_team_idx').on(t.team)]);
 
 export const students = pgTable('students', {
   id: text('id').primaryKey(),
