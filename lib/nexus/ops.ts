@@ -330,6 +330,28 @@ export function today(now = new Date(), timeZone = 'Asia/Shanghai') {
 }
 export const monthLabel = (ym: string) => { const [y, m] = ym.split('-'); return y && m ? `${y}年${Number(m)}月` : ym; };
 
+/** ¥/hour for 「我的课时费用」 when the ops teacher has teaching (跟课) hours that month. */
+export const LESSON_TEACHING_FEE_PER_HOUR = 150;
+/** YYYY-MM month key validation (same shape as KPI months). */
+export const isLessonMonth = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
+/** Whether `dateOrMonth` (YYYY-MM or YYYY-MM-DD) falls in a confirmed/locked month. */
+export function isLessonMonthLocked(locks: readonly string[], dateOrMonth: string) {
+  const m = (dateOrMonth || '').length >= 7 ? (dateOrMonth || '').slice(0, 7) : '';
+  return !!m && locks.includes(m);
+}
+/** 张捷嘉 (部门负责人) may still edit locked months; everyone else is frozen. */
+export function canEditLockedLessonMonth(user: { name?: string | null; email?: string | null; leader?: boolean | null } | null | undefined) {
+  if (!user) return false;
+  if (user.leader === true) return true;
+  if ((user.name || '').trim() === '张捷嘉') return true;
+  return /^zhangjiejia@/i.test(user.email || '');
+}
+/** 「我的课时费用」: hours × ¥150 when hours > 0, else ¥0. */
+export function myLessonTeachingFee(hours: number) {
+  const h = Math.max(0, Number(hours) || 0);
+  return h > 0 ? round2(h * LESSON_TEACHING_FEE_PER_HOUR) : 0;
+}
+
 /** Records the viewer may see: the 部门负责人 (leader flag) sees all, everyone else only their own. */
 export function visibleLessons<T extends { opsTeacher: string }>(list: readonly T[], viewer: { role: unknown; leader?: boolean | null }, email: string): T[] {
   if (viewer && viewer.leader === true && (viewer.role === 'ops' || viewer.role === 'superadmin' || viewer.role === 'admin')) return list.slice();

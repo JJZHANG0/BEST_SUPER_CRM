@@ -11,6 +11,7 @@ export const API_ENABLED = API_BASE.length > 0;
 export const APP_ENV = process.env.NEXT_PUBLIC_NEXUS_ENV || '';
 export type ApiUser = { id: number; email: string; username?: string | null; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean;
   /** 部门负责人 (only 张捷嘉): sees all teachers' 课时/津贴, reviews 绩效, assigns tasks. */ leader?: boolean; avatar?: string | null; theme?: string | null;
+  /** Preferred weather city for the workbench header (default 杭州). */ weatherCity?: string | null;
   /** users.role, active portal and portals this account may open (multi-role: ops + teacher). */ baseRole?: Role; portal?: 'ops' | 'teacher' | 'sales'; portals?: ('ops' | 'teacher' | 'sales')[] };
 /** Ops teachers listed for 教务老师 pickers and name lookups. */
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
@@ -74,6 +75,10 @@ export const api = {
   changePassword: (current: string, next: string) => request<{ ok: true }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ current, next }) }),
   updateAvatar: (avatar: string | null) => request<{ user: ApiUser }>('/auth/avatar', { method: 'POST', body: JSON.stringify({ avatar }) }),
   updateTheme: (theme: string) => request<{ user: ApiUser }>('/auth/theme', { method: 'POST', body: JSON.stringify({ theme }) }),
+  updateWeatherCity: (city: string) => request<{ user: ApiUser }>('/auth/weather-city', { method: 'POST', body: JSON.stringify({ city }) }),
+  weather: (city?: string) => request<import('./weather').WeatherPayload>('/weather' + (city ? `?city=${encodeURIComponent(city)}` : '')),
+  workHours: (month?: string) => request<{ month: string; totalMs: number }>('/work-hours' + (month ? `?month=${encodeURIComponent(month)}` : '')),
+  reportWorkHours: (month: string, deltaMs: number) => request<{ month: string; totalMs: number }>('/work-hours', { method: 'POST', body: JSON.stringify({ month, deltaMs }) }),
   adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),
   createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
@@ -85,7 +90,10 @@ export const api = {
   markAllAnnouncementsRead: () => request<{ ok: true; count: number }>('/announcements/read-all', { method: 'POST' }),
   announcementReads: (id: string) => request<{ announcement: { id: string; title: string; audience: string; audienceLabel: string }; rows: import('./announcements').AnnouncementReadRow[] }>(`/announcements/${encodeURIComponent(id)}/reads`),
   announcementDirectory: () => request<{ users: import('./announcements').AnnouncementDirectoryUser[] }>('/announcements/directory'),
+  lessonMonthLocks: () => request<{ months: string[]; locks: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }[] }>('/lesson-month-locks'),
+  confirmLessonMonth: (month: string) => request<{ lock: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }; announcement: import('./announcements').Announcement | null; already: boolean }>('/lesson-month-locks', { method: 'POST', body: JSON.stringify({ month }) }),
 };
+
 
 /** Published 推文 as served to anyone (no login): GET /api/public/articles/:slug. */
 export type PublicArticle = { slug: string; title: string; summary: string; cover: string; blocks: import('./articles').ArticleBlock[]; author: string; publishedAt: string | null;

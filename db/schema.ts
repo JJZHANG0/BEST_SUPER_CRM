@@ -31,6 +31,8 @@ export const users = pgTable('users', {
   avatar: text('avatar'),
   /** Accent theme id (see lib/nexus/themes.ts). */
   theme: text('theme').notNull().default('amethyst'),
+  /** Preferred city for workbench weather (default 杭州). */
+  weatherCity: text('weather_city').notNull().default('杭州'),
   /** 销售区域 (sales users): 销售大部 | 商务拓展一区 | 商务拓展二区 | 商务拓展三区 (lib/nexus/roles.ts SALES_REGIONS). */
   salesRegion: text('sales_region'),
   /** 销售负责人 (区/部 manager, e.g. 杨巍, 胡晓贇) — informational for stats; grants no extra rights. */
@@ -142,7 +144,7 @@ export const courses = pgTable('courses', {
   time: text('time').notNull(),
   status: text('status').notNull(),
   /** 课程编号 / 教室或线上 (optional; shown on the exported timetable). */
-  /** 「仍然保存」: saved despite 排课冲突 (teacher / team / room overlap). */
+  /** 「强制设定」: saved despite 排课冲突 (授课老师 / 运营老师 / team / room overlap). */
   conflictOverride: boolean('conflict_override'),
   code: text('code'),
   location: text('location'),
@@ -415,3 +417,27 @@ export const announcementReads = pgTable('announcement_reads', {
   uniqueIndex('announcement_reads_pk').on(t.announcementId, t.userId),
   index('announcement_reads_user_idx').on(t.userId),
 ]);
+
+/** Monthly CRM stickiness timer: accumulated active ms while on the workbench. */
+export const workHours = pgTable('work_hours', {
+  userId: integer('user_id').notNull().references(() => users.id),
+  /** YYYY-MM in Asia/Shanghai */
+  month: text('month').notNull(),
+  totalMs: integer('total_ms').notNull().default(0),
+  ...stamps,
+}, t => [
+  uniqueIndex('work_hours_user_month_idx').on(t.userId, t.month),
+  index('work_hours_user_idx').on(t.userId),
+]);
+
+/**
+ * 课时记录月度确认锁定: once ops confirms a YYYY-MM month, lesson create/edit/delete
+ * for dates in that month is blocked for everyone except 张捷嘉.
+ */
+export const lessonMonthLocks = pgTable('lesson_month_locks', {
+  month: text('month').primaryKey(),
+  confirmedBy: text('confirmed_by').notNull(),
+  confirmedByName: text('confirmed_by_name').notNull(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull().defaultNow(),
+  ...stamps,
+});

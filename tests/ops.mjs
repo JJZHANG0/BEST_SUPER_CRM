@@ -136,7 +136,7 @@ const api=readFileSync('server/app.ts','utf8');assert(api.includes('normalizeLes
 assert(store.includes('.map(normalizeLesson)'),'localStorage + bootstrap lessons migrated');
 const opsUi=readFileSync('components/nexus/ops-pages.tsx','utf8');
 assert(opsUi.includes('<CourseCombobox')&&opsUi.includes('应到人数')&&opsUi.includes('实到人数')&&opsUi.includes('attendanceText(n, expected)'));
-assert(/<FormField label="本次课程内容"><textarea[^>]*rows=\{6\}/.test(opsUi)&&/<FormField label="学生表现"><textarea[^>]*rows=\{6\}/.test(opsUi),'课程内容 and 学生表现 same taller size');
+assert(/<FormField label="本次课程内容"><textarea[^>]*rows=\{6\}/.test(opsUi)&&/<FormField label="学生布置"><textarea[^>]*rows=\{6\}/.test(opsUi),'课程内容 and 学生布置 same taller size');
 const cc=readFileSync('components/nexus/course-combobox.tsx','utf8');assert(cc.includes('role="combobox"')&&cc.includes('aria-activedescendant')&&cc.includes("'ArrowDown'")&&cc.includes("'Escape'"));
 const css=readFileSync('app/globals.css','utf8');
 assert(css.includes('.ops-table .num{text-align:left')&&css.includes('.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}'),'ops tables left-aligned');
@@ -161,5 +161,27 @@ assert.deepEqual([...sc2.studentIds].sort(),['s3']);
 const sc3=O.teacherRosterScope('郝震昆',{opsCourses:[{id:'OC',code:'X',name:'康莱德 「航空」TEAM 隼卫 第一阶段',teacher:'郝震焜'}],teams:[{id:'TH',name:'TEAM 「隼卫」',program:'conrad',teacher:'许瑾'}],enrollments:[],students:[]});
 assert.deepEqual([...sc3.teamIds],['TH'],'alias 郝震焜→郝震昆 matches course teacher');
 assert(readFileSync('server/app.ts','utf8').includes('teacherRosterScope')&&readFileSync('lib/nexus/store.tsx','utf8').includes('teacherRosterScope'),'API + Pages scope wired');
+
+
+// 课时费用 + month lock helpers
+assert.equal(O.LESSON_TEACHING_FEE_PER_HOUR, 150);
+assert.equal(O.myLessonTeachingFee(0), 0);
+assert.equal(O.myLessonTeachingFee(10), 1500);
+assert.equal(O.myLessonTeachingFee(1.5), 225);
+assert.equal(O.isLessonMonth('2026-10'), true);
+assert.equal(O.isLessonMonth('2026-13'), false);
+assert.equal(O.isLessonMonthLocked(['2026-10'], '2026-10-11'), true);
+assert.equal(O.isLessonMonthLocked(['2026-10'], '2026-09-30'), false);
+assert.equal(O.canEditLockedLessonMonth({ name: '张捷嘉', leader: true }), true);
+assert.equal(O.canEditLockedLessonMonth({ name: '程雪晴', email: 'chengxueqing@nexus.local' }), false);
+assert.equal(O.canEditLockedLessonMonth({ name: 'x', email: 'zhangjiejia@nexus.local' }), true);
+assert(readFileSync('drizzle/0015_lesson_month_locks.sql','utf8').includes('lesson_month_locks'));
+assert(readFileSync('db/schema.ts','utf8').includes('lessonMonthLocks'));
+assert(readFileSync('server/app.ts','utf8').includes('lesson-month-locks'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('跟课合计'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('我的课时费用'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('MonthConfirmHold'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('course-cell'));
+assert(readFileSync('app/globals.css','utf8').includes('course-stack'));
 
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

@@ -19,7 +19,7 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -31,11 +31,11 @@ import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleCon
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
 export type Portal = 'ops' | 'teacher' | 'sales';
 /** `role` is the EFFECTIVE role for the active portal (teacher portal ⇒ 'teacher' even for a superadmin); `baseRole` is users.role. */
-export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string; baseRole?: Role; portal?: Portal; portals?: Portal[] };
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string; weatherCity: string; baseRole?: Role; portal?: Portal; portals?: Portal[] };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme, baseRole: u.baseRole ?? u.role, portal: u.portal ?? basePortal(u.baseRole ?? u.role), portals: u.portals ?? [basePortal(u.baseRole ?? u.role)] });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme, weatherCity: u.weatherCity || '杭州', baseRole: u.baseRole ?? u.role, portal: u.portal ?? basePortal(u.baseRole ?? u.role), portals: u.portals ?? [basePortal(u.baseRole ?? u.role)] });
 const basePortal = (r: Role): Portal => r === 'sales' ? 'sales' : r === 'teacher' ? 'teacher' : 'ops';
 const isPortal = (v: unknown): v is Portal => v === 'ops' || v === 'teacher' || v === 'sales';
 const portalLabel: Record<Portal, string> = { ops: '运营老师', teacher: '授课老师', sales: '销售顾问' };
@@ -45,7 +45,7 @@ function inPortal(base: SessionUser, portal: Portal, portals: Portal[]): Session
   if (portal === 'teacher' && base.role !== 'teacher') return { ...s, role: 'teacher', leader: false, theme: 'steel' };
   return s;
 }
-const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME });
+const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME, weatherCity: (row as { weatherCity?: string | null }).weatherCity || '杭州' });
 const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true, salesRegion: row.salesRegion ?? null, salesLead: row.salesLead === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
 /** Human message for a unique violation on users (username vs email). */
@@ -179,6 +179,92 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!isThemeId(theme)) return c.json({ error: 'invalid', message: '请选择有效的主题配色' }, 400);
     const [row] = await db.update(schema.users).set({ theme, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
     return c.json({ user: publicUser(toSession(row)) });
+  });
+
+  app.post('/auth/weather-city', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { city?: unknown } | null;
+    const city = typeof body?.city === 'string' ? body.city.trim().replace(/\s+/g, ' ').slice(0, 40) : '';
+    if (!city) return c.json({ error: 'invalid', message: '请填写城市名称' }, 400);
+    const [row] = await db.update(schema.users).set({ weatherCity: city, updatedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
+    return c.json({ user: publicUser(toSession(row)) });
+  });
+
+  /** Open-Meteo proxy (no API key). ?city=杭州 */
+  app.get('/weather', async c => {
+    const city = (c.req.query('city') || c.get('user').weatherCity || '杭州').trim().slice(0, 40) || '杭州';
+    try {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh`);
+      if (!geoRes.ok) return c.json({ error: 'upstream', message: '地理编码服务暂不可用' }, 502);
+      const geo = await geoRes.json() as { results?: { name: string; latitude: number; longitude: number; admin1?: string }[] };
+      const hit = geo.results?.[0];
+      if (!hit) return c.json({ error: 'not_found', message: '未找到该城市，请换一个地名试试' }, 404);
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${hit.latitude}&longitude=${hit.longitude}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FShanghai&forecast_days=7`;
+      const fRes = await fetch(url);
+      if (!fRes.ok) return c.json({ error: 'upstream', message: '天气预报服务暂不可用' }, 502);
+      const f = await fRes.json() as { current: { temperature_2m: number; weather_code: number }; daily: { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[] } };
+      const label = (code: number) => {
+        if (code === 0) return '晴';
+        if (code === 1) return '晴间多云';
+        if (code === 2) return '多云';
+        if (code === 3) return '阴';
+        if (code === 45 || code === 48) return '雾';
+        if (code >= 51 && code <= 57) return '毛毛雨';
+        if (code >= 61 && code <= 67) return '雨';
+        if (code >= 71 && code <= 77) return '雪';
+        if (code >= 80 && code <= 82) return '阵雨';
+        if (code >= 85 && code <= 86) return '阵雪';
+        if (code >= 95) return '雷雨';
+        return '未知';
+      };
+      return c.json({
+        city,
+        resolved: [hit.name, hit.admin1].filter(Boolean).join(' · ') || city,
+        latitude: hit.latitude,
+        longitude: hit.longitude,
+        current: { temp: f.current.temperature_2m, code: f.current.weather_code, label: label(f.current.weather_code) },
+        daily: f.daily.time.map((date, i) => ({
+          date,
+          code: f.daily.weather_code[i],
+          label: label(f.daily.weather_code[i]),
+          high: f.daily.temperature_2m_max[i],
+          low: f.daily.temperature_2m_min[i],
+        })),
+      });
+    } catch (err) {
+      console.error('weather', err);
+      return c.json({ error: 'upstream', message: '天气服务请求失败' }, 502);
+    }
+  });
+
+  const shanghaiMonth = () => {
+    const sh = new Date(Date.now() + 8 * 3600_000);
+    return `${sh.getUTCFullYear()}-${String(sh.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+
+  app.get('/work-hours', async c => {
+    const user = c.get('user');
+    const month = (c.req.query('month') || shanghaiMonth()).slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
+    const [row] = await db.select().from(schema.workHours).where(and(eq(schema.workHours.userId, user.id), eq(schema.workHours.month, month))).limit(1);
+    return c.json({ month, totalMs: row?.totalMs ?? 0 });
+  });
+
+  app.post('/work-hours', async c => {
+    const user = c.get('user');
+    const body = await c.req.json().catch(() => null) as { month?: unknown; deltaMs?: unknown } | null;
+    const month = (typeof body?.month === 'string' ? body.month : shanghaiMonth()).slice(0, 7);
+    const delta = typeof body?.deltaMs === 'number' ? Math.floor(body.deltaMs) : NaN;
+    if (!/^\d{4}-\d{2}$/.test(month)) return c.json({ error: 'invalid', message: '月份格式应为 YYYY-MM' }, 400);
+    if (!Number.isFinite(delta) || delta < 0 || delta > 3_600_000) return c.json({ error: 'invalid', message: '单次上报时长需在 0–60 分钟内' }, 400);
+    const [existing] = await db.select().from(schema.workHours).where(and(eq(schema.workHours.userId, user.id), eq(schema.workHours.month, month))).limit(1);
+    const next = Math.min((existing?.totalMs ?? 0) + delta, 2_000_000_000);
+    if (existing) {
+      const [row] = await db.update(schema.workHours).set({ totalMs: next, updatedAt: new Date() }).where(and(eq(schema.workHours.userId, user.id), eq(schema.workHours.month, month))).returning();
+      return c.json({ month, totalMs: row.totalMs });
+    }
+    const [row] = await db.insert(schema.workHours).values({ userId: user.id, month, totalMs: next }).returning();
+    return c.json({ month, totalMs: row.totalMs });
   });
 
 
@@ -614,10 +700,81 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json(await issue(row, body.portal, portals));
   });
 
-  /** Everything the signed-in user may see, in the frontend's shapes. */
+  async function lockedMonths() {
+    const rows = await db.select({ month: schema.lessonMonthLocks.month }).from(schema.lessonMonthLocks);
+    return rows.map(r => r.month);
+  }
+
+  // ---- 课时记录 · 月度确认锁定 ----
+  app.get('/lesson-month-locks', async c => {
+    const user = c.get('user');
+    if (!canWrite(user) && !isTeacher(user.role)) return forbidden(c);
+    const rows = await db.select().from(schema.lessonMonthLocks).orderBy(desc(schema.lessonMonthLocks.month));
+    return c.json({
+      locks: rows.map(r => ({
+        month: r.month, confirmedBy: r.confirmedBy, confirmedByName: r.confirmedByName,
+        confirmedAt: r.confirmedAt.toISOString(),
+      })),
+      months: rows.map(r => r.month),
+    });
+  });
+
+  app.post('/lesson-month-locks', async c => {
+    const user = c.get('user');
+    if (!canWrite(user)) return forbidden(c);
+    const body = await c.req.json().catch(() => null) as { month?: unknown } | null;
+    const month = typeof body?.month === 'string' ? body.month.trim() : '';
+    if (!isLessonMonth(month)) return c.json({ error: 'invalid', message: '请选择有效月份（YYYY-MM）' }, 400);
+    const [existing] = await db.select().from(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month)).limit(1);
+    if (existing) {
+      return c.json({
+        lock: { month: existing.month, confirmedBy: existing.confirmedBy, confirmedByName: existing.confirmedByName, confirmedAt: existing.confirmedAt.toISOString() },
+        already: true as const,
+      });
+    }
+    const now = new Date();
+    const [row] = await db.insert(schema.lessonMonthLocks).values({
+      month, confirmedBy: user.email.toLowerCase(), confirmedByName: user.name, confirmedAt: now,
+    }).returning();
+
+    // Auto-notify 张捷嘉 with a directed 项目公告.
+    let announcement = null as ReturnType<typeof annView> | null;
+    const [leader] = await db.select().from(schema.users).where(and(eq(schema.users.active, true), or(eq(schema.users.name, '张捷嘉'), eq(schema.users.leader, true)))).orderBy(asc(schema.users.id)).limit(1);
+    if (leader) {
+      const lessonRows = await db.select().from(schema.lessonRecords);
+      const courseRows = await db.select({ id: schema.opsCourses.id, teacher: schema.opsCourses.teacher }).from(schema.opsCourses);
+      const inMonth = lessonRows.filter(r => String(r.date).slice(0, 7) === month);
+      const byTeacher = hoursByLessonTeacher(inMonth.map(r => ({
+        id: r.id, course: r.course, date: r.date, hours: r.hours, expectedCount: r.expectedCount, actualCount: r.actualCount,
+        opsTeacher: r.opsTeacher, rate: r.rate, unit: r.unit as 'hour' | 'person_hour' | 'session', amount: r.amount, note: r.note, createdBy: r.createdBy, teacher: r.teacher ?? undefined,
+      })), courseRows, month);
+      const totalH = Math.round(byTeacher.reduce((n, x) => n + x.hours, 0) * 100) / 100;
+      const lines = byTeacher.length
+        ? byTeacher.map(t => `· ${t.teacher}：${t.hours} 小时（${t.count} 节）`).join('\n')
+        : '· （本月暂无授课老师课时）';
+      const title = `${monthLabel(month)}授课老师课时已确认`;
+      const content = `${user.name} 已确认 ${monthLabel(month)} 的授课老师课时无误，该月课时记录已锁定（仅张捷嘉可再修改）。\n\n合计 ${byTeacher.length} 位老师 · ${totalH} 小时：\n${lines}`;
+      const id = 'ANN-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const [ann] = await db.insert(schema.announcements).values({
+        id, title, body: content, tag: '课时确认', program: null, audience: 'selected', recipientIds: [leader.id], authorId: user.id, authorName: user.name,
+      }).returning();
+      await db.insert(schema.announcementReads).values({ announcementId: id, userId: user.id }).onConflictDoNothing();
+      announcement = annView(ann, { read: true, readCount: 1, recipientCount: 1 });
+    }
+
+    return c.json({
+      lock: { month: row.month, confirmedBy: row.confirmedBy, confirmedByName: row.confirmedByName, confirmedAt: row.confirmedAt.toISOString() },
+      announcement,
+      already: false as const,
+    });
+  });
+
+    /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
     const [programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'teamLogs', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'resourceFolders', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
+    const lessonMonthLockRows = await db.select({ month: schema.lessonMonthLocks.month }).from(schema.lessonMonthLocks);
+    const lessonMonthLocks = lessonMonthLockRows.map(r => r.month);
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
     // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
@@ -656,10 +813,11 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         lessonFeedbacks: lessonFeedbacks.filter(r => scope.opsCourseIds.has(r.course as string)),
         staff: [], courseSessions: courseSessions.filter(x => scope.courseIds.has(x.course as string)),
         announcements: teacherAnn,
+        lessonMonthLocks,
       });
     }
     const announcementList = await announcementsFor(user);
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions, announcements: announcementList });
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions, announcements: announcementList, lessonMonthLocks });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -676,6 +834,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       classTypes: [], projects: [], teachers: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
       courseSessions: courseSessions.filter(x => courses.some(c => c.id === x.course)),
       announcements: announcementList,
+      lessonMonthLocks,
     });
   });
 
@@ -731,8 +890,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   });
 
 
-  /** 课程编号 format / uniqueness and 排课冲突 (same teacher, team or room) unless the course was saved with 「仍然保存」. */
-  async function scheduleGuard(name: 'courses' | 'courseSessions', data: Record<string, unknown>, id: string): Promise<{ status: 400 | 409; body: { error: string; message: string; conflicts?: unknown[] } } | null> {
+  /** 课程编号 format / uniqueness and 排课冲突 (授课老师 + 运营老师 + team/room) unless saved with 「强制设定」 (conflict_override). */
+  async function scheduleGuard(name: 'courses' | 'courseSessions', data: Record<string, unknown>, id: string, opsName: string): Promise<{ status: 400 | 409; body: { error: string; message: string; conflicts?: unknown[] } } | null> {
     const clean = (r: Record<string, unknown>) => { const o: Record<string, unknown> = {}; for (const [k, v] of Object.entries(r)) if (v !== null) o[k] = v; return o; };
     const courses = (await db.select().from(schema.courses)).map(r => clean(r as unknown as Record<string, unknown>)) as unknown as (CourseLike & { conflictOverride?: boolean })[];
     const sessions = (await db.select().from(schema.courseSessions)).map(r => clean(r as unknown as Record<string, unknown>)) as unknown as CourseSession[];
@@ -756,15 +915,15 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const own = sessions.filter(x => x.course === id);
       const t = String(data.time || '').split(/[–—~-]/).map(x => x.trim());
       const slots = own.length ? own : (t.length === 2 ? [{ date: String(data.date), start: t[0], end: t[1] }] : []);
-      const hits = scheduleConflicts(slots, { courseId: id, teacher: String(data.teacher || ''), team: String(data.team || ''), location: String(data.location || '') }, courses, sessions);
-      return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。如确需安排，请在表单中选择「仍然保存」。', conflicts: hits } } : null;
+      const hits = scheduleConflicts(slots, { courseId: id, teacher: String(data.teacher || ''), opsTeacher: opsName, team: String(data.team || ''), location: String(data.location || '') }, courses, sessions);
+      return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。请调整时间，或在表单中选择「强制设定」。', conflicts: hits } } : null;
     }
     const course = courses.find(x => x.id === data.course);
     if (!course || course.conflictOverride) return null; // the course PUT re-checks its sessions when it arrives
     const current = sessions.find(x => x.id === id);
     if (current && current.date === data.date && current.start === data.start && current.end === data.end && (current.location || '') === (data.location || '')) return null;
-    const hits = scheduleConflicts([{ date: String(data.date), start: String(data.start), end: String(data.end), location: (data.location as string) || course.location }], { courseId: course.id, teacher: course.teacher, team: course.team, location: course.location }, courses, sessions);
-    return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。如确需安排，请在表单中选择「仍然保存」。', conflicts: hits } } : null;
+    const hits = scheduleConflicts([{ date: String(data.date), start: String(data.start), end: String(data.end), location: (data.location as string) || course.location }], { courseId: course.id, teacher: course.teacher, opsTeacher: opsName, team: course.team, location: course.location }, courses, sessions);
+    return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。请调整时间，或在表单中选择「强制设定」。', conflicts: hits } } : null;
   }
 
   /** Upsert one record of a collection (ops/admin). The body is the full frontend record. */
@@ -809,6 +968,14 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         data.opsTeacher = String(data.opsTeacher).toLowerCase();
         data.createdBy = current ? current.createdBy : user.email;
       }
+      if (name === 'lessons' && !canEditLockedLessonMonth(user)) {
+        const dates = [String(data.date || '')];
+        if (current) dates.push(String(current.date || ''));
+        const months = await lockedMonths();
+        for (const d of dates) {
+          if (isLessonMonthLocked(months, d)) return c.json({ error: 'forbidden', message: '该月课时已确认锁定，仅张捷嘉可修改' }, 403);
+        }
+      }
       if (name === 'lessons') {
         // Snapshot the class type's rate when the record is created or moved to another course; the API computes the amount.
         let rate = current ? Number(current.rate) : NaN, unit = current ? String(current.unit) : '';
@@ -823,7 +990,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       }
     }
     if (name === 'courses' || name === 'courseSessions') {
-      const blocked = await scheduleGuard(name, data, id);
+      const blocked = await scheduleGuard(name, data, id, user.name);
       if (blocked) return c.json(blocked.body, blocked.status);
     }
     for (const [k, v] of Object.entries(recordSchemas[name].shape)) if ((v as { isOptional(): boolean }).isOptional() && data[k] === undefined) data[k] = null;
@@ -862,6 +1029,10 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       }
     }
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
+    if (name === 'lessons' && !canEditLockedLessonMonth(user)) {
+      const months = await lockedMonths();
+      if (isLessonMonthLocked(months, String(current.date || ''))) return c.json({ error: 'forbidden', message: '该月课时已确认锁定，仅张捷嘉可修改' }, 403);
+    }
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
       if (name === 'resourceFolders') await db.update(schema.resources).set({ folder: null }).where(eq(schema.resources.folder, id));

@@ -831,6 +831,11 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .ops-table [data-slot=table-cell]{padding:12px 8px;font-size:.8125rem;color:#6d6080;vertical-align:middle}
 .ops-table .cell-title{display:block;color:#3f354c;font-weight:550}
 .ops-table .cell-sub{display:block;font-size:.6875rem;color:#a093ad;margin-top:2px}
+/* 课程 column: vertically center the course name with other row fields; code hangs below. */
+.ops-table [data-slot=table-cell].course-cell{white-space:normal;vertical-align:middle;padding-bottom:calc(12px + 1.15em);position:relative}
+.ops-table .course-stack{position:relative;display:block;line-height:1.35}
+.ops-table .course-stack .cell-title{display:block;white-space:normal;overflow-wrap:anywhere}
+.ops-table .course-stack .cell-sub{position:absolute;left:0;top:100%;margin-top:2px;white-space:nowrap;line-height:1.3}
 .ops-table .num{text-align:left;font-variant-numeric:tabular-nums}
 .ops-table .num b{color:#3f354c;font-weight:600}
 .nowrap{white-space:nowrap}
@@ -959,6 +964,7 @@ html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-
   .best-brand .best-wordmark span,.best-brand small,.best-brand .best-mono{transition:opacity .2s linear!important;transform:none!important;filter:none!important}
   .best-bunny,.best-bunny[data-active]{scale:1;rotate:0deg;transition:opacity .2s linear!important}
 }
+
 /* ---- Course conflict modal (强制设定) ---- */
 .conflict-modal-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px;max-height:min(50vh,420px);overflow:auto}
 .conflict-modal-list li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;padding:10px 12px;border-radius:12px;background:#fff8f1;border:1px solid #f3c9a8}
@@ -1243,6 +1249,21 @@ html[data-workspace=public] body{background:#f4f2f7}
 .teacher-hour-chip b small{font-size:.6875rem;color:#9a8aae;font-weight:500}
 .teacher-hour-chip .th-count{grid-column:1/-1;font-size:.6875rem;color:#9a8aae}
 .teacher-hour-chip i{position:absolute;left:0;bottom:0;height:3px;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#b597ef,#7c4ddb)}
+.teacher-hours-head{flex-wrap:wrap}
+.teacher-hours-head small{margin-left:auto}
+.teacher-hours-empty{margin:0;padding:4px 2px 2px;font-size:.75rem;color:#9a8aae}
+.month-confirm-hold{position:relative;display:inline-flex;align-items:center;gap:6px;margin-left:8px;min-height:32px;padding:0 12px;border-radius:999px;border:1px solid #dccff0;background:#fff;color:#6a4bb8;font-size:.75rem;font-weight:600;cursor:pointer;user-select:none;touch-action:none;overflow:hidden;isolation:isolate}
+.month-confirm-hold>i{position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);background:linear-gradient(90deg,#e9ddff,#c9b0f5);z-index:0;pointer-events:none}
+.month-confirm-hold>svg,.month-confirm-hold>span{position:relative;z-index:1}
+.month-confirm-hold:hover{border-color:#b89ae6;background:#faf7ff}
+.month-confirm-hold.busy{opacity:.7;cursor:wait}
+.month-confirm-hold:disabled{opacity:.6;cursor:not-allowed}
+.month-lock-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;min-height:28px;padding:0 10px;border-radius:999px;background:#f1ecf8;color:#6d5b8c;font-size:.6875rem;font-weight:600;border:1px solid #e4daf2}
+.ops-table [data-slot=table-row].is-locked-month [data-slot=table-cell]:not(.row-actions){opacity:.78}
+.row-lock-hint{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;color:#9a8aae}
+.fee-stat{cursor:help}
+.fee-tip{font-size:.8125rem!important}
+
 .icon-button.has-feedback{color:#7c4ddb}
 .icon-button.has-feedback::after{content:'';position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:#1f9d6b;border:1px solid #fff}
 .lesson-dialog .form-stack{gap:14px}
@@ -1973,3 +1994,48 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 
 /* 项目公告 + 资料文件夹 */
 .ann-compose{margin-bottom:18px}.ann-compose h2{margin-bottom:4px}.ann-pick{border:1px solid #ebe4f4;border-radius:12px;padding:12px 14px;background:#faf8fd}.ann-pick-head{display:flex;align-items:center;gap:8px;font-size:.75rem;color:#7a6e8d;margin-bottom:10px}.ann-pick-head span{flex:1}.ann-pick-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:220px;overflow:auto}.ann-pick-list label{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;border:1px solid transparent;cursor:pointer}.ann-pick-list label.on{background:#f0e8fc;border-color:#e0d2f5}.ann-pick-list strong{font-size:.8125rem}.ann-pick-list small{margin-left:auto;color:#9a8aab;font-size:.6875rem}.ann-card.unread{box-shadow:inset 3px 0 0 #b07aef}.notification.is-unread{background:#f5effc}.ann-unread-modal{max-width:520px}.ann-unread-body{padding:8px 2px 16px}.ann-unread-body h2{font-size:1.125rem;margin:10px 0 8px}.ann-unread-body p{color:#6f6682;line-height:1.75;font-size:.875rem}.ann-reads-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto}.ann-reads-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#faf8fd;border:1px solid #efe9f6}.ann-reads-list li.unread{opacity:.72}.ann-read-dot{width:8px;height:8px;border-radius:50%;background:#c4b5d8;flex-shrink:0}.ann-reads-list li.read .ann-read-dot{background:#7d5bb8}.ann-reads-list em{margin-left:auto;font-style:normal;font-size:.6875rem;color:#9585a8}.resource-folders{margin-bottom:14px}.folder-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.folder-chips button{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;border:1px solid #e6dff0;background:#fff;font-size:.75rem;color:#6f6582}.folder-chips button.selected{background:linear-gradient(135deg,#efe6fb,#e4d7f7);border-color:#d5c4ee;color:#6b45b0;font-weight:600}.folder-chips em{font-style:normal;font-size:.625rem;background:#ebe3f5;padding:1px 6px;border-radius:999px}.folder-edit.compact{margin-top:8px}.folder-actions{display:inline-flex;gap:8px;margin-left:8px}.resource-folder-block{margin-top:12px}.resource-folder-title{font-size:.8125rem;color:#7a6e8d;margin:4px 0 8px;font-weight:600}
+
+/* —— Workbench weather + calendar chrome —— */
+.welcome-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.welcome-weather{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 12px;border-radius:12px;border:1px solid #ebe4f4;background:#ffffffaa;color:#6f6285;font-size:.75rem;min-height:48px;transition:background .18s,border-color .18s,box-shadow .18s}
+.welcome-weather:hover{background:#fff;border-color:#dccff0;box-shadow:0 4px 14px #7a5bb012}
+.welcome-weather .wx-glyph{font-size:1.25rem;line-height:1}
+.welcome-weather .wx-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.welcome-weather .wx-text strong{font-size:.9375rem;font-weight:650;color:#3d3550;letter-spacing:-.3px}
+.welcome-weather .wx-text small{display:inline-flex;align-items:center;gap:3px;font-size:.625rem;color:#9685a5}
+.welcome-weather .wx-hint{color:#b09cc8;opacity:.7}
+button.welcome-date{display:flex;align-items:center;gap:10px;font-size:.75rem;color:#7b6e8e;padding:8px 12px;border-radius:12px;border:1px solid transparent;background:transparent;text-align:left;min-height:48px;transition:background .18s,border-color .18s}
+button.welcome-date:hover{background:#ffffffaa;border-color:#ebe4f4}
+button.welcome-date>div>span{display:block;font-size:.625rem;color:#9685a5;margin-top:5px}
+.calendar-modal{max-width:420px}
+.cal-mode-toggle{display:inline-flex;gap:4px;padding:3px;border-radius:10px;background:#f3eef9;margin:4px 0 14px}
+.cal-mode-toggle button{min-height:32px;padding:6px 14px;border-radius:8px;font-size:.75rem;color:#7a6d90}
+.cal-mode-toggle button.on{background:#fff;color:#6b45b0;font-weight:600;box-shadow:0 1px 4px #6b45b015}
+.cal-month-wrap{display:flex;justify-content:center}
+.cal-rdp{margin:0 auto}
+.cal-year-wrap{padding:4px 0 8px}
+.cal-year-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cal-year-nav strong{font-size:1rem;color:#4a3f5e}
+.cal-year-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cal-year-cell{min-height:44px;border-radius:10px;border:1px solid #ebe4f4;background:#faf8fd;color:#6f6285;font-size:.8125rem}
+.cal-year-cell:hover{border-color:#d5c4ee;background:#f3eafc}
+.cal-year-cell.current{background:linear-gradient(135deg,#efe6fb,#e4d7f7);border-color:#d5c4ee;color:#6b45b0;font-weight:600}
+.weather-modal{max-width:440px}
+.wx-now{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#f6f1fc;margin-bottom:14px}
+.wx-now .wx-glyph.lg{font-size:2rem}
+.wx-now strong{display:block;font-size:1.75rem;letter-spacing:-1px;color:#3d3550}
+.wx-now span{font-size:.8125rem;color:#847796}
+.wx-days{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.wx-days li{display:grid;grid-template-columns:88px 28px 1fr auto;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:#faf8fd;border:1px solid #efe9f6;font-size:.8125rem;color:#6f6682}
+.wx-day-temps b{color:#3d3550;font-weight:600}
+.weather-city-form{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.weather-city-form input{flex:1;min-width:160px;border:1px solid #e6dff0;border-radius:10px;padding:10px 12px;background:#fffb;min-height:42px}
+.work-hours-card{cursor:default}
+.work-hours-card .work-hours-clock{font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.work-hours-card .wh-digits{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1.55rem;font-weight:650;color:#2f3f62;letter-spacing:1px}
+.work-hours-card .stat-icon.live{animation:wh-pulse 1.6s ease-in-out infinite}
+@keyframes wh-pulse{0%,100%{box-shadow:0 0 0 0 #688bc955}50%{box-shadow:0 0 0 6px #688bc900}}
+/* Collapsed sidebar: never show portal switch (belt + suspenders with React). */
+[data-collapsible=icon] .nexus-sidebar .portal-switch,
+.nexus-sidebar[data-collapsible=icon] .portal-switch{display:none!important}
+.portal-switch{width:100%;margin-top:8px;justify-content:center;font-size:.75rem;min-height:36px;padding:8px 10px;white-space:normal;line-height:1.35}
