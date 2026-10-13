@@ -12,11 +12,11 @@ import type { Role } from './roles';
 // Inlined (not imported) so this file stays runtime-import free for tests.
 const unameKey = (v: unknown) => typeof v === 'string' ? v.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase() : '';
 
-export type DirectoryUser = { email: string; username: string | null; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean; avatar?: string | null; theme?: string | null;
+export type DirectoryUser = { email: string; username: string | null; name: string; role: Role; salesName: string | null; active: boolean; mustChange: boolean; builtIn: boolean; avatar?: string | null; theme?: string | null; salesRegion?: string | null; salesLead?: boolean;
   /** 部门负责人: fixed in the built-in account list (never settable from 系统管理 / overrides). */ leader: boolean };
 type StaffAccount = { name: string; username: string; email: string; role: Role; salt: string; hash: string; leader?: boolean };
 /** Per-browser changes made through 系统管理 / 修改密码 on the Pages preview. */
-export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null; theme?: string | null };
+export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null; theme?: string | null; salesRegion?: string | null; salesLead?: boolean };
 export type Overrides = Record<string, UserOverride>;
 
 /** Public sales demo account (intentionally advertised on the login page). */
@@ -84,7 +84,7 @@ export function directory(overrides: Overrides = {}): DirectoryUser[] {
   ];
   const out = base.map(u => { const o = overrides[u.email]; return o ? { ...u, ...pick(o) } : u; });
   for (const [email, o] of Object.entries(overrides)) if (o.created && !out.some(u => u.email === email) && o.role) {
-    out.push({ email, username: o.username ?? null, name: o.name || email, role: o.role, salesName: o.salesName ?? null, active: o.active ?? true, mustChange: o.mustChange ?? true, builtIn: false, leader: false });
+    out.push({ email, username: o.username ?? null, name: o.name || email, role: o.role, salesName: o.salesName ?? null, salesRegion: o.salesRegion ?? null, salesLead: o.salesLead === true, active: o.active ?? true, mustChange: o.mustChange ?? true, builtIn: false, leader: false });
   }
   return out;
 }
@@ -98,6 +98,8 @@ function pick(o: UserOverride) {
   if (o.salesName !== undefined) r.salesName = o.salesName;
   if (o.avatar !== undefined) r.avatar = o.avatar;
   if (o.theme !== undefined) r.theme = o.theme;
+  if (o.salesRegion !== undefined) r.salesRegion = o.salesRegion;
+  if (typeof o.salesLead === 'boolean') r.salesLead = o.salesLead;
   return r;
 }
 /** Finds an account by email (contains '@') or by username (case/whitespace-insensitive). */

@@ -113,6 +113,12 @@ insert (username = 姓名, email = 拼音@nexus.local, `must_change_password=tru
 keep their existing role — they already appear in the 授课老师 picker; do not demote them to `teacher`.
 Initial passwords are delivered out of band (see `/workspace/coach-accounts.md` for the coach roster batch).
 
+销售老师 (`role=sales`, blue / `theme=ice` portal): username = 中文姓名, display name may append the English name
+(「陈恬 Caroline」), email = 拼音@nexus.local, `must_change_password=true`. Each carries `users.sales_region`
+(销售大部 / 商务拓展一区 / 二区 / 三区, migration 0013) and optional `users.sales_lead` (杨巍, 胡晓贇) for 业绩统计 grouping;
+editable in 系统管理 → 账号 (区域列 + 区域筛选). Batch roster: `scripts/sales-roster.json`, applied with
+`scripts/sales-accounts.sql.mjs` (upsert by email; existing accounts keep their password).
+
 ## 推文 public links and link previews
 
 Published 推文 (article posts) have a public, login-free reader:

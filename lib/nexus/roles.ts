@@ -10,6 +10,10 @@
 export type Role = 'ops' | 'sales' | 'teacher' | 'admin' | 'superadmin';
 export const roles: readonly Role[] = ['superadmin', 'ops', 'teacher', 'sales', 'admin'];
 export const roleLabels: Record<Role, string> = { superadmin: '超级管理员', ops: '项目运营老师', teacher: '授课老师', sales: '销售顾问', admin: '系统管理员' };
+/** 销售老师 org regions (users.sales_region) for grouping 销售业绩 stats. */
+export const SALES_REGIONS = ['销售大部', '商务拓展一区', '商务拓展二区', '商务拓展三区'] as const;
+export type SalesRegion = typeof SALES_REGIONS[number];
+export const isSalesRegion = (v: unknown): v is SalesRegion => typeof v === 'string' && (SALES_REGIONS as readonly string[]).includes(v);
 export const isRole = (v: unknown): v is Role => typeof v === 'string' && (roles as readonly string[]).includes(v);
 /** Ops workspace (anything that is not sales). */
 export const isOpsLike = (role: unknown) => role === 'ops' || role === 'superadmin' || role === 'admin';

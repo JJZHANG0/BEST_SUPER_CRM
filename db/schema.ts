@@ -31,6 +31,10 @@ export const users = pgTable('users', {
   avatar: text('avatar'),
   /** Accent theme id (see lib/nexus/themes.ts). */
   theme: text('theme').notNull().default('amethyst'),
+  /** 销售区域 (sales users): 销售大部 | 商务拓展一区 | 商务拓展二区 | 商务拓展三区 (lib/nexus/roles.ts SALES_REGIONS). */
+  salesRegion: text('sales_region'),
+  /** 销售负责人 (区/部 manager, e.g. 杨巍, 胡晓贇) — informational for stats; grants no extra rights. */
+  salesLead: boolean('sales_lead').notNull().default(false),
   ...stamps,
 }, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
 

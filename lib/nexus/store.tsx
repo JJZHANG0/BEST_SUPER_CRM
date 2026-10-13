@@ -72,7 +72,7 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   /** Change the signed-in user's password. Resolves to an error message, or null on success. */
   changePassword:(current:string,next:string)=>Promise<string|null>;
   /** 系统管理 · 用户管理 (superadmin). */
-  admin:{list:()=>Promise<AdminUser[]>;create:(u:{email:string;username:string;name:string;role:Role;salesName?:string|null})=>Promise<{ok:true;password:string}|{ok:false;error:string}>;update:(u:AdminUser,patch:{name?:string;username?:string;role?:Role;active?:boolean})=>Promise<string|null>;resetPassword:(u:AdminUser)=>Promise<{ok:true;password:string}|{ok:false;error:string}>};
+  admin:{list:()=>Promise<AdminUser[]>;create:(u:{email:string;username:string;name:string;role:Role;salesName?:string|null;salesRegion?:string|null;salesLead?:boolean})=>Promise<{ok:true;password:string}|{ok:false;error:string}>;update:(u:AdminUser,patch:{name?:string;username?:string;role?:Role;active?:boolean;salesRegion?:string|null;salesLead?:boolean})=>Promise<string|null>;resetPassword:(u:AdminUser)=>Promise<{ok:true;password:string}|{ok:false;error:string}>};
   /** False when changes could not be saved (browser storage refused, or the API rejected them). */
   persisted:boolean;
   /** True when this build talks to the NEXUS API (shared database); false in the static demo. */
@@ -108,7 +108,7 @@ const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
 const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,assignedBy:t.assignedBy??null,assignedByName:t.assignedByName??null,ownerName:t.ownerName??null,ownerEmail:t.ownerEmail??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
 const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,theme:DEFAULT_THEME,mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
-const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName,leader:u.leader});
+const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName,leader:u.leader,salesRegion:u.salesRegion??null,salesLead:u.salesLead===true});
 const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):'无法连接服务器，请检查网络后重试';
 
 export function Provider({children}:{children:ReactNode}){
@@ -327,7 +327,7 @@ export function Provider({children}:{children:ReactNode}){
    if(directory(overrides).some(x=>x.email===email))return {ok:false,error:'该邮箱已被使用'};
    if(usernameTaken(username,overrides))return {ok:false,error:'该用户名已被使用'};
    const password=randomPassword();const h=await makeHash(password);
-   setOverrides(o=>({...o,[email]:{created:true,name,username,role:u.role,active:true,mustChange:true,salesName:u.role==='sales'?(u.salesName||'顾问 '+name):null,...h}}));
+   setOverrides(o=>({...o,[email]:{created:true,name,username,role:u.role,active:true,mustChange:true,salesName:u.role==='sales'?(u.salesName||'顾问 '+name):null,salesRegion:u.salesRegion??null,salesLead:u.salesLead===true,...(u.role==='sales'?{theme:'ice'}:u.role==='teacher'?{theme:'steel'}:{}),...h}}));
    return {ok:true,password};
   },
   update:async(u,patch)=>{

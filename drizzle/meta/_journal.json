@@ -92,6 +92,13 @@
       "when": 1791730000000,
       "tag": "0012_team_progress_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791740000000,
+      "tag": "0013_users_sales_region",
+      "breakpoints": true
     }
   ]
 }

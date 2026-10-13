@@ -1,0 +1,150 @@
+[
+ {
+  "username": "杨巍",
+  "en": "",
+  "email": "yangwei@nexus.local",
+  "region": "销售大部",
+  "lead": true
+ },
+ {
+  "username": "胡晓贇",
+  "en": "",
+  "email": "huxiaoyun@nexus.local",
+  "region": "商务拓展一区",
+  "lead": true,
+  "note": "也在销售大部（区负责人）"
+ },
+ {
+  "username": "陈恬",
+  "en": "Caroline",
+  "email": "chentian@nexus.local",
+  "region": "商务拓展一区",
+  "lead": false
+ },
+ {
+  "username": "康海瑞",
+  "en": "Harry",
+  "email": "kanghairui@nexus.local",
+  "region": "商务拓展一区",
+  "lead": false
+ },
+ {
+  "username": "卢昕",
+  "en": "",
+  "email": "luxin@nexus.local",
+  "region": "商务拓展一区",
+  "lead": false
+ },
+ {
+  "username": "孙杰",
+  "en": "",
+  "email": "sunjie@nexus.local",
+  "region": "商务拓展一区",
+  "lead": false
+ },
+ {
+  "username": "王姝越",
+  "en": "",
+  "email": "wangshuyue@nexus.local",
+  "region": "商务拓展一区",
+  "lead": false
+ },
+ {
+  "username": "王明玉",
+  "en": "",
+  "email": "wangmingyu@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "傅易佳",
+  "en": "",
+  "email": "fuyijia@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "李佳佳",
+  "en": "",
+  "email": "lijiajia@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "刘佳蓉",
+  "en": "",
+  "email": "liujiarong@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "罗潘煜",
+  "en": "",
+  "email": "luopanyu@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "尹歆",
+  "en": "",
+  "email": "yinxin@nexus.local",
+  "region": "商务拓展二区",
+  "lead": false
+ },
+ {
+  "username": "李寅",
+  "en": "",
+  "email": "liyin@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "周樨瀛",
+  "en": "Daisy Zhou",
+  "email": "zhouxiying@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "蒋波",
+  "en": "",
+  "email": "jiangbo@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "邵振楠",
+  "en": "",
+  "email": "shaozhennan@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "宋盼婷",
+  "en": "",
+  "email": "songpanting@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "冼嘉辉",
+  "en": "",
+  "email": "xianjiahui@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "尹秀清",
+  "en": "",
+  "email": "yinxiuqing@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ },
+ {
+  "username": "赵忠倩",
+  "en": "",
+  "email": "zhaozhongqian@nexus.local",
+  "region": "商务拓展三区",
+  "lead": false
+ }
+]

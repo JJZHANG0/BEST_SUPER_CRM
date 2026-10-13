@@ -15,7 +15,7 @@ export type ApiUser = { id: number; email: string; username?: string | null; nam
 /** Ops teachers listed for 教务老师 pickers and name lookups. */
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
 /** Row of 系统管理 · 用户管理. */
-export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null; leader?: boolean };
+export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null; leader?: boolean; salesRegion?: string | null; salesLead?: boolean };
 export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions';
 export type Collection = 'programs' | 'teams' | 'teamLogs' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | 'posts' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
@@ -75,8 +75,8 @@ export const api = {
   updateAvatar: (avatar: string | null) => request<{ user: ApiUser }>('/auth/avatar', { method: 'POST', body: JSON.stringify({ avatar }) }),
   updateTheme: (theme: string) => request<{ user: ApiUser }>('/auth/theme', { method: 'POST', body: JSON.stringify({ theme }) }),
   adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),
-  createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
-  updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   resetPassword: (id: number) => request<{ password: string }>(`/admin/users/${id}/reset-password`, { method: 'POST' }),
 };
 

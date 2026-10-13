@@ -16,7 +16,7 @@ import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
-import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
@@ -45,7 +45,7 @@ function inPortal(base: SessionUser, portal: Portal, portals: Portal[]): Session
   return s;
 }
 const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME });
-const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true });
+const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true, salesRegion: row.salesRegion ?? null, salesLead: row.salesLead === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
 /** Human message for a unique violation on users (username vs email). */
 function conflictMessage(err: unknown) {
@@ -205,7 +205,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   });
   app.post('/admin/users', async c => {
     if (!canManageSystem(c.get('user').role)) return onlySuperadmin(c);
-    const body = await c.req.json().catch(() => null) as { email?: unknown; username?: unknown; name?: unknown; role?: unknown; salesName?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { email?: unknown; username?: unknown; name?: unknown; role?: unknown; salesName?: unknown; salesRegion?: unknown; salesLead?: unknown } | null;
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const name = typeof body?.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
     if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400);
@@ -215,9 +215,11 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) return c.json({ error: 'invalid', message: '请输入有效的邮箱（作为备用登录账号）' }, 400);
     if (!isRole(body?.role) || body.role === 'admin') return c.json({ error: 'invalid', message: '未知角色' }, 400);
     const salesName = body.role === 'sales' ? (typeof body.salesName === 'string' && body.salesName.trim() ? body.salesName.trim().slice(0, 80) : '顾问 ' + name) : null;
+    if (body.salesRegion != null && body.salesRegion !== '' && !isSalesRegion(body.salesRegion)) return c.json({ error: 'invalid', message: '未知销售区域' }, 400);
+    const salesRegion = isSalesRegion(body.salesRegion) ? body.salesRegion : null;
     const password = generatePassword();
     try {
-      const [row] = await db.insert(schema.users).values({ email, username, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true, theme: body.role === 'teacher' ? 'steel' : DEFAULT_THEME }).returning();
+      const [row] = await db.insert(schema.users).values({ email, username, name, role: body.role, salesName, passwordHash: await hashPassword(password), mustChangePassword: true, theme: body.role === 'teacher' ? 'steel' : body.role === 'sales' ? 'ice' : DEFAULT_THEME, salesRegion, salesLead: body.salesLead === true }).returning();
       return c.json({ user: adminUser(row), password }, 201);
     } catch (err) {
       if (pgCode(err) === '23505') return c.json({ error: 'conflict', message: conflictMessage(err) }, 409);
@@ -230,12 +232,14 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const id = Number(c.req.param('id'));
     const [row] = Number.isInteger(id) ? await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1) : [];
     if (!row) return c.json({ error: 'not_found' }, 404);
-    const body = await c.req.json().catch(() => null) as { name?: unknown; username?: unknown; role?: unknown; active?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { name?: unknown; username?: unknown; role?: unknown; active?: unknown; salesRegion?: unknown; salesLead?: unknown } | null;
     const patch: Partial<typeof schema.users.$inferInsert> = { updatedAt: new Date() };
     if (body?.username !== undefined) { const username = normalizeUsername(body.username); const issue = usernameIssue(username); if (issue) return c.json({ error: 'invalid', message: issue }, 400); patch.username = username; }
     if (typeof body?.name === 'string') { const name = body.name.trim().replace(/\s+/g, ' ').slice(0, 80); if (!name) return c.json({ error: 'invalid', message: '请填写姓名' }, 400); patch.name = name; }
     if (body?.role !== undefined) { if (!isRole(body.role)) return c.json({ error: 'invalid', message: '未知角色' }, 400); patch.role = body.role; if (body.role === 'sales' && !row.salesName) patch.salesName = '顾问 ' + (patch.name ?? row.name); }
     if (body?.active !== undefined) { if (typeof body.active !== 'boolean') return c.json({ error: 'invalid' }, 400); patch.active = body.active; }
+    if (body?.salesRegion !== undefined) { if (body.salesRegion === null || body.salesRegion === '') patch.salesRegion = null; else if (isSalesRegion(body.salesRegion)) patch.salesRegion = body.salesRegion; else return c.json({ error: 'invalid', message: '未知销售区域' }, 400); }
+    if (body?.salesLead !== undefined) { if (typeof body.salesLead !== 'boolean') return c.json({ error: 'invalid' }, 400); patch.salesLead = body.salesLead; }
     if (row.id === me.id && ((patch.role && patch.role !== row.role) || patch.active === false)) return c.json({ error: 'invalid', message: '不能修改自己的角色或停用自己的账号' }, 400);
     try {
       const [updated] = await db.update(schema.users).set(patch).where(eq(schema.users.id, id)).returning();
