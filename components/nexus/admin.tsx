@@ -1,7 +1,7 @@
 'use client';
 /** 系统管理 (superadmin): users, 项目编号, 课程 (with CSV import) and 班型与津贴标准. */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { UserPlus, KeyRound, Pencil, Trash2, Upload, Download, Plus, Copy, ShieldCheck, FolderKanban, BookOpenCheck, Users, BadgeJapaneseYen, Ban, CircleCheck, GraduationCap } from 'lucide-react';
+import { UserPlus, KeyRound, Pencil, Trash2, Upload, Download, Plus, Copy, ShieldCheck, FolderKanban, BookOpenCheck, Users, BadgeJapaneseYen, Ban, CircleCheck, GraduationCap, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
@@ -11,6 +11,7 @@ import { canManageSystem, roleLabels, isOpsLike, type Role, normalizeUsername, S
 const regionOptions = [{ value: '', label: '未分区' }, ...SALES_REGIONS.map(r => ({ value: r, label: r }))];
 import {
   allowanceUnits, courseStatuses, importCourses, newRecordId, statusFromDates, toCsv, unitLabel, courseCsvColumns,
+  compareByCodeNumeric,
   type ClassType, type Teacher, type CourseStatus, type OpsCourse, type Project, type CourseImport,
 } from '@/lib/nexus/ops';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState, Notice } from './ui';
@@ -128,8 +129,16 @@ function UserEditDialog({ user, onClose, onSave }: { user: AdminUser; onClose: (
 
 function ProjectsTab() {
   const s = useNexus();
-  const [q, setQ] = useState(''), [editing, setEditing] = useState<Project | null>(null), [open, setOpen] = useState(false);
-  const list = s.projects.filter(p => (p.code + p.name).toLowerCase().includes(q.trim().toLowerCase()));
+  const [q, setQ] = useState(''), [editing, setEditing] = useState<Project | null>(null), [open, setOpen] = useState(false), [showEnded, setShowEnded] = useState(false);
+  const matched = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return s.projects
+      .filter(p => !needle || (p.code + p.name).toLowerCase().includes(needle))
+      .slice()
+      .sort((a, b) => compareByCodeNumeric(a.code, b.code));
+  }, [s.projects, q]);
+  const ended = matched.filter(p => p.status === '已结束');
+  const list = showEnded ? matched : matched.filter(p => p.status !== '已结束');
   const count = (id: string) => s.opsCourses.filter(c => c.project === id).length;
   const remove = async (p: Project) => {
     if (count(p.id)) return toast.error('该项目下还有课程，请先删除或移动课程');
@@ -138,7 +147,7 @@ function ProjectsTab() {
   };
   return <section className="glass panel">
     <div className="filter-toolbar"><SearchBox value={q} onChange={setQ} placeholder="搜索项目编号或名称" /><button className="primary compact push-right" onClick={() => { setEditing(null); setOpen(true); }}><Plus size={16} />新建项目</button></div>
-    <div className="results-meta">{list.length} 个项目<span>项目编号示例：COND2025001</span></div>
+    <div className="results-meta">{list.length} 个项目{!showEnded && ended.length ? `（已隐藏 ${ended.length} 个已结束）` : ''}<span>按项目编号尾号升序{ended.length > 0 && <button type="button" className="text-button inline-action" onClick={() => setShowEnded(v => !v)}>{showEnded ? <><ChevronUp size={14} />收起已结束</> : <><ChevronDown size={14} />展开已结束（{ended.length}）</>}</button>}</span></div>
     {list.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['项目编号', '项目名称', '起始日期', '终止日期', '状态', '课程数', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
       <TableBody>{list.map(p => <TableRow key={p.id}>
         <TableCell className="mono"><strong className="cell-title">{p.code}</strong></TableCell>
@@ -148,7 +157,7 @@ function ProjectsTab() {
         <TableCell className="num">{count(p.id)}</TableCell>
         <TableCell className="row-actions"><button className="icon-button" title="编辑" aria-label={`编辑${p.code}`} onClick={() => { setEditing(p); setOpen(true); }}><Pencil size={15} /></button><button className="icon-button" title="删除" aria-label={`删除${p.code}`} onClick={() => remove(p)}><Trash2 size={15} /></button></TableCell>
       </TableRow>)}</TableBody></Table></div>
-      : <EmptyState icon={FolderKanban} title={s.projects.length ? '没有匹配的项目' : '还没有项目'} description="新建项目编号，或在课程管理中导入课程表时自动创建。" action="新建项目" onAction={() => { setEditing(null); setOpen(true); }} />}
+      : <EmptyState icon={FolderKanban} title={s.projects.length ? (matched.length && !showEnded ? '当前仅有已结束项目' : '没有匹配的项目') : '还没有项目'} description={matched.length && !showEnded ? '点击上方「展开已结束」查看。' : '新建项目编号，或在课程管理中导入课程表时自动创建。'} action={matched.length && !showEnded ? '展开已结束' : '新建项目'} onAction={() => { if (matched.length && !showEnded) setShowEnded(true); else { setEditing(null); setOpen(true); } }} />}
     {open && <ProjectDialog project={editing} onClose={() => setOpen(false)} />}
   </section>;
 }
@@ -180,10 +189,19 @@ function ProjectDialog({ project, onClose }: { project: Project | null; onClose:
 function CoursesTab() {
   const s = useNexus();
   const [q, setQ] = useState(''), [project, setProject] = useState('__all'), [status, setStatus] = useState('__all');
-  const [editing, setEditing] = useState<OpsCourse | null>(null), [open, setOpen] = useState(false), [importing, setImporting] = useState(false);
-  const list = s.opsCourses.filter(c => (project === '__all' || c.project === project) && (status === '__all' || c.status === status) && (c.code + c.name + c.teacher + s.staffName(c.opsTeacher)).toLowerCase().includes(q.trim().toLowerCase()));
-  const type = (id: string) => s.classTypes.find(t => t.id === id);
+  const [editing, setEditing] = useState<OpsCourse | null>(null), [open, setOpen] = useState(false), [importing, setImporting] = useState(false), [showEnded, setShowEnded] = useState(false);
   const code = (id: string) => s.projects.find(p => p.id === id)?.code || '—';
+  const matched = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return s.opsCourses
+      .filter(c => (project === '__all' || c.project === project) && (status === '__all' || c.status === status) && (!needle || (c.code + c.name + c.teacher + s.staffName(c.opsTeacher)).toLowerCase().includes(needle)))
+      .slice()
+      .sort((a, b) => compareByCodeNumeric(code(a.project), code(b.project)) || compareByCodeNumeric(a.code, b.code));
+  }, [s.opsCourses, s.projects, s.staff, project, status, q]);
+  const ended = matched.filter(c => c.status === '已结束');
+  // When user picks 已结束 in the status filter, always show them; otherwise hide by default.
+  const list = (showEnded || status === '已结束') ? matched : matched.filter(c => c.status !== '已结束');
+  const type = (id: string) => s.classTypes.find(t => t.id === id);
   const rateText = (t?: ClassType) => t ? `¥${t.rate} ${unitLabel(t.unit)}` : '—';
   const used = (id: string) => s.lessons.some(l => l.course === id) || s.lessonFeedbacks.some(f => f.course === id);
   const remove = async (c: OpsCourse) => { if (used(c.id)) return toast.error('该课程已有课时记录或反馈，不能删除，可将状态改为已结束'); if (!window.confirm(`删除课程 ${c.code}？`)) return; if (await s.removeRecord('opsCourses', c.id)) toast.success('已删除'); };
@@ -194,7 +212,7 @@ function CoursesTab() {
       <Picker label="课程状态" value={status} onChange={setStatus} options={[{ value: '__all', label: '全部状态' }, ...courseStatuses.map(x => ({ value: x, label: x }))]} />
       <div className="push-right toolbar-buttons"><button className="secondary compact" onClick={() => setImporting(true)}><Upload size={16} />CSV 导入</button><button className="primary compact" onClick={() => { setEditing(null); setOpen(true); }}><Plus size={16} />新建课程</button></div>
     </div>
-    <div className="results-meta">{list.length} 门课程<span>津贴标准由班级类型决定{list.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
+    <div className="results-meta">{list.length} 门课程{!showEnded && status !== '已结束' && ended.length ? `（已隐藏 ${ended.length} 门已结束）` : ''}<span>按项目编号·课程编号尾号升序 · 津贴标准由班级类型决定{ended.length > 0 && status !== '已结束' && <button type="button" className="text-button inline-action" onClick={() => setShowEnded(v => !v)}>{showEnded ? <><ChevronUp size={14} />收起已结束</> : <><ChevronDown size={14} />展开已结束（{ended.length}）</>}</button>}{list.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
     {list.length ? <div className="ops-table-wrap"><Table className="ops-table courses-table"><TableHeader><TableRow>{['项目编号', '课程编号', '课程状态', '课程名称', '班级类型', '津贴标准', '授课老师', '教务老师', '起始日期', '终止日期', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
       <TableBody>{list.map(c => { const t = type(c.classType); return <TableRow key={c.id}>
         <TableCell className="mono nowrap">{code(c.project)}</TableCell><TableCell className="mono nowrap"><strong className="cell-title">{c.code}</strong></TableCell>

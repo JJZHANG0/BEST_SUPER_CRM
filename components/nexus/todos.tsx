@@ -237,7 +237,6 @@ function AssignedPanel() {
 function LeaderPanel({ list }: { list: Todo[] }) {
   const open = openTodos(list), done = list.filter(isDone).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
   return <section className="glass panel" role="tabpanel" aria-label="领导万岁">
-    <p className="leader-tab-intro"><Crown size={15} />部门负责人指派给你的任务，已同步到你的待办，带 <b>{CAPITALIST_TAG}</b> 标签。</p>
     <div className="results-meta">{open.length} 项进行中 · {done.length} 项已完成<span>按期望DDL排序</span></div>
     <div className="todo-list">
       {open.map(t => <TodoRow key={t.id} todo={t} mode="open" />)}

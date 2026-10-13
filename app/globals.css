@@ -756,9 +756,9 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .todo-add-extra.compact-extra{grid-template-columns:140px 1fr;margin-top:2px}
 .todo-add-extra.compact-extra>input{border:1px solid #e3d9ee;border-radius:8px;padding:8px 10px;background:#fffd;font-size:.8125rem;color:#594368;min-height:36px}
 .todo-list{display:flex;flex-direction:column}
-.todo-row{display:flex;align-items:flex-start;gap:10px;padding:12px 4px;border-bottom:1px solid #eee9f380;width:100%}
+.todo-row{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid #eee9f380;width:100%}
 .todo-row:last-child{border:0}
-.todo-check{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;color:#9a86b0;flex-shrink:0;margin-top:1px}
+.todo-check{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;color:#9a86b0;flex-shrink:0}
 .todo-check:hover{background:#f3eef9;color:#7a5aad}
 .todo-row.done .todo-check{color:#43896d;background:#e7f4ee}
 .todo-main{flex:1;min-width:0;text-align:left}
@@ -1932,3 +1932,12 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 .okr-ai-objs b{color:#6d3fd6}.okr-ai-objs em{font-style:normal;color:#9a8ca6}
 .okr-ai-actions{display:flex;gap:8px;flex:none}
 @media (max-width:720px){.okr-ai-banner{flex-direction:column}.okr-ai-actions{align-self:flex-end}}
+
+/* Global search: vertically center dialog X with the left magnifying glass (h-12 input row). */
+[data-slot=dialog-content]:has([data-slot=command])>[data-slot=dialog-close]{
+  top:0;right:0;height:3rem;width:3rem;min-height:3rem;min-width:3rem;margin:0;
+  display:grid;place-items:center;border-radius:0;opacity:.65
+}
+/* 快速新建: centered dialog (replaces bottom sheet) */
+.quick-create-dialog{max-width:440px;width:calc(100% - 2rem);padding:24px 28px}
+.quick-create-dialog .more-grid{margin:12px 0 0}

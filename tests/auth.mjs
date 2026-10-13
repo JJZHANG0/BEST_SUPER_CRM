@@ -20,7 +20,7 @@ assert(dir.every(u=>u.email!=='ops@nexus.demo'),'old ops demo account removed');
 assert(dir.filter(u=>u.role!=='sales').every(u=>u.mustChange),'staff must change the initial password');
 
 // Sales demo still works; normalisation; wrong passwords and unknown accounts fail.
-assert.equal((await A.authenticateDemo(' SALES@nexus.demo ','NexusSales2026!'))?.role,'sales');
+assert.equal(await A.authenticateDemo(' SALES@nexus.demo ','NexusSales2026!'),null,'Alex sales demo removed');
 assert.equal(await A.authenticateDemo('sales@nexus.demo','wrong'),null);
 assert.equal(await A.authenticateDemo('ops@nexus.demo','NexusOps2026!'),null);
 assert.equal(await A.authenticateDemo('zhangjiejia@nexus.local','guess-1234'),null);

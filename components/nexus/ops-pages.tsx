@@ -154,7 +154,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
         {withFb && <>
           <FormField label={attTouched ? '到课情况' : '到课情况（按实到/应到自动填写，可修改）'}><input maxLength={200} value={attendance} onChange={e => { const v = e.target.value; setAttTouched(v !== ''); setFb(x => ({ ...x, attendance: v })); }} placeholder="填写实到人数后自动生成，例如：5/6 到课；李同学请假" /></FormField>
           <FormField label="本次课程内容"><textarea rows={6} maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" className="fb-tall" /></FormField>
-          <FormField label="学生表现"><textarea rows={6} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
+          <FormField label="学生布置"><textarea rows={6} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
           <div className="form-columns">
             <FormField label="问题与风险"><textarea rows={2} maxLength={4000} value={fb.issues} onChange={setF('issues')} placeholder="需要协调或关注的问题" /></FormField>
             <FormField label="下一步安排"><textarea rows={2} maxLength={2000} value={fb.nextSteps} onChange={setF('nextSteps')} placeholder="下次课前要完成的事项" /></FormField>
@@ -291,7 +291,7 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
         <FormField label="到课情况"><input maxLength={200} value={attendance} onChange={e => setAttendance(e.target.value)} placeholder="例如：6/6 全勤；李同学请假" /></FormField>
       </div>
       <FormField label="本次课程内容"><textarea required rows={6} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} placeholder="本节课讲了什么、完成了哪些任务" className="fb-tall" /></FormField>
-      <FormField label="学生表现"><textarea rows={6} maxLength={4000} value={performance} onChange={e => setPerformance(e.target.value)} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
+      <FormField label="学生布置"><textarea rows={6} maxLength={4000} value={performance} onChange={e => setPerformance(e.target.value)} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
       <div className="form-columns">
         <FormField label="问题与风险"><textarea rows={3} maxLength={4000} value={issues} onChange={e => setIssues(e.target.value)} placeholder="需要协调或关注的问题" /></FormField>
         <FormField label="下一步安排"><textarea rows={3} maxLength={2000} value={nextSteps} onChange={e => setNextSteps(e.target.value)} placeholder="下次课前要完成的事项" /></FormField>
@@ -322,7 +322,7 @@ export function LessonFeedbackPage() {
   const remove = async (f: LessonFeedback) => { if (!confirmDelete('课情反馈')) return false; if (await s.removeRecord('lessonFeedbacks', f.id)) { toast.success('已删除'); return true; } return false; };
   const close = () => { setOpen(false); setEditing(null); if (s.route.includes('new')) s.go('lesson-feedback'); };
   return <>
-    <PageTitle title="课情反馈" en="LESSON FEEDBACK" description={all ? '部门负责人：按老师查看全部课情反馈，按月份与项目筛选。' : '每节课后记录到课、内容与学生表现（记录课时时也可一并填写）；只有你和部门负责人能看到。'} action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />
+    <PageTitle title="课情反馈" en="LESSON FEEDBACK" description={all ? '部门负责人：按老师查看全部课情反馈，按月份与项目筛选。' : '每节课后记录到课、内容与学生布置（记录课时时也可一并填写）；只有你和部门负责人能看到。'} action="记录反馈" onAction={() => { setEditing(null); setOpen(true); }} />
     {all && <PersonTabs value={teacher} onChange={setTeacher} counts={new Map(s.staff.map(u => [u.email.toLowerCase(), visibleLessons(s.lessonFeedbacks, s.viewer, me).filter(f => f.opsTeacher.toLowerCase() === u.email.toLowerCase() && (!month || monthOf(f.date) === month)).length]))} />}
     <section className="glass panel">
       {toolbar}
@@ -343,7 +343,7 @@ export function LessonFeedbackPage() {
       </>}
     </section>
     {zoom && (() => { const f = s.lessonFeedbacks.find(x => x.id === zoom.id); if (!f) return null; const c = course(f.course); const l = f.lesson ? s.lessons.find(x => x.id === f.lesson) : undefined; const title = c?.name || '已删除的课程';
-      const sections = ([['本次内容', f.content], ['学生表现', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v);
+      const sections = ([['本次内容', f.content], ['学生布置', f.performance], ['问题与风险', f.issues], ['下一步', f.nextSteps]] as const).filter(([, v]) => v);
       return <ZoomModal origin={zoom.el} label={`课情反馈：${title}`} onClosed={() => setZoom(null)}><div className="lf-detail">
         <div className="eyebrow">LESSON FEEDBACK</div>
         <h2>{title}</h2>

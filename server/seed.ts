@@ -2,7 +2,6 @@
  * Idempotent seed. Existing rows are never overwritten, so running it on every deploy is safe.
  * It only inserts reference data that the app needs to start empty-but-real:
  *   - the 运营部 staff accounts (scrypt hashes; must change password on first sign-in)
- *   - the public sales demo account (sales@nexus.demo)
  *   - the programme catalogue, one empty unpublished 项目书 per programme, and the example 推文 (lib/nexus/post-seed.ts)
  *   - 班级类型 / 教务津贴标准
  *   - real 运营部 data from the spreadsheet (lib/nexus/real-seed.ts): 项目编号, 课程, 授课老师,
@@ -21,7 +20,6 @@ import { defaultClassTypes } from '../lib/nexus/ops';
 import { staffSeed } from './staff-seed';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from '../lib/nexus/real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from '../lib/nexus/roster-seed';
-import { hashPassword } from './password';
 
 const withOrder = <T extends object>(list: readonly T[]) => list.map((x, i) => ({ ...x, sortOrder: i }));
 
@@ -39,8 +37,15 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
     const r = await db.update(schema.users).set({ role: 'ops', updatedAt: new Date() }).where(and(eq(schema.users.email, a.email), eq(schema.users.role, 'superadmin'))).returning({ id: schema.users.id });
     if (r.length) log(`seed: ${a.username} superadmin → ops`);
   }
-  const sales = await db.insert(schema.users).values({ email: salesDemo.email, name: salesDemo.name, role: 'sales', salesName: salesDemo.salesName, passwordHash: await hashPassword(salesDemo.password) }).onConflictDoNothing().returning({ id: schema.users.id });
-  if (sales.length) log(`seed: user ${salesDemo.email} (sales demo)`);
+  // Soft-disable legacy test accounts (Alex / 陈老师 / ops@nexus.demo) if still present — never re-create them.
+  const disabled = await db.update(schema.users).set({ active: false, updatedAt: new Date() }).where(and(
+    eq(schema.users.active, true),
+    or(
+      inArray(schema.users.email, ['ops@nexus.demo', salesDemo.email]),
+      inArray(schema.users.name, ['Alex', '陈老师']),
+    ),
+  )).returning({ email: schema.users.email, name: schema.users.name });
+  if (disabled.length) log(`seed: disabled legacy test accounts ${disabled.map(r => r.name + '<' + r.email + '>').join(', ')}`);
   const steps: [string, () => Promise<unknown[]>][] = [
     ['programs', () => db.insert(schema.programs).values(withOrder(data.programs).map(p => ({ ...p, draft: p.draft ?? null }))).onConflictDoNothing().returning({ id: schema.programs.id })],
     ['articles', () => db.insert(schema.articles).values(seedArticles.map(a => ({ ...a }))).onConflictDoNothing().returning({ program: schema.articles.program })],

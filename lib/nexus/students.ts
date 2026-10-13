@@ -87,7 +87,7 @@ const dues = ['2026-09-20', '2026-09-27', '2026-10-04', '2026-10-09', '2026-10-1
 const shift = (date: string, days: number) => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
 /** Deterministic demo homework for each student, shaped by their seeded status. */
-export function seedAssignments(students: readonly { id: string; program: string; health?: unknown }[], teacherFor: (program: string) => string = () => '陈老师'): Assignment[] {
+export function seedAssignments(students: readonly { id: string; program: string; health?: unknown }[], teacherFor: (program: string) => string = () => '待分配'): Assignment[] {
   return students.flatMap((s, si) => {
     const health = isHealth(s.health) ? s.health : '状态良好';
     const titles = taskTitles[s.program] ?? taskTitles.bpa;

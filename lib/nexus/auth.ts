@@ -19,10 +19,10 @@ type StaffAccount = { name: string; username: string; email: string; role: Role;
 export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null; theme?: string | null; salesRegion?: string | null; salesLead?: boolean };
 export type Overrides = Record<string, UserOverride>;
 
-/** Public sales demo account (intentionally advertised on the login page). */
+/** Legacy sales demo (Alex / sales@nexus.demo) — no longer seeded or listed; email kept for disable/cleanup scripts. */
 export const salesDemo = { role: 'sales' as Role, label: '销售顾问', name: 'Alex', email: 'sales@nexus.demo', password: 'NexusSales2026!', salesName: '顾问 Alex' };
-/** Kept for the login page's "fill demo account" button. */
-export const demoAccounts = [salesDemo] as const;
+/** @deprecated Empty: test demos (Alex / 陈老师) removed from the product. */
+export const demoAccounts = [] as const;
 
 /** 运营部老师 — sign in with their name (username) or email. Initial passwords are delivered out of band and must be changed on first sign-in. */
 export const staffAccounts: readonly StaffAccount[] = [
@@ -80,7 +80,6 @@ const norm = (email: string) => email.trim().toLowerCase();
 export function directory(overrides: Overrides = {}): DirectoryUser[] {
   const base: DirectoryUser[] = [
     ...staffAccounts.map(a => ({ email: a.email, username: a.username, name: a.name, role: a.role, salesName: null, active: true, mustChange: true, builtIn: true, leader: a.leader === true })),
-    { email: salesDemo.email, username: null, name: salesDemo.name, role: salesDemo.role, salesName: salesDemo.salesName, active: true, mustChange: false, builtIn: true, leader: false },
   ];
   const out = base.map(u => { const o = overrides[u.email]; return o ? { ...u, ...pick(o) } : u; });
   for (const [email, o] of Object.entries(overrides)) if (o.created && !out.some(u => u.email === email) && o.role) {
@@ -121,7 +120,6 @@ export async function authenticateDemo(identifier: string, password: string, ove
   if (!user || !user.active || !password) return null;
   const o = overrides[key];
   if (o?.hash && o.salt) return (await pbkdf2Hex(password, o.salt)) === o.hash ? user : null;
-  if (key === salesDemo.email) return password === salesDemo.password ? user : null;
   const staff = staffAccounts.find(a => a.email === key);
   if (!staff) return null;
   return (await pbkdf2Hex(password, staff.salt)) === staff.hash ? user : null;
