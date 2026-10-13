@@ -16,7 +16,7 @@ export type DirectoryUser = { email: string; username: string | null; name: stri
   /** 部门负责人: fixed in the built-in account list (never settable from 系统管理 / overrides). */ leader: boolean };
 type StaffAccount = { name: string; username: string; email: string; role: Role; salt: string; hash: string; leader?: boolean };
 /** Per-browser changes made through 系统管理 / 修改密码 on the Pages preview. */
-export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null; theme?: string | null; salesRegion?: string | null; salesLead?: boolean };
+export type UserOverride = { name?: string; username?: string | null; role?: Role; active?: boolean; salt?: string; hash?: string; mustChange?: boolean; created?: boolean; salesName?: string | null; avatar?: string | null; theme?: string | null; weatherCity?: string | null; salesRegion?: string | null; salesLead?: boolean };
 export type Overrides = Record<string, UserOverride>;
 
 /** Legacy sales demo (Alex / sales@nexus.demo) — no longer seeded or listed; email kept for disable/cleanup scripts. */

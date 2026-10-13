@@ -1,5 +1,7 @@
 'use client';
-import { Users, Layers, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet } from 'lucide-react';
+import { Users, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet } from 'lucide-react';
+import { WorkbenchWelcomeTools } from './workbench-chrome';
+import { WorkHoursCard } from './work-hours-card';
 import { PixelChase } from './pixel-chase';
 import { Badge, SectionTitle } from './ui';
 import { TodoHomeCard } from './todos';
@@ -31,14 +33,13 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
   const now = new Date(today + 'T12:00:00');
   const stats = [
     { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' },
-    { label: '进行中的项目', value: programs.filter(p => p.published).length, unit: '个', icon: Layers, sub: `项目库共 ${programs.length} 个项目`, tone: 'blue', path: 'programs' },
     { label: '活跃队伍', value: teams.length, unit: '支', icon: UsersRound, sub: teams.length ? `${attention.length} 支队伍需要关注` : '暂无队伍', tone: 'pink', path: 'teams' },
     { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' },
     { label: allowance.team ? '当月教务津贴 · 团队' : '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)}${allowance.team ? ' · 全部老师' : ''} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' },
   ];
   return <>
-    <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>星期{weekdays[(now.getDay() + 6) % 7]} · 新的一天，新的可能</span></div></div></div>
-    <div className="stats-grid five">{stats.map(x => <button className="stat-card glass" key={x.label} onClick={() => go(x.path)}><div className="stat-top"><span>{x.label}</span><span className={`stat-icon ${x.tone}`}><x.icon size={19} /></span></div><div className="stat-value">{x.value}{x.unit && <span>{x.unit}</span>}</div><div className="stat-foot"><span>{x.sub}</span><ChevronRight size={14} /></div></button>)}</div>
+    <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><WorkbenchWelcomeTools now={now} /></div>
+    <div className="stats-grid five"><button className="stat-card glass" onClick={() => go(stats[0].path)}><div className="stat-top"><span>{stats[0].label}</span><span className={`stat-icon ${stats[0].tone}`}><Users size={19} /></span></div><div className="stat-value">{stats[0].value}{stats[0].unit && <span>{stats[0].unit}</span>}</div><div className="stat-foot"><span>{stats[0].sub}</span><ChevronRight size={14} /></div></button><WorkHoursCard />{stats.slice(1).map(x => <button className="stat-card glass" key={x.label} onClick={() => go(x.path)}><div className="stat-top"><span>{x.label}</span><span className={`stat-icon ${x.tone}`}><x.icon size={19} /></span></div><div className="stat-value">{x.value}{x.unit && <span>{x.unit}</span>}</div><div className="stat-foot"><span>{x.sub}</span><ChevronRight size={14} /></div></button>)}</div>
     {/* Same 5-column grid as the KPI cards: 待办 / 今日课程 span cards 1–4, 快捷操作 / note sit under card 5. */}
     <div className="dashboard-grid">
       <div className="dg-todo"><TodoHomeCard /></div>
@@ -71,7 +72,7 @@ export function TeacherHome() {
   const studentCount = scope.studentIds.size;
   return <>
     <div className="welcome teacher-welcome"><div><div className="eyebrow">TEACHER WORKSPACE</div><h1>{greeting()}，{name || '老师'} <span className="hello-spark">✧</span></h1><p>仅显示你负责的队伍、课程与学生。</p></div>
-      <div className="welcome-date"><CalendarDays size={17} /><div>{now.getFullYear()} 年 {now.getMonth() + 1} 月 {now.getDate()} 日<span>授课老师工作台 · 金属灰</span></div></div></div>
+      <WorkbenchWelcomeTools now={now} subtitle="授课老师工作台 · 金属灰" /></div>
     <div className="stats-grid teacher-stats">
       {[{ label: '我的课程', value: courseCount, unit: '门', path: 'courses' },
         { label: '我的队伍', value: teamCount, unit: '支', path: 'teams' },
