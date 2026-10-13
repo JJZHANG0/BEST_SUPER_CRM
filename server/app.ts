@@ -18,7 +18,7 @@ import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -26,11 +26,22 @@ import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
-export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string };
+export type Portal = 'ops' | 'teacher' | 'sales';
+/** `role` is the EFFECTIVE role for the active portal (teacher portal ⇒ 'teacher' even for a superadmin); `baseRole` is users.role. */
+export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string; baseRole?: Role; portal?: Portal; portals?: Portal[] };
 type Env = { Variables: { user: SessionUser } };
 const TOKEN_TTL = 60 * 60 * 12;
 const canWrite = (u: SessionUser) => roleCanWrite(u.role);
-const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme });
+const publicUser = (u: SessionUser) => ({ id: u.id, email: u.email, username: u.username, name: u.name, role: u.role, salesName: u.salesName, mustChangePassword: u.mustChangePassword, leader: u.leader, avatar: u.avatar, theme: u.theme, baseRole: u.baseRole ?? u.role, portal: u.portal ?? basePortal(u.baseRole ?? u.role), portals: u.portals ?? [basePortal(u.baseRole ?? u.role)] });
+const basePortal = (r: Role): Portal => r === 'sales' ? 'sales' : r === 'teacher' ? 'teacher' : 'ops';
+const isPortal = (v: unknown): v is Portal => v === 'ops' || v === 'teacher' || v === 'sales';
+const portalLabel: Record<Portal, string> = { ops: '运营老师', teacher: '授课老师', sales: '销售顾问' };
+/** Session as seen inside a portal: the teacher portal applies teacher role/ACL (no leader rights) and the steel shell. */
+function inPortal(base: SessionUser, portal: Portal, portals: Portal[]): SessionUser {
+  const s = { ...base, baseRole: base.role, portal, portals };
+  if (portal === 'teacher' && base.role !== 'teacher') return { ...s, role: 'teacher', leader: false, theme: 'steel' };
+  return s;
+}
 const toSession = (row: typeof schema.users.$inferSelect): SessionUser => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, salesName: row.salesName, mustChangePassword: row.mustChangePassword, leader: row.leader === true, avatar: row.avatar ?? null, theme: isThemeId(row.theme) ? row.theme : DEFAULT_THEME });
 const adminUser = (row: typeof schema.users.$inferSelect) => ({ id: row.id, email: row.email, username: row.username, name: row.name, role: row.role as Role, active: row.active, mustChangePassword: row.mustChangePassword, salesName: row.salesName, leader: row.leader === true });
 /** Random 16-character password without look-alike characters (upper, lower, digit, symbol). */
@@ -69,6 +80,28 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json({ status: database === 'ok' ? 'ok' : 'degraded', env: config.env, database, uptime: Math.round((Date.now() - startedAt.getTime()) / 1000) }, database === 'ok' ? 200 : 503);
   });
 
+  /** Portals a user may open. Teacher capability: role=teacher, or an ops-workspace account named as 授课老师 in the directory, a 课程编号 or a team. */
+  async function portalsFor(row: typeof schema.users.$inferSelect): Promise<Portal[]> {
+    const r = row.role as Role;
+    if (r === 'sales') return ['sales'];
+    if (r === 'teacher') return ['teacher'];
+    if (!isOpsLike(r)) return [];
+    const [dir, oc, tm] = await Promise.all([
+      db.select({ n: schema.teachers.name, a: schema.teachers.active }).from(schema.teachers),
+      db.select({ n: schema.opsCourses.teacher }).from(schema.opsCourses),
+      db.select({ n: schema.teams.teacher }).from(schema.teams),
+    ]);
+    const names = [...dir.filter(x => x.a).map(x => x.n), ...oc.map(x => x.n), ...tm.map(x => x.n)];
+    const coach = names.some(n => canonicalTeacherName(n) === canonicalTeacherName(row.name));
+    return coach ? ['ops', 'teacher'] : ['ops'];
+  }
+  async function issue(row: typeof schema.users.$inferSelect, portal: Portal, portals: Portal[]) {
+    const user = inPortal(toSession(row), portal, portals);
+    const token = await sign({ sub: String(row.id), role: row.role, portal, portals, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL }, config.jwtSecret, 'HS256');
+    return { token, user: publicUser(user), expiresIn: TOKEN_TTL };
+  }
+  const portalDenied = (c: Context, p: Portal) => c.json({ error: 'portal_denied', message: `该账号没有「${portalLabel[p]}」身份，请选择正确的登录身份。` }, 403);
+
   // Simple per-IP throttle for failed logins (20 per 10 minutes).
   const attempts = new Map<string, { n: number; until: number }>();
   app.post('/auth/login', async c => {
@@ -76,7 +109,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const now = Date.now(), slot = attempts.get(ip);
     if (slot && slot.until > now && slot.n >= 20) return c.json({ error: 'too_many_attempts' }, 429);
     // `login` is a username (e.g. 张捷嘉) or an email; `email` is accepted for older clients.
-    const body = await c.req.json().catch(() => null) as { login?: unknown; email?: unknown; password?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { login?: unknown; email?: unknown; password?: unknown; portal?: unknown } | null;
     const raw = typeof body?.login === 'string' ? body.login : typeof body?.email === 'string' ? body.email : '';
     const password = typeof body?.password === 'string' ? body.password : '';
     const ident = raw.includes('@') ? raw.trim().toLowerCase() : normalizeUsername(raw).toLowerCase();
@@ -88,9 +121,11 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       return c.json({ error: 'invalid_credentials' }, 401);
     }
     attempts.delete(ip);
-    const user = toSession(row);
-    const token = await sign({ sub: String(user.id), role: user.role, exp: Math.floor(now / 1000) + TOKEN_TTL }, config.jwtSecret, 'HS256');
-    return c.json({ token, user: publicUser(user), expiresIn: TOKEN_TTL });
+    // The workspace chosen on the login page decides the portal; it must be one the account holds.
+    const portals = await portalsFor(row);
+    const portal = isPortal(body?.portal) ? body.portal : basePortal(row.role as Role);
+    if (!portals.includes(portal)) return portalDenied(c, portal);
+    return c.json(await issue(row, portal, portals));
   });
 
   // 推文 public reader + metrics: no login (registered before the auth middleware).
@@ -101,11 +136,17 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const header = c.req.header('authorization') || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!token) return c.json({ error: 'unauthorized' }, 401);
-    let payload: { sub?: unknown };
-    try { payload = await verify(token, config.jwtSecret, 'HS256') as { sub?: unknown }; } catch { return c.json({ error: 'unauthorized' }, 401); }
+    let payload: { sub?: unknown; portal?: unknown; portals?: unknown };
+    try { payload = await verify(token, config.jwtSecret, 'HS256') as typeof payload; } catch { return c.json({ error: 'unauthorized' }, 401); }
     const [row] = await db.select().from(schema.users).where(eq(schema.users.id, Number(payload.sub))).limit(1);
     if (!row || !row.active) return c.json({ error: 'unauthorized' }, 401);
-    c.set('user', toSession(row));
+    const base = basePortal(row.role as Role);
+    const portals = Array.isArray(payload.portals) ? (payload.portals as unknown[]).filter(isPortal) : [base];
+    let portal: Portal = isPortal(payload.portal) ? payload.portal : base;
+    // A teacher-portal token never grants more than teacher ACL; any other mismatch (role changed) falls back to the base portal.
+    if (portal !== 'teacher' && portal !== base) portal = base;
+    if (portal === 'teacher' && row.role !== 'teacher' && !isOpsLike(row.role)) portal = base;
+    c.set('user', inPortal(toSession(row), portal, portals.length ? portals : [base]));
     await next();
   });
   const forbidden = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅项目运营老师可用' }, 403);
@@ -382,6 +423,18 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       ...(body?.action === 'reopen' ? {} : { reviewedBy: user.id, reviewedByName: user.name }),
     }).where(eq(schema.kpiSheets.id, current!.id)).returning();
     return c.json({ sheet: kpiRow(row, owner?.name || '') });
+  });
+
+  /** Switch portal (multi-role users, e.g. 张捷嘉: 运营端 ⇄ 教师端). Returns a new token. */
+  app.post('/auth/portal', async c => {
+    const me = c.get('user');
+    const body = await c.req.json().catch(() => null) as { portal?: unknown } | null;
+    if (!isPortal(body?.portal)) return c.json({ error: 'invalid' }, 400);
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, me.id)).limit(1);
+    if (!row) return c.json({ error: 'unauthorized' }, 401);
+    const portals = await portalsFor(row);
+    if (!portals.includes(body.portal)) return portalDenied(c, body.portal);
+    return c.json(await issue(row, body.portal, portals));
   });
 
   /** Everything the signed-in user may see, in the frontend's shapes. */

@@ -76,6 +76,8 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   /** False when changes could not be saved (browser storage refused, or the API rejected them). */
   persisted:boolean;
   /** True when this build talks to the NEXUS API (shared database); false in the static demo. */
+  /** Multi-role users: reopen the workspace as 运营端 or 教师端 (new token; teacher ACL applies in 教师端). */
+  switchPortal:(p:'ops'|'teacher')=>Promise<string|null>;
   apiMode:boolean;user:ApiUser|null;
   /** True while a saved API session is being restored on page load. */
   restoring:boolean;
@@ -212,8 +214,8 @@ export function Provider({children}:{children:ReactNode}){
    if(!match)return {ok:false,error:'账号或密码不正确，或账号已停用。'};
    clearPwLater();const du=demoUser(match);const th=isThemeId(overrides[match.email]?.theme)?overrides[match.email]!.theme as ThemeId:(readStoredTheme()||DEFAULT_THEME);applyTheme(th);setUser({...du,theme:th});setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
   }
-  try{const res=await api.login(email,password);clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
-  catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':'服务器暂时不可用，请稍后重试。'):'无法连接服务器，请检查网络后重试。'}}
+  try{const res=await api.login(email,password,role==='sales'?'sales':role==='teacher'?'teacher':'ops');clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
+  catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===403?(e.message&&!/^HTTP|forbidden|portal_denied/.test(e.message)?e.message:'该账号没有所选登录身份，请选择正确的身份后再登录。'):e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':'服务器暂时不可用，请稍后重试。'):'无法连接服务器，请检查网络后重试。'}}
  };
  const logout=()=>{token.clear();clearPwLater();setUser(null);setAuthenticated(false)};
  // 「稍后修改」 lasts for this browser session only (sessionStorage); every explicit sign-in asks again.
@@ -353,7 +355,8 @@ export function Provider({children}:{children:ReactNode}){
   if(API_ENABLED){try{const r=await api.updateTheme(id);setUser(u=>u?{...u,theme:r.user.theme??id}:u);return null}catch(e){return apiError(e,'主题保存失败')}}
   const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),theme:id}};setOverrides(next);setUser(u=>u?{...u,theme:id}:u);write(STORAGE_KEYS.users,next);return null;
  };
-return <Context.Provider value={{authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+const switchPortal=async(p:'ops'|'teacher'):Promise<string|null>=>{try{const res=await api.switchPortal(p);token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());go('dashboard');return null}catch(e){return e instanceof ApiError&&e.message?e.message:'切换失败，请稍后重试'}};
+return <Context.Provider value={{switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){
   const s=useNexus();

@@ -10,7 +10,8 @@ export const API_ENABLED = API_BASE.length > 0;
 /** 'production' | 'development' | '' (demo) — shown as a small badge outside production. */
 export const APP_ENV = process.env.NEXT_PUBLIC_NEXUS_ENV || '';
 export type ApiUser = { id: number; email: string; username?: string | null; name: string; role: Role; salesName: string | null; mustChangePassword?: boolean;
-  /** 部门负责人 (only 张捷嘉): sees all teachers' 课时/津贴, reviews 绩效, assigns tasks. */ leader?: boolean; avatar?: string | null; theme?: string | null };
+  /** 部门负责人 (only 张捷嘉): sees all teachers' 课时/津贴, reviews 绩效, assigns tasks. */ leader?: boolean; avatar?: string | null; theme?: string | null;
+  /** users.role, active portal and portals this account may open (multi-role: ops + teacher). */ baseRole?: Role; portal?: 'ops' | 'teacher' | 'sales'; portals?: ('ops' | 'teacher' | 'sales')[] };
 /** Ops teachers listed for 教务老师 pickers and name lookups. */
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
 /** Row of 系统管理 · 用户管理. */
@@ -55,7 +56,8 @@ export type KpiReviewRow = { user: { key: string; name: string; email: string; r
 export type TodoWrite = { title?: string; note?: string | null; dueAt?: string | null; completedAt?: string | null };
 
 export const api = {
-  login: (login: string, password: string) => request<{ token: string; user: ApiUser }>('/auth/login', { method: 'POST', body: JSON.stringify({ login, password }) }),
+  login: (login: string, password: string, portal?: string) => request<{ token: string; user: ApiUser }>('/auth/login', { method: 'POST', body: JSON.stringify({ login, password, portal }) }),
+  switchPortal: (portal: string) => request<{ token: string; user: ApiUser }>('/auth/portal', { method: 'POST', body: JSON.stringify({ portal }) }),
   me: () => request<{ user: ApiUser }>('/auth/me'),
   bootstrap: <T>() => request<T>('/bootstrap'),
   put: <T>(collection: Collection, id: string, record: unknown) => request<{ record: T }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(record) }),
