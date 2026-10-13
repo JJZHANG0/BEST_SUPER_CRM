@@ -45,8 +45,8 @@ export default function Login() {
         <div className="access-hero-art">
           <div className="access-hero-glow" aria-hidden="true"/>
           <picture className="access-hero-img">
-            <source type="image/webp" srcSet={`${CREW_SM} 720w, ${CREW_WEBP} 1200w`} sizes="(max-width: 900px) 90vw, 560px"/>
-            <img src={CREW_PNG} width={1200} height={900} alt="B.E.S.T 的伙伴们：小兔、小猪、哈士奇、小猫和胡萝卜" decoding="async" fetchPriority="high"/>
+            <source type="image/webp" srcSet={`${CREW_SM} 720w, ${CREW_WEBP} 1320w`} sizes="(max-width: 900px) 90vw, 560px"/>
+            <img src={CREW_PNG} width={960} height={638} alt="B.E.S.T 的伙伴们：小兔、小猪、哈士奇、小猫和胡萝卜" decoding="async" fetchPriority="high"/>
           </picture>
           <span className="access-hero-shadow" aria-hidden="true"/>
           <span className="access-sparkle s1" aria-hidden="true"/><span className="access-sparkle s2" aria-hidden="true"/><span className="access-sparkle s3" aria-hidden="true"/>

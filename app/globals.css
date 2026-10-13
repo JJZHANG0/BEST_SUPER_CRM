@@ -1849,15 +1849,15 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 .access-hero-copy h1 span{color:var(--access)}
 .access-hero-copy p{margin-top:14px;font-size:.95rem;line-height:1.75;color:#7a7383}
 .access-hero-copy{animation:hero-rise .7s cubic-bezier(.2,.7,.2,1) both}
-.access-hero-art{position:relative;aspect-ratio:4/3;max-width:600px;width:100%;border-radius:28px;background:#f7f6fd;box-shadow:0 30px 70px color-mix(in srgb,var(--access) 12%,transparent),inset 0 0 0 1px #ffffffcc;overflow:hidden;animation:hero-rise .9s .1s cubic-bezier(.2,.7,.2,1) both}
-.access-hero-glow{position:absolute;inset:-20%;z-index:1;mix-blend-mode:multiply;opacity:.55;background:radial-gradient(closest-side at calc(50% + var(--px)*30%) calc(40% + var(--py)*30%),color-mix(in srgb,var(--access) 16%,transparent),transparent 70%);transition:background .2s;pointer-events:none}
-.access-hero-img{position:absolute;inset:2%;display:block;transform:translate3d(calc(var(--px)*-14px),calc(var(--py)*-10px),0);transition:transform .35s cubic-bezier(.2,.7,.2,1)}
-.access-hero-img img{width:100%;height:100%;object-fit:contain;animation:hero-float 6s ease-in-out infinite;user-select:none;-webkit-user-drag:none}
-.access-hero-shadow{position:absolute;left:18%;right:18%;bottom:7%;height:16px;border-radius:50%;background:radial-gradient(closest-side,#3c2f5022,transparent);animation:hero-shadow 6s ease-in-out infinite}
-.access-sparkle{position:absolute;width:10px;height:10px;background:#fff;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);filter:drop-shadow(0 0 6px color-mix(in srgb,var(--access) 60%,white));animation:hero-twinkle 3.6s ease-in-out infinite;transform:translate3d(calc(var(--px)*12px),calc(var(--py)*12px),0)}
+.access-hero-art{position:relative;aspect-ratio:1320/877;max-width:600px;width:100%;margin-top:auto;background:none;overflow:visible;animation:hero-rise .9s .1s cubic-bezier(.2,.7,.2,1) both}
+.access-hero-glow{position:absolute;inset:-12% -8% 0;z-index:0;opacity:.6;background:radial-gradient(closest-side at calc(50% + var(--px)*30%) calc(40% + var(--py)*30%),color-mix(in srgb,var(--access) 16%,transparent),transparent 70%);transition:background .2s;pointer-events:none}
+.access-hero-img{position:absolute;inset:0;z-index:2;display:block;transform:translate3d(calc(var(--px)*-14px),calc(var(--py)*-10px),0);transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+.access-hero-img img{width:100%;height:100%;object-fit:contain;object-position:50% 100%;filter:drop-shadow(0 10px 18px color-mix(in srgb,var(--access) 14%,transparent));animation:hero-float 6s ease-in-out infinite;user-select:none;-webkit-user-drag:none}
+.access-hero-shadow{position:absolute;z-index:1;left:6%;right:6%;bottom:-9px;height:20px;border-radius:50%;background:radial-gradient(closest-side,#3c2f5022,transparent);animation:hero-shadow 6s ease-in-out infinite}
+.access-sparkle{position:absolute;z-index:3;width:10px;height:10px;background:#fff;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);filter:drop-shadow(0 0 6px color-mix(in srgb,var(--access) 60%,white));animation:hero-twinkle 3.6s ease-in-out infinite;transform:translate3d(calc(var(--px)*12px),calc(var(--py)*12px),0)}
 .access-sparkle.s1{top:12%;left:14%}.access-sparkle.s2{top:20%;right:12%;width:14px;height:14px;animation-delay:1.2s}.access-sparkle.s3{bottom:26%;left:48%;width:8px;height:8px;animation-delay:2.3s}
 @keyframes hero-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-@keyframes hero-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes hero-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes hero-shadow{0%,100%{transform:scaleX(1);opacity:1}50%{transform:scaleX(.92);opacity:.7}}
 @keyframes hero-twinkle{0%,100%{opacity:0;scale:.6}50%{opacity:1;scale:1}}
 .access-card{animation:hero-rise .7s .15s cubic-bezier(.2,.7,.2,1) both}
@@ -1867,6 +1867,7 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 .access-demo-fill{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:14px;min-height:40px;font-size:.78rem;color:var(--access-deep);border-radius:10px;border:1px dashed color-mix(in srgb,var(--access) 35%,white);background:transparent}
 .access-demo-fill:hover{background:var(--access-faint)}
 .access-demo-fill:focus-visible,.access-role button:focus-visible{outline:2px solid var(--access);outline-offset:2px}
+@media(min-width:901px){.access-layout{align-items:stretch}.access-hero{justify-content:space-between}.access-card{align-self:center}}
 @media(max-width:900px){.access-hero{order:0;align-items:center;text-align:center}.access-hero-art{max-width:420px}.access-hero-copy p{display:none}}
-@media(max-width:600px){.access-hero{display:flex;gap:10px}.access-hero-copy{display:none}.access-hero-art{max-width:300px;border-radius:22px;box-shadow:none;background:#f7f6fd}.access-role.access-role-3 button{flex-direction:column;gap:3px;min-height:58px}}
+@media(max-width:600px){.access-hero{display:flex;gap:10px}.access-hero-copy{display:none}.access-hero-art{max-width:300px;margin-bottom:10px}.access-role.access-role-3 button{flex-direction:column;gap:3px;min-height:58px}}
 @media(prefers-reduced-motion:reduce){.access-hero-copy,.access-hero-art,.access-card,.access-hero-img img,.access-hero-shadow,.access-sparkle{animation:none!important}.access-hero-img,.access-hero-glow{transition:none;transform:none}.access-sparkle{opacity:.7}}
