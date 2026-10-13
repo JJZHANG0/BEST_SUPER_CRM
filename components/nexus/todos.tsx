@@ -12,6 +12,7 @@ import { copyText } from '@/lib/nexus/clipboard';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { KpiSelfPanel } from './kpi';
+import { GenerateOkrButton } from './okr';
 
 /** Todos owned by the signed-in user (API: numeric user id; Pages demo: login email). */
 function mine(list: Todo[], meKey: string) {
@@ -292,6 +293,8 @@ export function TodosPage() {
   const done = groups.reduce((n, g) => n + g.items.length, 0);
   const assignedOpen = useMemo(() => assigner ? assignedByKey(s.todos, s.meKey).filter(t => !isDone(t)).length : 0, [assigner, s.todos, s.meKey]);
   const [exporting, setExporting] = useState(false);
+  // 生成OKR: this month, or the newest month with completed todos when this month has none yet.
+  const okrMonth = groups.some(g => g.key === currentMonth()) || !groups.length ? currentMonth() : groups[0].key;
   const setTab = (t: TodoTab) => s.go(t === 'open' ? 'todos' : t === 'done' ? 'todos?tab=done' : 'todos?tab=' + t);
   return (
     <>
@@ -315,7 +318,7 @@ export function TodosPage() {
       )}
       {tab === 'done' && (
         <div role="tabpanel" aria-label="已完成">
-          <div className="results-meta done-meta">{done} 项已完成<span>按完成时间倒序 · 可恢复或删除<button type="button" className="secondary compact export-button" onClick={() => setExporting(true)}><Share2 size={15} />一键导出</button></span></div>
+          <div className="results-meta done-meta">{done} 项已完成<span>按完成时间倒序 · 可恢复或删除<GenerateOkrButton month={okrMonth} count={groups.find(g => g.key === okrMonth)?.items.length || 0} /><button type="button" className="secondary compact export-button" onClick={() => setExporting(true)}><Share2 size={15} />一键导出</button></span></div>
           {!groups.length && <section className="glass panel"><EmptyState icon={Check} title="还没有已完成的待办" description="在「待办」中勾选完成的事项会按月归档到这里。" /></section>}
           {groups.map(g => (
             <section className="glass panel todo-month" key={g.key}>

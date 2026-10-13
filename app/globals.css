@@ -1878,3 +1878,36 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 .access-layout{flex:1 0 auto;align-content:center;margin-top:clamp(40px,9vh,120px);margin-bottom:clamp(28px,6vh,80px)}
 .access-footer{width:100%;margin:auto auto 0;padding-top:12px}
 @media(max-width:600px){.access-layout{margin:29px auto}}
+
+/* 生成OKR */
+.okr-btn-wrap{display:inline-flex;margin-right:8px}
+.okr-button.primary{gap:6px}
+.okr-button:disabled{opacity:.5;cursor:not-allowed}
+.okr-loading-dialog{max-width:440px}
+.okr-loading{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:10px 6px 4px}
+.okr-loading .actions{justify-content:center;margin-top:6px;width:100%}
+.okr-orb{position:relative;width:76px;height:76px;display:grid;place-items:center;color:#fff;margin-bottom:6px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#b58cff,#6d3fd6 60%,#3d2380);box-shadow:0 10px 30px rgba(109,63,214,.35)}
+.okr-orb span{position:absolute;inset:-8px;border-radius:50%;border:2px solid rgba(109,63,214,.35);animation:okr-ring 1.8s ease-out infinite}
+.okr-orb span:nth-child(2){animation-delay:.6s}.okr-orb span:nth-child(3){animation-delay:1.2s}
+.okr-orb svg{animation:okr-pulse 1.4s ease-in-out infinite}
+.okr-orb.error{background:radial-gradient(circle at 30% 30%,#ff9d8a,#d9483b 65%,#8c241b);box-shadow:0 10px 30px rgba(217,72,59,.3)}
+.okr-orb.error svg{animation:none}
+@keyframes okr-ring{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.45);opacity:0}}
+@keyframes okr-pulse{50%{transform:scale(1.15) rotate(8deg)}}
+.okr-steps{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;font-size:.84rem;color:#9a8ca6}
+.okr-steps li{padding-left:22px;position:relative}
+.okr-steps li::before{content:'';position:absolute;left:4px;top:.45em;width:9px;height:9px;border-radius:50%;background:#e3dbea}
+.okr-steps li.active{color:#3d2a4d;font-weight:600}.okr-steps li.active::before{background:#6d3fd6;box-shadow:0 0 0 4px rgba(109,63,214,.18)}
+.okr-steps li.done{color:#5d4d6b}.okr-steps li.done::before{background:#3aa676}
+.okr-progress{width:100%;height:6px;border-radius:99px;background:#efe9f4;overflow:hidden;margin-top:6px}
+.okr-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#8a5cf0,#c38cff);transition:width .5s ease}
+.okr-elapsed{color:#9a8ca6;font-size:.75rem}
+.okr-ai-banner{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;border:1.5px dashed rgba(109,63,214,.45);background:linear-gradient(135deg,rgba(181,140,255,.12),rgba(255,255,255,.6))}
+.okr-ai-main{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.okr-ai-main p{margin:4px 0 0;font-size:.84rem;color:#5d4d6b}
+.okr-ai-tag{flex:none;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;background:#6d3fd6;color:#fff;font-size:.75rem;font-weight:700;white-space:nowrap}
+.okr-ai-objs{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+.okr-ai-objs li{display:inline-flex;gap:6px;align-items:center;padding:3px 10px;border-radius:8px;background:rgba(109,63,214,.08);font-size:.78rem}
+.okr-ai-objs b{color:#6d3fd6}.okr-ai-objs em{font-style:normal;color:#9a8ca6}
+.okr-ai-actions{display:flex;gap:8px;flex:none}
+@media (max-width:720px){.okr-ai-banner{flex-direction:column}.okr-ai-actions{align-self:flex-end}}

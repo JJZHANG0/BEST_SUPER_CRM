@@ -69,6 +69,7 @@ export const api = {
   saveKpi: (month: string, items: KpiItem[], submit: boolean) => request<{ sheet: KpiSheet }>(`/kpi/${month}`, { method: 'PUT', body: JSON.stringify({ items, submit }) }),
   kpiReview: (month: string) => request<{ rows: KpiReviewRow[] }>(`/kpi-review/${month}`),
   reviewKpi: (userKey: string, month: string, body: { items?: KpiItem[]; reviewNote?: string; action: KpiReviewAction }) => request<{ sheet: KpiSheet }>(`/kpi-review/${encodeURIComponent(userKey)}/${month}`, { method: 'PUT', body: JSON.stringify(body) }),
+  generateOkr: (month: string) => request<{ okr: import('./okr').OkrDraft; todoCount: number }>('/okr/generate', { method: 'POST', body: JSON.stringify({ month }) }),
   remove: (collection: OpsCollection, id: string) => request<{ ok: true }>(`/${collection}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   changePassword: (current: string, next: string) => request<{ ok: true }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ current, next }) }),
   updateAvatar: (avatar: string | null) => request<{ user: ApiUser }>('/auth/avatar', { method: 'POST', body: JSON.stringify({ avatar }) }),

@@ -22,6 +22,8 @@ import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRost
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
+import { buildOkrMessages, parseOkr, rateLimiter } from '../lib/nexus/okr';
+import { monthKeyOf } from '../lib/nexus/todos';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
@@ -391,6 +393,42 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       ? await db.update(schema.kpiSheets).set(values).where(eq(schema.kpiSheets.id, current.id)).returning()
       : await db.insert(schema.kpiSheets).values({ ...values, userId: user.id, month }).returning();
     return c.json({ sheet: ownerView(kpiRow(row, user.name)) });
+  });
+
+  // ---- 生成OKR: completed todos of a month → Qwen (key only in server env) → OKR draft (not saved) ----
+  const okrLimit = rateLimiter(20_000);
+  app.post('/okr/generate', async c => {
+    const user = c.get('user');
+    if (!isOpsLike(user.role) || !canFillKpi(user)) return c.json({ error: 'forbidden', message: '仅运营老师可生成 OKR' }, 403);
+    const body = await c.req.json().catch(() => null) as { month?: unknown } | null;
+    const month = isMonth(body?.month) ? body!.month as string : monthKeyOf(new Date().toISOString());
+    const apiKey = process.env.QWEN_API_KEY || '';
+    if (!apiKey) return c.json({ error: 'not_configured', message: '服务器未配置 AI 服务' }, 503);
+    const wait = okrLimit(String(user.id));
+    if (wait) return c.json({ error: 'rate_limited', message: `操作太频繁，请 ${wait} 秒后再试` }, 429);
+    const rows = await db.select().from(schema.todos).where(and(eq(schema.todos.userId, user.id), sql`${schema.todos.completedAt} is not null`)).orderBy(desc(schema.todos.completedAt));
+    const todos = rows.filter(r => monthKeyOf(r.completedAt!.toISOString()) === month)
+      .map(r => ({ id: r.id, title: r.title, note: r.note, completedAt: r.completedAt!.toISOString(), assignedByName: r.assignedByName }));
+    if (!todos.length) return c.json({ error: 'empty', message: '该月还没有已完成的待办' }, 400);
+    const base = (process.env.QWEN_BASE_URL || 'https://maas.qianwenaiapi.com/compatible-mode/v1').replace(/\/$/, '');
+    const models = [...new Set([process.env.QWEN_MODEL || 'qwen3.7-plus', 'qwen-plus'])];
+    const messages = buildOkrMessages({ month, name: user.name, todos });
+    let lastErr = 'AI 服务暂时不可用';
+    for (const model of models) {
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 75_000);
+      try {
+        const res = await fetch(base + '/chat/completions', { method: 'POST', signal: ctl.signal, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 3000, enable_thinking: false, response_format: { type: 'json_object' } }) });
+        const data = await res.json().catch(() => null) as { choices?: { message?: { content?: string } }[]; error?: { code?: string } } | null;
+        if (!res.ok) { console.error('okr: model', model, 'http', res.status, data?.error?.code || ''); lastErr = res.status === 429 ? 'AI 服务繁忙，请稍后再试' : 'AI 服务返回错误'; continue; }
+        const okr = parseOkr(data?.choices?.[0]?.message?.content || '', month, new Set(todos.map(t => t.id)));
+        return c.json({ okr: { ...okr, model, generatedAt: new Date().toISOString() }, todoCount: todos.length });
+      } catch (err) {
+        const e = err as Error; console.error('okr: model', model, e.name === 'AbortError' ? 'timeout' : e.message);
+        lastErr = e.name === 'AbortError' ? 'AI 生成超时，请重试' : 'AI 返回内容无法解析，请重试';
+      } finally { clearTimeout(timer); }
+    }
+    return c.json({ error: 'upstream', message: lastErr }, 502);
   });
 
   /** Reviewer: every ops teacher (plus anyone who filled a sheet) for one month. */

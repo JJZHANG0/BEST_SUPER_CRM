@@ -15,6 +15,9 @@ import {
 } from '@/lib/nexus/kpi';
 import type { KpiReviewRow } from '@/lib/nexus/api';
 import { PageTitle, EmptyState, Back, Notice } from './ui';
+import { readOkrDraft, clearOkrDraft } from './okr';
+import { okrToKpiItems, hasOkrContent, type OkrDraft } from '@/lib/nexus/okr';
+import { Sparkles, X } from 'lucide-react';
 
 type Mode = 'self' | 'review' | 'readonly';
 const statusTone = (s: KpiStatus | 'none') => s === 'finalized' ? 'good' : s === 'submitted' ? 'watch' : s === 'draft' ? 'info' : 'neutral';
@@ -97,7 +100,8 @@ function TodoPickDialog({ open, onClose, todos, month, items, target, onPick }: 
 /** 当月绩效 tab: the signed-in teacher fills their KRs, saves a draft and submits for review. */
 export function KpiSelfPanel() {
   const s = useNexus();
-  const [month, setMonth] = useState(currentMonth());
+  const [ai, setAi] = useState<OkrDraft | null>(() => readOkrDraft());
+  const [month, setMonth] = useState(() => ai?.month || currentMonth());
   const [sheet, setSheet] = useState<KpiSheet | null>(null);
   const [items, setItems] = useState<KpiItem[]>(blankItems());
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false);
@@ -108,7 +112,17 @@ export function KpiSelfPanel() {
     let live = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the async fetch below
     setLoading(true);
-    s.kpi.load(month).then(sh => { if (!live) return; setSheet(sh); setItems(sh ? sh.items : blankItems()); setDirty(false); setLoading(false); });
+    s.kpi.load(month).then(sh => {
+      if (!live) return;
+      setSheet(sh);
+      const base = sh ? sh.items : blankItems();
+      const draft = readOkrDraft();
+      if (draft && draft.month === month) {
+        if (sh && sh.status !== 'draft') { clearOkrDraft(); setAi(null); setItems(base); setDirty(false); toast.error(sh.status === 'finalized' ? '本月绩效已定稿，AI 生成的 OKR 未写入' : '本月绩效已提交审核，AI 生成的 OKR 未写入'); }
+        else { setAi(draft); setItems(okrToKpiItems(draft, base, new Map(own.map(t => [t.id, t.title])))); setDirty(true); }
+      } else { setItems(base); setDirty(false); }
+      setLoading(false);
+    });
     return () => { live = false; };
   }, [month, s.meKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const status: KpiStatus | 'none' = sheet?.status ?? 'none';
@@ -123,6 +137,7 @@ export function KpiSelfPanel() {
     setBusy(false);
     if (!r.ok) { toast.error(r.error); return; }
     setSheet(r.sheet); setItems(r.sheet.items); setDirty(false);
+    if (ai) { clearOkrDraft(); setAi(null); }
     s.log(`${submit ? '提交' : '保存'}${monthKeyLabel(month)}绩效`);
     toast.success(submit ? '已提交审核，审核人评分定稿后可查看最终得分' : '草稿已保存');
   };
@@ -135,6 +150,11 @@ export function KpiSelfPanel() {
     }));
     toast.success('已插入到 KR');
   };
+  const confirmAi = () => {
+    if (sheet && hasOkrContent(sheet.items) && !window.confirm(`${monthKeyLabel(month)}已有保存过的绩效内容，确认用 AI 生成的 OKR（含你的修改）覆盖 A–C 类 KR？`)) return;
+    save(false);
+  };
+  const discardAi = () => { clearOkrDraft(); setAi(null); setItems(sheet ? sheet.items : blankItems()); setDirty(false); toast.success('已放弃 AI 草稿'); };
   const switchMonth = (m: string) => { if (dirty && !window.confirm('当前月份有未保存的修改，切换月份将丢弃这些修改。继续？')) return; setMonth(m); };
   return <div role="tabpanel" aria-label="当月绩效" className="kpi-self">
     <section className="glass panel kpi-head">
@@ -148,6 +168,17 @@ export function KpiSelfPanel() {
         <button type="button" className="primary compact" disabled={busy || loading} onClick={() => save(true)}><Send size={15} />提交审核</button>
       </div>}
     </section>
+    {ai && editable && !loading && <section className="glass panel okr-ai-banner" role="status">
+      <div className="okr-ai-main">
+        <span className="okr-ai-tag"><Sparkles size={13} />AI生成·待确认</span>
+        <div><strong>{monthKeyLabel(month)} OKR 草稿尚未保存</strong><p>{ai.summary || '已根据本月已完成待办生成 KR，请逐条检查修改后再确认保存。'}{sheet && hasOkrContent(sheet.items) ? ' 注意：确认保存将覆盖本月已保存的 A–C 类 KR。' : ''}</p>
+        {ai.objectives.length > 0 && <ul className="okr-ai-objs">{ai.objectives.map(o => <li key={o.category}><b>{o.category}</b>{o.objective || KPI_CATEGORIES.find(c => c.key === o.category)?.name}<em>{o.keyResults.length} KR</em></li>)}</ul>}</div>
+      </div>
+      <div className="okr-ai-actions">
+        <button type="button" className="secondary compact" disabled={busy} onClick={discardAi}><X size={15} />放弃</button>
+        <button type="button" className="primary compact" disabled={busy} onClick={confirmAi}><Check size={15} />确认保存</button>
+      </div>
+    </section>}
     {status === 'draft' && sheet?.reviewNote && sheet.reviewedByName && <Notice>{sheet.reviewedByName} 退回了本月绩效：{sheet.reviewNote}</Notice>}
     {status === 'submitted' && <Notice>已提交审核，等待 {sheet?.reviewedByName || '审核人'} 评分。如需修改，请联系审核人退回。</Notice>}
     {status === 'finalized' && sheet && <section className="glass panel kpi-final">

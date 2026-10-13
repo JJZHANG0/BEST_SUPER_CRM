@@ -35,6 +35,8 @@ jobs:
         run: node tests/ops.mjs
       - name: Validate monthly KPI scoring, review workflow and permissions
         run: node tests/kpi.mjs
+      - name: Validate 生成OKR parser / mapper / rate limit
+        run: node tests/okr.mjs
       - name: Validate 排课 / 课表导出 / 课时+学情反馈 / 部门负责人可见范围
         run: node tests/schedule.mjs
       - name: Validate course code + schedule conflict guard
