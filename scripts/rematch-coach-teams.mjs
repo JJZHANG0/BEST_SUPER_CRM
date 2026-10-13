@@ -11,7 +11,9 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
 const DRY = process.argv.includes('--dry-run');
-const COACHES = new Set(['王皓萱','李进坚','董之恒','郑永雄','吴奎','刘仲','钱其萩','邓金平','王银申','罗超','王志衡','张捷嘉','杜步天','张金阳','王钰','花宇轩','郝震昆','徐新泽']);
+const COACHES = new Set(['王皓萱','李进坚','董之恒','郑永雄','吴奎','刘仲','钱其萩','邓金平','王银申','罗超','王志衡','张捷嘉','杜步天','张金阳','王钰','花宇轩','郝震昆','徐新泽','马超','贺迪']);
+// Blacklisted: never (re)assign as team teacher; their historical course rows stay intact.
+const BLACKLIST = new Set(['夏宏伟']);
 const ALIAS = { '郝震焜': '郝震昆' };
 const teamCore = (name) => String(name || '').replace(/team/gi, '').replace(/[「」『』"“”\s]/g, '').trim();
 const programOf = (name) => {
@@ -86,6 +88,7 @@ const map = new Map();
 const perTeacher = {};
 for (const c of courses) {
   const teacher = canon(c.teacher);
+  if (BLACKLIST.has(teacher)) { report.unmatchedCourses.push({ code: c.code, name: c.name, teacher, reason: 'blacklisted' }); continue; }
   if (!teacher) { report.unmatchedCourses.push({ code: c.code, name: c.name, reason: 'no_teacher' }); continue; }
   const linked = courseTeams(c, teams);
   if (!linked.length) {
