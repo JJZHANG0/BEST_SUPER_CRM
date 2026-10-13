@@ -301,7 +301,11 @@ export function Provider({children}:{children:ReactNode}){
   },
  };
  const removeRecord=async(name:OpsCollection,id:string)=>{
-  const drop=()=>(setters[name] as unknown as Dispatch<SetStateAction<{id:string}[]>>)(l=>l.filter(x=>x.id!==id));
+  const drop=()=>{
+    (setters[name] as unknown as Dispatch<SetStateAction<{id:string}[]>>)(l=>l.filter(x=>x.id!==id));
+    // Deleting a 课程安排 course also drops its 排课 sessions locally (API cascades too).
+    if(name==='courses')setCourseSessions(l=>l.filter(x=>x.course!==id));
+  };
   if(!API_ENABLED){drop();return true}
   try{await api.remove(name,id);synced.current[name]?.delete(id);drop();setPersisted(true);return true}
   catch(e){toast.error(e instanceof ApiError&&e.status===409?'该记录仍被其他数据引用，无法删除':apiError(e,'删除失败'));return false}

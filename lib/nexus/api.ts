@@ -16,7 +16,7 @@ export type ApiUser = { id: number; email: string; username?: string | null; nam
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
 /** Row of 系统管理 · 用户管理. */
 export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null; leader?: boolean; salesRegion?: string | null; salesLead?: boolean };
-export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions';
+export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions' | 'courses';
 export type Collection = 'programs' | 'teams' | 'teamLogs' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | 'posts' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }

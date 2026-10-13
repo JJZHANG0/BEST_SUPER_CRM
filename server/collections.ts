@@ -42,8 +42,8 @@ export const systemCollections: readonly CollectionName[] = ['classTypes', 'proj
 /** Per-teacher records: ops write their own, superadmins any; ops only read their own. */
 export const ownedCollections: readonly CollectionName[] = ['lessons', 'lessonFeedbacks'];
 /** Collections that accept DELETE. */
-/** 课程排课: any ops-workspace account may add / remove sessions (like courses themselves). */
-export const scheduleCollections: readonly CollectionName[] = ['courseSessions'];
+/** 课程安排 + 排课: any ops-workspace account may add / remove courses and sessions. */
+export const scheduleCollections: readonly CollectionName[] = ['courses', 'courseSessions'];
 export const deletableCollections: readonly CollectionName[] = [...systemCollections, ...ownedCollections, ...scheduleCollections];
 export const isCollection = (name: string): name is CollectionName => Object.hasOwn(recordSchemas, name);
 

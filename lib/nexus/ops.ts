@@ -51,6 +51,39 @@ export function durationLabel(start: string, end: string): string {
   if (!(mins > 0)) return '';
   return mins % 60 === 0 ? `${mins / 60} 小时` : mins > 60 ? `${Math.round(mins / 6) / 10} 小时` : `${mins} 分钟`;
 }
+/** Label for a duration in minutes alone (新建课程 · 课时长度). */
+export function minutesLabel(mins: number): string {
+  if (!(mins > 0)) return '';
+  return mins % 60 === 0 ? `${mins / 60} 小时` : mins > 60 ? `${Math.round(mins / 6) / 10} 小时` : `${mins} 分钟`;
+}
+/** HH:MM options every 15 minutes (腾讯会议-style), 00:00–23:45. */
+export const TIME_OPTIONS_15: readonly string[] = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = Math.floor(i / 4), m = (i % 4) * 15;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+});
+/** Common 课时 lengths in minutes for 新建课程. */
+export const DURATION_OPTIONS_MIN = [30, 45, 60, 90, 120, 150, 180] as const;
+/** Snap a free-form HH:MM down to the nearest 15-minute slot (or '' if invalid). */
+export function snapTo15(t: string): string {
+  const m = timeToMinutes(t);
+  if (Number.isNaN(m)) return '';
+  const snapped = Math.max(0, Math.min(23 * 60 + 45, Math.round(m / 15) * 15));
+  return `${String(Math.floor(snapped / 60)).padStart(2, '0')}:${String(snapped % 60).padStart(2, '0')}`;
+}
+/** start + durationMinutes → HH:MM (caps at 23:59; returns '' when start is bad). */
+export function endFromDuration(start: string, durationMinutes: number): string {
+  const a = timeToMinutes(start);
+  if (Number.isNaN(a) || !(durationMinutes > 0)) return '';
+  const end = Math.min(a + durationMinutes, 23 * 60 + 59);
+  return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}
+/** Prefer an exact DURATION_OPTIONS_MIN match; otherwise the raw positive minute span (or 90 default). */
+export function durationFromRange(start: string, end: string, fallback = 90): number {
+  const mins = timeToMinutes(end) - timeToMinutes(start);
+  if (!(mins > 0)) return fallback;
+  if ((DURATION_OPTIONS_MIN as readonly number[]).includes(mins)) return mins;
+  return mins;
+}
 /** One 课时记录. rate/unit are a snapshot of the class type when the record was created. */
 export type LessonRecord = {
   id: string; course: string; date: string; hours: number;
@@ -212,6 +245,26 @@ export function attendanceText(actual: number | null, expected: number | null): 
   if (expected && expected > 0) return actual === expected ? `${actual}/${expected} 全勤` : `${actual}/${expected} 到课`;
   return `${actual} 人到课`;
 }
+
+/** First contiguous digit run after stripping a leading letter/hyphen prefix (COND2025001 → 2025001, WS2026017-11 → 2026017). */
+export function codePrimaryNumeric(code: string): number {
+  const m = String(code || '').trim().replace(/^[A-Za-z-]+/, '').match(/^\d+/);
+  return m ? Number(m[0]) : 0;
+}
+/** Last contiguous digit run (WS2026017-11 → 11). */
+export function codeTrailingNumeric(code: string): number {
+  const m = String(code || '').match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : 0;
+}
+/** Sort 项目/课程编号 by trailing numeric suffixes ascending (primary run, then final segment, then locale). */
+export function compareByCodeNumeric(a: string, b: string): number {
+  const pa = codePrimaryNumeric(a), pb = codePrimaryNumeric(b);
+  if (pa !== pb) return pa - pb;
+  const ta = codeTrailingNumeric(a), tb = codeTrailingNumeric(b);
+  if (ta !== tb) return ta - tb;
+  return a.localeCompare(b, 'en');
+}
+
 /** Live filter for the course combobox: every whitespace-separated term must match code, name, project or teacher. */
 export function filterCourses<T extends { code: string; name: string; teacher: string; project: string }>(courses: readonly T[], query: string, projectLabel: (id: string) => string = () => ''): T[] {
   const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);

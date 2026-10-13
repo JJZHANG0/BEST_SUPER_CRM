@@ -4,7 +4,9 @@
  * ↑ ↓ to move, Enter to pick, Esc to close (restores the current course). WAI-ARIA combobox pattern.
  */
 import { Fragment, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ChevronsUpDown, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, UsersRound } from 'lucide-react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { filterCourses, type OpsCourse } from '@/lib/nexus/ops';
 
 const LIMIT = 80;
@@ -64,8 +66,8 @@ export function CourseCombobox({ courses, value, onChange, projectLabel, ariaLab
       // While open the box is a search field (empty = all courses, current course as placeholder).
       placeholder={selected ? label(selected) : '输入课程编号、名称、项目或授课老师搜索'}
       value={query ?? (selected ? label(selected) : '')}
-      onFocus={() => { setQuery(''); openList(); }}
-      onClick={openList}
+      onFocus={() => { /* stay closed on modal open / tab-focus; open via click, type, or arrows */ }}
+      onClick={() => { if (query === null) setQuery(''); openList(); }}
       onChange={e => { setQuery(e.target.value); setActive(0); setOpen(true); list.current?.scrollTo({ top: 0 }); }}
       onBlur={close}
       onKeyDown={onKey} />
@@ -84,7 +86,7 @@ export function CourseCombobox({ courses, value, onChange, projectLabel, ariaLab
 }
 
 /** One 课程编号 choice for 新建课程 (from 课时记录 courses). */
-export type CodeOption = { code: string; name: string; project: string; program: string; programName: string; teams: { id: string; name: string }[]; teacher: string };
+export type CodeOption = { code: string; name: string; project: string; program: string; programName: string; teams: { id: string; name: string }[]; teacher: string; location?: string };
 const norm = (v: string) => v.trim().replace(/\s+/g, '').toUpperCase();
 
 /**
@@ -142,7 +144,7 @@ export function CourseCodeCombobox({ options, value, onPick, taken }: {
     <Search size={15} className="cc-icon" aria-hidden="true" />
     <input ref={input} role="combobox" aria-label="课程编号" aria-autocomplete="list" aria-expanded={open} aria-controls={listId}
       aria-activedescendant={open && rows[active] ? optId(active) : undefined} autoComplete="off" spellCheck={false}
-      placeholder={value ? value : '从已有课程编号中选择，例如 WS2026017 / 康莱德'}
+      placeholder={value ? value : '必选 · 从已有课程编号中选择，例如 WS2026017 / 康莱德'} required
       value={query ?? value}
       onFocus={() => { setQuery(''); setOpen(true); setActive(0); }}
       onChange={e => { setQuery(e.target.value); setActive(0); setOpen(true); list.current?.scrollTo({ top: 0 }); }}
@@ -162,4 +164,31 @@ export function CourseCodeCombobox({ options, value, onPick, taken }: {
       <div className="cc-foot" aria-live="polite">{matches.length > LIMIT ? `显示前 ${LIMIT} 个，共 ${matches.length} 个匹配` : `${matches.length} 个已有编号`} · 仅可选库中已有编号 · ↑↓ Enter Esc</div>
     </div>}
   </div>;
+}
+
+/** Searchable 关联队伍 typeahead (type to filter), same pattern as TeacherPicker. */
+export function TeamCombobox({ options, value, onChange, label = '关联队伍', allowUnassigned = true }: {
+  options: readonly string[]; value: string; onChange: (name: string) => void; label?: string; allowUnassigned?: boolean;
+}) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const pick = (v: string) => { onChange(v); setOpen(false); };
+  const shown = options.filter(o => o !== '待分配');
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild>
+      <button type="button" role="combobox" aria-expanded={open} aria-controls={listId} aria-label={label} className={'choice teacher-picker team-combobox' + (value && value !== '待分配' ? '' : ' empty')}>
+        <UsersRound size={15} aria-hidden="true" /><span>{value || '待分配'}</span><ChevronsUpDown size={15} className="teacher-picker-caret" aria-hidden="true" />
+      </button>
+    </PopoverTrigger>
+    <PopoverContent id={listId} className="teacher-picker-pop" align="start">
+      <Command filter={(item, search) => item.toLowerCase().includes(search.trim().toLowerCase()) ? 1 : 0}>
+        <CommandInput placeholder="输入队伍名称搜索…" />
+        <CommandList>
+          <CommandEmpty>没有匹配的队伍</CommandEmpty>
+          {allowUnassigned && <CommandGroup><CommandItem value="待分配" onSelect={() => pick('待分配')}><Check size={14} className={value === '待分配' || !value ? '' : 'invisible'} />待分配</CommandItem></CommandGroup>}
+          {shown.length > 0 && <CommandGroup heading="队伍">{shown.map(n => <CommandItem key={n} value={n} onSelect={() => pick(n)}><Check size={14} className={value === n ? '' : 'invisible'} />{n}</CommandItem>)}</CommandGroup>}
+        </CommandList>
+      </Command>
+    </PopoverContent>
+  </Popover>;
 }

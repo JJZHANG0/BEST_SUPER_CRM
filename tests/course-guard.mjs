@@ -19,7 +19,7 @@ assert.equal(S.courseCodeIssue('WS2026017-1-1',courses,'A'),null,'own code is fi
 assert.equal(S.normalizeCourseCode(' ws2026017-1-2 '),'WS2026017-1-2');
 // Known library codes (ops_courses).
 const known=[{code:'WS2026017-1-1'},{code:'COND02501-11A'}];
-assert.equal(S.knownCourseCodeIssue('',known),null);
+assert.match(S.knownCourseCodeIssue('',known),/请选择课程编号/);
 assert.equal(S.knownCourseCodeIssue('ws2026017-1-1',known),null);
 assert.match(S.knownCourseCodeIssue('WS9999999-9-9',known),/编号不存在/);
 // Conflicts.

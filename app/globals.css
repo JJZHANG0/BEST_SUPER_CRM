@@ -1244,7 +1244,7 @@ html[data-workspace=public] body{background:#f4f2f7}
 .end-by input[type=number]{width:72px;min-height:32px}
 .end-by input[type=date]{flex:1;min-height:32px}
 .manual-slots{display:flex;flex-direction:column;gap:8px}
-.manual-slot{display:grid;grid-template-columns:24px minmax(0,1.4fr) minmax(0,1fr) auto minmax(0,1fr) 44px;align-items:center;gap:8px}
+.manual-slot{display:grid;grid-template-columns:24px minmax(0,1.2fr) minmax(0,.9fr) minmax(0,.9fr) auto 44px;align-items:center;gap:8px}
 .manual-slot em{font-style:normal;font-size:.75rem;color:#9a8aae;text-align:center}
 .manual-slot span{color:#9a8aae}
 .manual-slot .icon-button{min-height:38px;min-width:38px}
@@ -1258,6 +1258,27 @@ html[data-workspace=public] body{background:#f4f2f7}
 .session-list span{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;background:#f4effc;color:#4a3d61;font-size:.75rem;font-variant-numeric:tabular-nums}
 .session-list span.past{opacity:.55}
 .session-list em{font-style:normal;font-size:.625rem;color:#9a8aae}
+.session-list .session-chip-editable{padding-right:4px;gap:4px}
+.session-list .session-chip-btn{display:inline-grid;place-items:center;width:20px;height:20px;border:0;border-radius:6px;background:transparent;color:#8a7a9e;cursor:pointer;padding:0}
+.session-list .session-chip-btn:hover{background:#ebe4f6;color:#5b3bb0}
+.session-list .session-chip-btn.danger:hover{background:#fdeceb;color:#b42318}
+.course-danger-actions{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding-top:12px;border-top:1px dashed #eadff5}
+.course-danger-actions .danger-soft{justify-content:center;border-color:#f0b48a;color:#b4561b;background:#fff}
+.course-danger-actions .danger-soft:hover{background:#fff1e6}
+.course-danger-actions>small{line-height:1.4}
+.time-select,.duration-select{width:100%;min-height:44px;padding:0 12px;border:1px solid #e6dfef;border-radius:10px;background:#fff;color:#3f354c;font-size:.875rem;font-variant-numeric:tabular-nums}
+.time-select:focus-visible,.duration-select:focus-visible{outline:2px solid #c9b6ec;outline-offset:1px}
+.time-range-duration{grid-template-columns:1fr 1fr auto}
+.time-range-duration .duration b{font-variant-numeric:tabular-nums;margin:0 2px}
+.manual-slot .manual-end{font-size:.75rem;color:#7a5bc0;font-variant-numeric:tabular-nums;white-space:nowrap}
+.session-pick-dialog .session-pick-list,.session-edit-dialog .session-edit-form{display:flex;flex-direction:column;gap:8px;margin:12px 0 16px}
+.session-pick-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid #ebe4f6;border-radius:10px;background:#fff;color:#3f354c;font-size:.875rem;text-align:left;cursor:pointer}
+.session-pick-row:hover{border-color:#f0b48a;background:#fff8f2;color:#b4561b}
+.session-pick-row em{font-style:normal;font-size:.7rem;color:#9a8aae;min-width:1.2em}
+.session-pick-row span{flex:1}
+.session-pick-row svg{flex:none;opacity:.7}
+@media(max-width:600px){.manual-slot{grid-template-columns:24px 1fr 1fr;grid-template-rows:auto auto}.manual-slot .manual-end,.manual-slot .icon-button{grid-column:2 / -1}}
+
 .course-row h3 .course-code{font-style:normal;margin-left:8px;font-size:.625rem;font-weight:700;letter-spacing:.03em;padding:2px 6px;border-radius:5px;background:#efe8fc;color:#6a43c9;vertical-align:2px}
 .calendar-toolbar .export-timetable{margin-left:8px;min-height:38px}
 

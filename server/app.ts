@@ -596,13 +596,16 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const sessions = (await db.select().from(schema.courseSessions)).map(r => clean(r as unknown as Record<string, unknown>)) as unknown as CourseSession[];
     if (name === 'courses') {
       const current = courses.find(x => x.id === id);
-      const code = typeof data.code === 'string' ? data.code : '';
-      if (code && normalizeCourseCode(code) !== normalizeCourseCode(current?.code)) {
+      const code = typeof data.code === 'string' ? data.code : (current?.code || '');
+      // 课程编号 is required and must match 课时记录 library (ops_courses).
+      {
         const opsCodes = await db.select({ code: schema.opsCourses.code }).from(schema.opsCourses);
         const known = knownCourseCodeIssue(code, opsCodes);
         if (known) return { status: 400, body: { error: 'invalid', message: known } };
-        const issue = courseCodeIssue(code, courses, id);
-        if (issue) return { status: issue.includes('已被') ? 409 : 400, body: { error: issue.includes('已被') ? 'conflict' : 'invalid', message: issue } };
+        if (normalizeCourseCode(code) !== normalizeCourseCode(current?.code)) {
+          const issue = courseCodeIssue(code, courses, id);
+          if (issue) return { status: issue.includes('已被') ? 409 : 400, body: { error: issue.includes('已被') ? 'conflict' : 'invalid', message: issue } };
+        }
         data.code = normalizeCourseCode(code);
       }
       if (data.conflictOverride === true) return null;
@@ -719,6 +722,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
+      // 课程安排 has no FK to course_sessions (browser writes them in parallel); cascade in the API.
+      if (name === 'courses') await db.delete(schema.courseSessions).where(eq(schema.courseSessions.course, id));
       await db.delete(t).where(eq(t.id, id));
     } catch (err) {
       if (pgCode(err) === '23503') return c.json({ error: 'in_use', message: '该记录仍被其他数据引用，无法删除' }, 409);

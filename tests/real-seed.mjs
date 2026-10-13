@@ -26,7 +26,9 @@ assert.equal(O.durationLabel('14:00','15:30'),'1.5 小时');assert.equal(O.durat
 assert.deepEqual(O.teacherNames([{id:'1',name:'Dora',note:'',active:true},{id:'2',name:'停用',note:'',active:false},{id:'3',name:'许瑾',note:'',active:true}],[{name:'许瑾',active:true},{name:'离职',active:false}],'旧老师'),['许瑾','Dora','旧老师']);
 const mod=readFileSync('components/nexus/modules.tsx','utf8');
 assert(mod.includes('<TeacherPicker value={teacher} onChange={setTeacher}/>')&&mod.includes('<ScheduleFields onChange={setSched}')&&mod.includes('initialSlots')&&mod.includes("time:first.start+'–'+first.end"));
-assert(readFileSync('components/nexus/schedule.tsx','utf8').includes('aria-label="结束时间"'));
+const sched=readFileSync('components/nexus/schedule.tsx','utf8');
+assert(sched.includes('课时长度')&&sched.includes('TIME_OPTIONS_15')&&sched.includes('endFromDuration')&&!sched.includes('aria-label="结束时间"'),'start every 15 min + duration → end');
+assert(mod.includes('删除本课程')&&mod.includes('删除本周期课程')&&mod.includes('TeamCombobox')&&mod.includes('课程编号（必填'));
 assert(!mod.includes('开始时间（课程时长 1 小时）'));
 assert(readFileSync('components/nexus/admin.tsx','utf8').includes("{ id: 'teachers', label: '授课老师'"));
 // 首次登录改密可跳过，本次会话有效，下次登录再提醒。
