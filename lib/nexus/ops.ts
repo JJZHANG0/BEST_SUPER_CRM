@@ -131,10 +131,14 @@ export function sameTeacherName(a: unknown, b: unknown): boolean {
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
 }
-export type TeacherScopeInput = {
-  opsCourses: readonly { id: string; code: string; name: string; teacher: string }[];
-  courses?: readonly { id: string; teacher: string; team: string; code?: string }[];
-  teams: readonly { id: string; name: string; program: string; teacher?: string }[];
+export type TeacherScopeInput<
+  OC extends { id: string; code: string; name: string; teacher: string } = { id: string; code: string; name: string; teacher: string },
+  C extends { id: string; teacher: string; team: string; code?: string } = { id: string; teacher: string; team: string; code?: string },
+  T extends { id: string; name: string; program: string; teacher?: string } = { id: string; name: string; program: string; teacher?: string },
+> = {
+  opsCourses: readonly OC[];
+  courses?: readonly C[];
+  teams: readonly T[];
   enrollments: readonly { id?: string; student: string; team: string; status: string }[];
   students: readonly { id: string; team: string; status: string }[];
 };
@@ -145,7 +149,11 @@ export type TeacherScopeInput = {
  * 3. Plus teams on 课程安排 rows where they are 授课老师;
  * 4. Students = enrollments ∪ students.team for those team ids.
  */
-export function teacherRosterScope(teacherName: string, input: TeacherScopeInput) {
+export function teacherRosterScope<
+  OC extends { id: string; code: string; name: string; teacher: string },
+  C extends { id: string; teacher: string; team: string; code?: string },
+  T extends { id: string; name: string; program: string; teacher?: string },
+>(teacherName: string, input: TeacherScopeInput<OC, C, T>) {
   const name = canonicalTeacherName(teacherName);
   const mineOps = input.opsCourses.filter(c => sameTeacherName(c.teacher, name));
   const mineCourses = (input.courses || []).filter(c => sameTeacherName(c.teacher, name));
