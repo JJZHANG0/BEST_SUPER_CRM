@@ -212,14 +212,19 @@ function AssignedPanel() {
       {rows.map(t => {
         const done = isDone(t), overdue = !done && !!t.dueAt && t.dueAt.slice(0, 10) < todayIso();
         return <div key={t.id} className={'todo-row assign-row ' + (done ? 'done' : 'open')}>
-          <span className="avatar small-avatar" aria-hidden="true">{ownerName(t).slice(0, 1)}</span>
+          <div className="assign-who">
+            <span className="avatar small-avatar" aria-hidden="true">{ownerName(t).slice(0, 1)}</span>
+            <span className="assign-owner">{ownerName(t)}</span>
+          </div>
           <div className="todo-main">
             <strong>{t.title}</strong>
-            <p className="todo-meta">
-              <span className="assign-owner">{ownerName(t)}</span>
-              {t.dueAt && <><span className="todo-sep" aria-hidden="true">·</span><span className={'todo-due' + (overdue ? ' overdue' : '')}><CalendarDays size={12} aria-hidden="true" /><span>DDL {formatDue(t.dueAt)}</span></span></>}
-              {t.note && <><span className="todo-sep" aria-hidden="true">·</span><span className="todo-note">{t.note}</span></>}
-            </p>
+            {(t.dueAt || t.note) && (
+              <p className="todo-meta">
+                {t.dueAt && <span className={'todo-due' + (overdue ? ' overdue' : '')}><CalendarDays size={12} aria-hidden="true" /><span>DDL {formatDue(t.dueAt)}</span></span>}
+                {t.dueAt && t.note && <span className="todo-sep" aria-hidden="true">·</span>}
+                {t.note && <span className="todo-note">{t.note}</span>}
+              </p>
+            )}
           </div>
           <span className={'assign-state ' + (done ? 'good' : overdue ? 'poor' : 'watch')}>{done ? `已完成 · ${formatDue(t.completedAt)}` : overdue ? '已逾期' : '进行中'}</span>
           <div className="todo-actions"><button type="button" className="icon-button" aria-label="撤回指派" title="撤回指派" onClick={() => withdraw(t)}><Undo2 size={15} /></button></div>
