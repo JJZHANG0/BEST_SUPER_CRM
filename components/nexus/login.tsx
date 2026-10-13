@@ -1,11 +1,14 @@
 'use client';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
-import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, Hexagon, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, UserRound, Sparkles, UsersRound, Layers3, GraduationCap} from 'lucide-react';
+import {ArrowRight, ArrowUpRight, Check, Eye, EyeOff, LoaderCircle, LockKeyhole, UserRound, UsersRound, Layers3, GraduationCap} from 'lucide-react';
+import {assetUrl} from '@/lib/nexus/assets';
 import {useNexus} from '@/lib/nexus/store';
 import {BrandMark} from '@/components/nexus/brand';
 import {salesDemo} from '@/lib/nexus/auth';
 import {APP_ENV} from '@/lib/nexus/api';
-const workspaces=[{role:'sales',label:'销售顾问',tone:'蓝'},{role:'ops',label:'运营老师',tone:'紫'},{role:'teacher',label:'授课老师',tone:'金属灰'}] as const;
+const workspaces=[{role:'sales',label:'销售顾问'},{role:'ops',label:'运营老师'},{role:'teacher',label:'授课老师'}] as const;
+
+const CREW_WEBP=assetUrl('brand/login-crew.webp'),CREW_SM=assetUrl('brand/login-crew-720.webp'),CREW_PNG=assetUrl('brand/login-crew.png');
 
 export default function Login() {
   const s=useNexus();
@@ -15,6 +18,14 @@ export default function Login() {
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[show,setShow]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[help,setHelp]=useState(false),[caps,setCaps]=useState(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current)},[]);
+  // Hero parallax: pointer position -> CSS vars (skipped for reduced motion / touch).
+  const hero=useRef<HTMLElement|null>(null);
+  useEffect(()=>{const el=hero.current;if(!el||typeof window==='undefined')return;
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches||!window.matchMedia('(pointer: fine)').matches)return;
+    let raf=0;const move=(e:PointerEvent)=>{const r=el.getBoundingClientRect();const x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{el.style.setProperty('--px',x.toFixed(3));el.style.setProperty('--py',y.toFixed(3))})};
+    const leave=()=>{el.style.setProperty('--px','0');el.style.setProperty('--py','0')};
+    el.addEventListener('pointermove',move);el.addEventListener('pointerleave',leave);
+    return()=>{cancelAnimationFrame(raf);el.removeEventListener('pointermove',move);el.removeEventListener('pointerleave',leave)}},[]);
   const choose=(role:'sales'|'ops'|'teacher')=>{s.setRole(role);setEmail('');setPassword('');setError('');setHelp(false)};
   const submit=(event:FormEvent)=>{
     event.preventDefault();if(busy)return;
@@ -24,27 +35,26 @@ export default function Login() {
   };
   return <main className="access-page">
     <div className="access-aura" aria-hidden="true"/>
-    <header className="access-header"><BrandMark href="#/login" className="access-brand" label="B.E.S.T 内部超级管理系统 · 登录页"/><span className="access-internal"><LockKeyhole size={14}/>内部协作空间</span></header>
+    <header className="access-header"><BrandMark href="#/login" className="access-brand" label="B.E.S.T 内部超级管理系统 · 登录页"/></header>
     <div className="access-layout">
-      <section className="access-story" aria-label="平台介绍">
-        <div className="access-kicker"><span/> CONNECT PEOPLE. INSPIRE POSSIBILITIES.</div>
-        <h1>连接每一份热爱，<br/>让成长<span>有迹可循。</span></h1>
-        <p className="access-intro">从第一次了解，到每一次进步。<br/>让销售、运营与授课老师，在同一个空间高效协作。</p>
-        <div className="crystal-scene" aria-hidden="true">
-          <div className="crystal-orbit orbit-one"/><div className="crystal-orbit orbit-two"/>
-          <div className="crystal-halo"/>
-          <div className="nexus-crystal"><div className="crystal-face face-one"/><div className="crystal-face face-two"/><div className="crystal-face face-three"/><Hexagon size={58} strokeWidth={1}/></div>
-          <div className="crystal-label label-program"><span><Layers3 size={20}/></span><div>每一个项目<small>清晰连接，及时同步</small></div><ArrowUpRight size={17}/></div>
-          <div className="crystal-label label-student"><span><UsersRound size={20}/></span><div>每一份成长<small>共同关注，全程陪伴</small></div><i><Check size={13}/></i></div>
-          <span className="crystal-spark spark-one">✧</span><span className="crystal-spark spark-two">✧</span>
+      <section className="access-hero" ref={hero} aria-label="B.E.S.T 协作平台">
+        <div className="access-hero-copy">
+          <h1>连接每一份热爱，<br/>让成长<span>有迹可循。</span></h1>
+          <p>销售、运营与授课老师，在同一个空间高效协作。</p>
         </div>
-        <div className="access-story-footer"><span>01 / 一个工作空间</span><span>无限协作可能 <ArrowRight size={14}/></span></div>
+        <div className="access-hero-art">
+          <div className="access-hero-glow" aria-hidden="true"/>
+          <picture className="access-hero-img">
+            <source type="image/webp" srcSet={`${CREW_SM} 720w, ${CREW_WEBP} 1200w`} sizes="(max-width: 900px) 90vw, 560px"/>
+            <img src={CREW_PNG} width={1200} height={900} alt="B.E.S.T 的伙伴们：小兔、小猪、哈士奇、小猫和胡萝卜" decoding="async" fetchPriority="high"/>
+          </picture>
+          <span className="access-hero-shadow" aria-hidden="true"/>
+          <span className="access-sparkle s1" aria-hidden="true"/><span className="access-sparkle s2" aria-hidden="true"/><span className="access-sparkle s3" aria-hidden="true"/>
+        </div>
       </section>
       <section className="access-card" aria-labelledby="access-title">
-        <div className="access-card-top"><span className="access-symbol"><KeyRound size={22}/></span><span><i/> INVITATION ONLY</span></div>
-        <div className="access-welcome">WELCOME TO YOUR WORKSPACE</div>
-        <h2 id="access-title">欢迎回来</h2><p className="access-subtitle">使用内部授权账号，开启今天的协作。</p>
-        <fieldset className="access-role access-role-3" disabled={busy}><legend className="sr-only">选择工作空间</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:a.role==='teacher'?teacher:!sales&&!teacher;return <button type="button" key={a.role} data-ws={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:a.role==='teacher'?<GraduationCap size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span><small>{a.tone}</small>{on&&<Check size={14}/>}</button>})}</fieldset>
+        <h2 id="access-title">欢迎回来</h2><p className="access-subtitle">请选择身份并登录您的账号</p>
+        <fieldset className="access-role access-role-3" disabled={busy}><legend className="sr-only">选择登录身份</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:a.role==='teacher'?teacher:!sales&&!teacher;return <button type="button" key={a.role} data-ws={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:a.role==='teacher'?<GraduationCap size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span>{on&&<Check size={14} className="access-role-check" aria-hidden="true"/>}</button>})}</fieldset>
         <form onSubmit={submit} className="access-form" aria-busy={busy}>
           <label htmlFor="access-email">用户名（姓名）</label><div className="access-input"><UserRound size={18}/><input id="access-email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={120} placeholder={sales&&!noDemo?salesDemo.email:'例如：张捷嘉'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}}/></div>
           <div className="access-password-label"><label htmlFor="access-password">登录密码</label><button type="button" disabled={busy} onClick={()=>setHelp(!help)} aria-expanded={help}>需要帮助？</button></div>
@@ -54,12 +64,10 @@ export default function Login() {
           {error&&<p id="access-error" role="alert" className="access-error">{error}</p>}
           <button className="access-submit" disabled={busy} type="submit">{busy?<><LoaderCircle className="access-spinner" size={19}/>正在进入工作空间…</>:<>登录工作空间<ArrowRight size={19}/></>}</button>
         </form>
-        <div className="access-authorized"><ShieldCheck size={15}/><span>仅限已授权成员 · 无需自行注册</span></div>
-        {sales&&!noDemo?<div className="access-demo"><div><Sparkles size={16}/><strong>体验销售顾问工作空间</strong><span>冰晶蓝</span></div><p>示例账号</p><button type="button" disabled={busy} onClick={()=>{setEmail(salesDemo.email);setPassword(salesDemo.password);setError('')}}>填入销售示例账号<ArrowUpRight size={16}/></button></div>
-        :<div className="access-demo"><div><Sparkles size={16}/><strong>{sales?'销售顾问工作空间':teacher?'授课老师工作空间':'运营老师工作空间'}</strong><span>{sales?'冰晶蓝':teacher?'金属灰':'冰晶紫'}</span></div><p>使用管理员分配的账号登录，首次登录需修改初始密码。</p></div>}
+        {sales&&!noDemo&&<button type="button" className="access-demo-fill" disabled={busy} onClick={()=>{setEmail(salesDemo.email);setPassword(salesDemo.password);setError('')}}>使用销售示例账号<ArrowUpRight size={15}/></button>}
         {!s.apiMode&&<p className="access-demo-note">当前为预览站：数据只保存在本浏览器，不与他人同步。</p>}
       </section>
     </div>
-    <footer className="access-footer"><span>© 2026 B.E.S.T</span><span>Innovation, connected.<i/>教育创新 · 协作共生</span></footer>
+    <footer className="access-footer"><span>© 2026 B.E.S.T</span><span>如需账号或重置密码，请联系管理员</span></footer>
   </main>;
 }
