@@ -1871,3 +1871,10 @@ html[data-workspace=teacher] .bottom-nav button.active{color:#111827}
 @media(max-width:900px){.access-hero{order:0;align-items:center;text-align:center}.access-hero-art{max-width:420px}.access-hero-copy p{display:none}}
 @media(max-width:600px){.access-hero{display:flex;gap:10px}.access-hero-copy{display:none}.access-hero-art{max-width:300px;margin-bottom:10px}.access-role.access-role-3 button{flex-direction:column;gap:3px;min-height:58px}}
 @media(prefers-reduced-motion:reduce){.access-hero-copy,.access-hero-art,.access-card,.access-hero-img img,.access-hero-shadow,.access-sparkle{animation:none!important}.access-hero-img,.access-hero-glow{transition:none;transform:none}.access-sparkle{opacity:.7}}
+
+/* Login: sticky footer pinned to the viewport bottom; hero + card vertically centred between header and footer. */
+.access-page{display:flex;flex-direction:column}
+.access-header{width:100%;margin:0 auto}
+.access-layout{flex:1 0 auto;align-content:center;margin-top:clamp(40px,9vh,120px);margin-bottom:clamp(28px,6vh,80px)}
+.access-footer{width:100%;margin:auto auto 0;padding-top:12px}
+@media(max-width:600px){.access-layout{margin:29px auto}}
