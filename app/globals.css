@@ -897,7 +897,7 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 }
 
 /* 工作台 v2: 待办 | 快捷操作 same row & equal height; 今日课程 below 待办. */
-.dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);grid-template-areas:"todo quick" "schedule note";gap:20px;align-items:stretch}
+.dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);grid-template-areas:"todo quick" "schedule schedule";gap:20px;align-items:stretch}
 .dashboard-grid>.dg-todo{grid-area:todo;display:flex;min-width:0}
 .dashboard-grid>.dg-todo>.todo-home-panel{flex:1;min-width:0}
 .dashboard-grid>.dg-quick{grid-area:quick;display:flex;flex-direction:column;padding-bottom:20px}
@@ -1224,7 +1224,7 @@ html[data-workspace=public] body{background:#f4f2f7}
 /* 工作台: share the KPI cards' 5-column grid (same 14px gutter) so 待办 / 今日课程 end at card 4 and
    快捷操作 matches card 5 (当月教务津贴). Below 1181px the KPI row wraps, so the two-column layout returns. */
 @media(min-width:1181px){
-  .dashboard-grid{grid-template-columns:repeat(5,minmax(0,1fr));grid-template-areas:"todo todo todo todo quick" "schedule schedule schedule schedule note";column-gap:14px;row-gap:18px}
+  .dashboard-grid{grid-template-columns:repeat(5,minmax(0,1fr));grid-template-areas:"todo todo todo todo quick" "schedule schedule schedule schedule schedule";column-gap:14px;row-gap:18px}
   .dashboard-grid>.dg-quick{padding-left:16px;padding-right:16px}
   .dashboard-grid>.dg-quick .quick-grid{gap:10px}
   .dashboard-grid>.dg-quick .quick-grid button{min-height:78px;padding:10px 6px}
@@ -1341,54 +1341,36 @@ html[data-workspace=public] body{background:#f4f2f7}
 .timetable-preview{border:1px solid #e6dff1;border-radius:12px;overflow:auto;max-height:min(62vh,720px);background:#fff;box-shadow:0 6px 24px #2b1b5714;line-height:0}
 @media(max-width:760px){.timetable-options{grid-template-columns:1fr 1fr}}
 
-/* ---------- Pixel chase (workbench easter egg) ----------
-   CRITICAL: canvas must NOT participate in intrinsic height.
-   Earlier height:100%/min-height:100% + ResizeObserver setting canvas.height
-   created a feedback loop that grew document height forever (empty purple column).
-   Fix: dg-note is stretched by the grid row (今日课程 defines height); chase is
-   position:absolute inset:0 so it fills without contributing layout size. */
-.dashboard-grid>.dg-note{
-  grid-area:note;
-  position:relative;
-  align-self:stretch!important;
-  display:block!important;
-  min-width:0;
-  min-height:0;
-  height:auto; /* row height comes from 今日课程, not from chase content */
-  padding:0;
+/* ---------- Floating white-rabbit robot pet (pixel-chase.tsx) ----------
+   Portalled to <body>, fixed bottom-right, transparent — no card/frame.
+   Size ≈ former NULL desktop-pet (~64×80). dg-note chase card removed. */
+.dashboard-grid>.dg-note{display:none!important}
+.pixel-pet{
+  position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));
+  z-index:45;width:64px;height:88px;padding:0;margin:0;border:0;
+  background:transparent;box-shadow:none;border-radius:0;overflow:visible;
+  cursor:pointer;pointer-events:auto;line-height:0;
+  filter:drop-shadow(0 6px 10px rgb(40 28 70 / .18));
 }
-.pixel-chase-shell{
-  position:absolute;inset:0;
-  display:block;width:100%;height:100%;
-  min-height:0; /* never min-height:100% — that fed the canvas loop */
-}
-.pixel-chase-shell>.pixel-chase,
-.pixel-chase{
-  position:absolute;inset:0;
-  display:block;width:100%;height:100%;
-  min-height:0;border:0;padding:0;margin:0;
-  border-radius:14px;overflow:hidden;
-  background:linear-gradient(120deg,color-mix(in srgb,var(--nx-accent-soft) 75%,transparent),var(--nx-accent-softer));
-  border:1px solid #ffffffb0;cursor:pointer;text-align:left;
-}
-.pixel-chase-canvas{
-  position:absolute;inset:0;
-  display:block;width:100%;height:100%;
-  min-height:0; /* absolute — zero intrinsic contribution */
+.pixel-pet:focus-visible{outline:3px solid #b398ed;outline-offset:4px;border-radius:10px}
+.pixel-pet-canvas{
+  display:block;width:64px;height:88px;
   image-rendering:pixelated;image-rendering:crisp-edges;
+  background:transparent;
 }
-.pixel-chase-hint,.pixel-chase-quip{
-  position:absolute;left:12px;right:12px;bottom:12px;z-index:2;
-  font-size:.75rem;color:var(--nx-accent-ink);background:#ffffffcc;
-  backdrop-filter:blur(6px);border-radius:10px;padding:8px 12px;
-  pointer-events:none;box-shadow:0 4px 14px color-mix(in srgb,var(--nx-accent) 8%,transparent);
+.pixel-pet-quip{
+  position:absolute;right:0;bottom:calc(100% + 8px);z-index:2;
+  min-width:160px;max-width:220px;white-space:normal;
+  font-size:.72rem;line-height:1.55;color:var(--nx-accent-ink);
+  background:#ffffffee;backdrop-filter:blur(8px);border-radius:12px;
+  padding:8px 12px;pointer-events:none;text-align:left;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--nx-accent) 12%,transparent);
+  border:1px solid #ffffffd0;
 }
-.pixel-chase-quip{color:var(--nx-accent-ink);font-weight:550}
-@media(prefers-reduced-motion:reduce){.pixel-chase-canvas{/* static frame painted by JS */}}
-@media(max-width:900px){
-  .dashboard-grid{grid-template-areas:"todo" "quick" "schedule" "note"}
-  .dashboard-grid>.dg-note{display:block!important;min-height:280px;position:relative}
+@media(max-width:767px){
+  .pixel-pet{right:12px;bottom:calc(78px + env(safe-area-inset-bottom))}
 }
+@media(prefers-reduced-motion:reduce){.pixel-pet{filter:drop-shadow(0 4px 6px rgb(40 28 70 / .14))}}
 
 /* Compact equal-height lesson feedback cards */
 .avatar.has-img{padding:0;overflow:hidden;background:#ddd}
