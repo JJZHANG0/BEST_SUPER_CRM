@@ -177,11 +177,16 @@ export function PixelChase({ className = '' }: { className?: string }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const cssW = canvas.clientWidth || 300;
-    const cssH = canvas.clientHeight || 160;
-    if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
-      canvas.width = Math.floor(cssW * dpr);
-      canvas.height = Math.floor(cssH * dpr);
+    // Size from the absolutely-positioned shell (grid row height), NEVER from
+    // canvas intrinsic bitmap — that feedback loop grew the page forever.
+    const box = (canvas.parentElement ?? canvas).getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(box.width) || canvas.clientWidth || 300);
+    const cssH = Math.max(1, Math.min(1200, Math.floor(box.height) || canvas.clientHeight || 160));
+    const bw = Math.floor(cssW * dpr);
+    const bh = Math.floor(cssH * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
     }
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -248,9 +253,11 @@ export function PixelChase({ className = '' }: { className?: string }) {
   useEffect(() => {
     const onResize = () => paint(performance.now() - start.current, reduced);
     window.addEventListener('resize', onResize);
-    const el = canvasRef.current?.parentElement;
-    const ro = el && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
-    if (el && ro) ro.observe(el);
+    // Observe the absolute shell (fills dg-note); ignore canvas bitmap size.
+    const btn = canvasRef.current?.parentElement;
+    const shell = btn?.parentElement ?? btn;
+    const ro = shell && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
+    if (shell && ro) ro.observe(shell);
     requestAnimationFrame(onResize);
     return () => { window.removeEventListener('resize', onResize); ro?.disconnect(); };
   }, [paint, reduced]);

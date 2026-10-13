@@ -432,7 +432,7 @@ html[data-workspace=sales] .access-submit:hover{transform:none;box-shadow:none}
 /* ---------------------------------------------------------------------------
    Shared tokens for 项目推文 / 学生状态 / 资料分类 (ops violet by default, sales blue).
    --------------------------------------------------------------------------- */
-:root{--art-accent:#8050db;--art-accent-soft:#f1ebfb;--art-line:#ece6f3;--art-ink:#2b2236;--art-text:#4d4259;--art-muted:#8f80a0;--art-page:#f8f6fc}
+:root{--art-accent:var(--nx-accent);--art-accent-soft:var(--nx-accent-soft);--art-line:var(--nx-accent-border);--art-ink:#2b2236;--art-text:#4d4259;--art-muted:#8f80a0;--art-page:var(--nx-page)}
 html[data-workspace=sales]{--art-accent:#1f6fd9;--art-accent-soft:#eef4fd;--art-line:#e3e8ef;--art-ink:#1e2a36;--art-text:#3a4756;--art-muted:#6b7785;--art-page:#f5f7fa}
 
 /* ---------------------------------------------------------------------------
@@ -899,7 +899,7 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .dashboard-grid>.dg-quick .quick-grid button{justify-content:center;border:1px solid #efe9f7;border-radius:13px;background:#fbf9fe;min-height:84px;font-size:.75rem}
 .dashboard-grid>.dg-quick .quick-grid button:hover{background:#f4effb;border-color:#e3d7f3}
 .dashboard-grid>.dg-schedule{grid-area:schedule;min-width:0;height:100%;display:flex;flex-direction:column}.dashboard-grid>.dg-schedule .today-courses{flex:1}
-.dashboard-grid>.dg-note{grid-area:note;align-self:stretch!important;display:flex!important;flex-direction:column;min-height:0;min-width:0;height:100%}
+.dashboard-grid>.dg-note{grid-area:note;position:relative;align-self:stretch!important;display:block!important;min-height:0;min-width:0;height:auto}
 @media(max-width:900px){.dashboard-grid{grid-template-columns:1fr;grid-template-areas:"todo" "quick" "schedule"}.dashboard-grid>.dg-note{display:none}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(4,1fr);grid-auto-rows:auto}.dashboard-grid>.dg-quick .quick-grid button{min-height:76px}}
 @media(max-width:767px){.dashboard-grid{gap:18px;grid-template-areas:"quick" "todo" "schedule"}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(2,1fr)}}
 /* 期望DDL picker in the todo add row. */
@@ -914,7 +914,7 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 @media(max-width:600px){.todo-add-row{flex-wrap:wrap}.todo-add-row>input{flex-basis:100%}.todo-ddl{flex:1}.todo-ddl>input{width:100%}}
 
 /* ---------- B.E.S.T wordmark + bunny easter egg (components/nexus/brand.tsx) ---------- */
-.best-brand{--best-ink:#2a2140;--best-accent:#8756db;--best-ease:cubic-bezier(.2,.7,.2,1);position:relative;display:flex;align-items:center;gap:10px;color:var(--best-ink);text-decoration:none;cursor:default;border-radius:12px;outline:none;-webkit-tap-highlight-color:transparent}
+.best-brand{--best-ink:#2a2140;--best-accent:var(--nx-accent);--best-ease:cubic-bezier(.2,.7,.2,1);position:relative;display:flex;align-items:center;gap:10px;color:var(--best-ink);text-decoration:none;cursor:default;border-radius:12px;outline:none;-webkit-tap-highlight-color:transparent}
 html[data-workspace=sales] .best-brand{--best-accent:var(--nx-blue)}
 .best-brand:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--best-accent) 35%,transparent)}
 a.best-brand{cursor:pointer}
@@ -923,7 +923,7 @@ a.best-brand{cursor:pointer}
 .best-brand .best-wordmark span{display:inline-block;background:linear-gradient(160deg,var(--best-ink) 30%,color-mix(in srgb,var(--best-accent) 78%,var(--best-ink)));-webkit-background-clip:text;background-clip:text;color:transparent;transition:opacity .48s var(--best-ease),filter .48s var(--best-ease),transform .52s var(--best-ease);transition-delay:calc(var(--i)*28ms);will-change:transform,opacity,filter}
 .best-brand .best-wordmark .dot{background:none;color:var(--best-accent);margin:0 .015em}
 .best-brand small{display:block;font-size:.625rem;font-weight:500;letter-spacing:.34em;color:#8a829b;white-space:nowrap;transition:opacity .42s var(--best-ease) .1s,filter .42s var(--best-ease) .1s,transform .42s var(--best-ease) .1s}
-.best-brand .best-mono{display:none;place-items:center;width:40px;height:40px;flex:none;border-radius:12px;color:#fff;font-size:1.125rem;font-weight:800;letter-spacing:0;background:linear-gradient(145deg,#a47ff0,#7647d1);box-shadow:0 3px 9px #9c77dd33;transition:opacity .4s var(--best-ease),filter .4s var(--best-ease),transform .45s var(--best-ease)}
+.best-brand .best-mono{display:none;place-items:center;width:40px;height:40px;flex:none;border-radius:12px;color:#fff;font-size:1.125rem;font-weight:800;letter-spacing:0;background:linear-gradient(145deg,var(--nx-accent-hi),var(--nx-accent-2));box-shadow:0 3px 9px var(--nx-glow);transition:opacity .4s var(--best-ease),filter .4s var(--best-ease),transform .45s var(--best-ease)}
 html[data-workspace=sales] .best-brand .best-mono{background:var(--nx-blue);box-shadow:none}
 .nexus-sidebar[data-collapsible=icon] .best-brand .best-mono{display:grid}
 @media(min-width:768px) and (max-width:1100px){.nexus-sidebar .best-brand .best-mono{display:grid}}
@@ -1262,15 +1262,54 @@ html[data-workspace=public] body{background:#f4f2f7}
 .timetable-preview{border:1px solid #e6dff1;border-radius:12px;overflow:auto;max-height:min(62vh,720px);background:#fff;box-shadow:0 6px 24px #2b1b5714;line-height:0}
 @media(max-width:760px){.timetable-options{grid-template-columns:1fr 1fr}}
 
-/* ---------- Pixel chase (workbench easter egg) ---------- */
-.pixel-chase-shell{display:flex;flex:1 1 auto;align-self:stretch;width:100%;height:100%;min-height:100%}.pixel-chase-shell>.pixel-chase{flex:1 1 auto;width:100%;height:100%;min-height:100%}.pixel-chase{position:relative;display:flex;flex-direction:column;width:100%;flex:1 1 auto;align-self:stretch;height:100%;min-height:100%;border:0;padding:0;border-radius:14px;overflow:hidden;background:linear-gradient(120deg,#ebe4f9bb,#eee9f9a6);border:1px solid #ffffffb0;cursor:pointer;text-align:left}
-.pixel-chase-canvas{display:block;width:100%;flex:1 1 auto;min-height:0;height:100%;image-rendering:pixelated}
-.pixel-chase-hint,.pixel-chase-quip{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;font-size:.75rem;color:#9076aa;background:#ffffffcc;backdrop-filter:blur(6px);border-radius:10px;padding:8px 12px;pointer-events:none;box-shadow:0 4px 14px #5b3bb012}
-.pixel-chase-quip{color:#6b4f8c;font-weight:550}
+/* ---------- Pixel chase (workbench easter egg) ----------
+   CRITICAL: canvas must NOT participate in intrinsic height.
+   Earlier height:100%/min-height:100% + ResizeObserver setting canvas.height
+   created a feedback loop that grew document height forever (empty purple column).
+   Fix: dg-note is stretched by the grid row (今日课程 defines height); chase is
+   position:absolute inset:0 so it fills without contributing layout size. */
+.dashboard-grid>.dg-note{
+  grid-area:note;
+  position:relative;
+  align-self:stretch!important;
+  display:block!important;
+  min-width:0;
+  min-height:0;
+  height:auto; /* row height comes from 今日课程, not from chase content */
+  padding:0;
+}
+.pixel-chase-shell{
+  position:absolute;inset:0;
+  display:block;width:100%;height:100%;
+  min-height:0; /* never min-height:100% — that fed the canvas loop */
+}
+.pixel-chase-shell>.pixel-chase,
+.pixel-chase{
+  position:absolute;inset:0;
+  display:block;width:100%;height:100%;
+  min-height:0;border:0;padding:0;margin:0;
+  border-radius:14px;overflow:hidden;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--nx-accent-soft) 75%,transparent),var(--nx-accent-softer));
+  border:1px solid #ffffffb0;cursor:pointer;text-align:left;
+}
+.pixel-chase-canvas{
+  position:absolute;inset:0;
+  display:block;width:100%;height:100%;
+  min-height:0; /* absolute — zero intrinsic contribution */
+  image-rendering:pixelated;image-rendering:crisp-edges;
+}
+.pixel-chase-hint,.pixel-chase-quip{
+  position:absolute;left:12px;right:12px;bottom:12px;z-index:2;
+  font-size:.75rem;color:var(--nx-accent-ink);background:#ffffffcc;
+  backdrop-filter:blur(6px);border-radius:10px;padding:8px 12px;
+  pointer-events:none;box-shadow:0 4px 14px color-mix(in srgb,var(--nx-accent) 8%,transparent);
+}
+.pixel-chase-quip{color:var(--nx-accent-ink);font-weight:550}
 @media(prefers-reduced-motion:reduce){.pixel-chase-canvas{/* static frame painted by JS */}}
-.dashboard-grid>.dg-note{min-height:0;height:100%;align-self:stretch !important;display:flex !important}
-.dashboard-grid>.dg-note .pixel-chase{height:100%;min-height:100%;flex:1}
-@media(max-width:900px){.dashboard-grid{grid-template-areas:"todo" "quick" "schedule" "note"}.dashboard-grid>.dg-note{display:flex !important;min-height:280px}}
+@media(max-width:900px){
+  .dashboard-grid{grid-template-areas:"todo" "quick" "schedule" "note"}
+  .dashboard-grid>.dg-note{display:block!important;min-height:280px;position:relative}
+}
 
 /* Compact equal-height lesson feedback cards */
 .avatar.has-img{padding:0;overflow:hidden;background:#ddd}
@@ -1550,5 +1589,93 @@ html[data-workspace=public] body{background:#f4f2f7}
 .text-button{color:var(--nx-accent-ink)}
 .badge.violet{color:var(--nx-accent-ink);border-color:var(--nx-accent-border);background:var(--nx-accent-softer)}
 
-/* Pixel chase canvas: crisp fine pixels (not blurry upscale) */
-.pixel-chase-canvas{image-rendering:pixelated;image-rendering:crisp-edges}
+
+/* ── Theme surfaces: wire remaining hardcoded purple accents through --nx-* ──
+   Buttons/hovers already used tokens; sidebar active + violet badges were partial.
+   These overrides keep specificity ≥ the early minified rules so the whole UI
+   (sidebar, calendar chip, avatars, pager, charts, page glow, wordmark) follows
+   the selected theme (冰蓝 / 玫瑰 / …). */
+body{
+  background:
+    radial-gradient(ellipse at 90% 2%,color-mix(in srgb,var(--nx-grad-a) 55%,transparent),transparent 43%),
+    radial-gradient(ellipse at 6% 96%,color-mix(in srgb,var(--nx-accent-soft) 55%,transparent),transparent 40%),
+    var(--nx-page);
+}
+button:focus-visible,a:focus-visible{outline-color:color-mix(in srgb,var(--nx-accent-muted) 70%,white)}
+.brand-icon{
+  background:linear-gradient(145deg,var(--nx-accent-hi),var(--nx-accent-2));
+  box-shadow:0 3px 9px var(--nx-glow);
+}
+.workspace-avatar{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.nexus-sidebar .nav-button[data-active=true]{
+  background:linear-gradient(100deg,var(--nx-accent-soft),var(--nx-accent-softer));
+  color:var(--nx-accent-ink);
+  box-shadow:inset 0 0 0 1px var(--nx-accent-border);
+  font-weight:600;
+}
+.nav-button em{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.help-card{color:var(--nx-accent-ink);background:color-mix(in srgb,var(--nx-accent-soft) 60%,transparent)}
+.avatar{
+  background:linear-gradient(135deg,var(--nx-accent-soft),color-mix(in srgb,var(--nx-accent-muted) 35%,var(--nx-accent-soft)));
+  color:var(--nx-accent-ink);
+}
+.icon-button:hover{background:var(--nx-accent-softer)}
+.icon-button i{background:var(--nx-accent)}
+.hello-spark{color:var(--nx-accent-muted)}
+.stat-icon.violet{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.meter>[data-slot=progress-indicator]{background:linear-gradient(90deg,var(--nx-accent-muted),var(--nx-accent))}
+.quick-grid button>span{
+  border-color:var(--nx-accent-border);
+  color:var(--nx-accent);
+  background:linear-gradient(135deg,var(--nx-accent-softer),var(--nx-accent-soft));
+}
+.mini-date{background:var(--nx-accent-softer);border-color:var(--nx-accent-border)}
+.mini-date .selected{
+  color:#fff;
+  background:linear-gradient(145deg,var(--nx-accent-hi),var(--nx-accent-2));
+  box-shadow:0 2px 5px var(--nx-glow);
+}
+.mini-date .selected small{color:#fff}
+.today-course{border-left-color:var(--nx-accent-muted)}
+.dashboard-grid>.dg-quick .quick-grid button{
+  border-color:var(--nx-accent-border);
+  background:var(--nx-accent-softer);
+}
+.dashboard-grid>.dg-quick .quick-grid button:hover{
+  background:var(--nx-accent-soft);
+  border-color:var(--nx-accent-border);
+}
+.premium-pager-page.active{
+  background:linear-gradient(135deg,var(--nx-accent-hi),var(--nx-accent-2));
+  color:#fff;border-color:transparent;
+  box-shadow:0 6px 16px var(--nx-glow);
+}
+.filter-chips .selected{color:var(--nx-accent-ink);background:var(--nx-accent-soft);border-color:var(--nx-accent-border)}
+.detail-tabs [data-slot=tabs-trigger][data-state=active]{border-color:var(--nx-accent);color:var(--nx-accent-ink)}
+.bottom-nav .active{color:var(--nx-accent-ink);background:var(--nx-accent-soft)}
+.breadcrumb:before{background:var(--nx-accent)}
+.kpi-summary-cat i{background:linear-gradient(90deg,var(--nx-accent-muted),var(--nx-accent))}
+.search-box:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--nx-accent) 22%,transparent);border-color:var(--nx-accent-muted)}
+.form-field input:focus,.form-field textarea:focus{border-color:var(--nx-accent-muted);box-shadow:0 0 0 3px color-mix(in srgb,var(--nx-accent) 18%,transparent)}
+.todo-ddl:focus-within{border-color:var(--nx-accent-muted);box-shadow:0 0 0 3px color-mix(in srgb,var(--nx-accent) 18%,transparent)}
+.settings-row-icon{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.time-range .duration{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.row-progress b{color:var(--nx-accent-ink)}
+.card-link{color:var(--nx-accent-ink)}
+.full-link{color:var(--nx-accent-ink)}
+.mobile-date-strip .selected{background:var(--nx-accent)}
+.desktop-calendar .selected{background:var(--nx-accent-softer)}
+.desktop-calendar button>span{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.stage-track .complete{background:linear-gradient(90deg,var(--nx-accent-muted),var(--nx-accent))}
+.timeline .current{background:var(--nx-accent)}
+.timeline li>span{border-color:var(--nx-accent-border)}
+.pdf-frame{background:var(--nx-accent-soft);border-color:var(--nx-accent-border)}
+.log-row>span{background:var(--nx-accent-muted)}
+.person-tabs button em{background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.teacher-summary>button:hover{border-color:var(--nx-accent-border);background:var(--nx-accent-softer)}
+.access-page{
+  --access:var(--nx-accent);
+  --access-deep:var(--nx-accent-ink);
+  --access-soft:var(--nx-accent-soft);
+  --access-faint:var(--nx-accent-softer);
+}
