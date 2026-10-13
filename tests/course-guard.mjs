@@ -17,6 +17,11 @@ assert.equal(S.courseCodeIssue('COND02501-11A',courses),null);
 assert.match(S.courseCodeIssue('ws2026017-1-1',courses),/已被其他课程使用/);
 assert.equal(S.courseCodeIssue('WS2026017-1-1',courses,'A'),null,'own code is fine');
 assert.equal(S.normalizeCourseCode(' ws2026017-1-2 '),'WS2026017-1-2');
+// Known library codes (ops_courses).
+const known=[{code:'WS2026017-1-1'},{code:'COND02501-11A'}];
+assert.equal(S.knownCourseCodeIssue('',known),null);
+assert.equal(S.knownCourseCodeIssue('ws2026017-1-1',known),null);
+assert.match(S.knownCourseCodeIssue('WS9999999-9-9',known),/编号不存在/);
 // Conflicts.
 const slot=(date,start,end)=>({date,start,end});
 const t=S.scheduleConflicts([slot('2026-10-20','15:00','16:00')],{teacher:'王钰'},courses,sessions);

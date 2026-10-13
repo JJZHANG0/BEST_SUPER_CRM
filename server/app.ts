@@ -23,7 +23,7 @@ import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
-import { courseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
+import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
 export type SessionUser = { id: number; email: string; username: string | null; name: string; role: Role; salesName: string | null; mustChangePassword: boolean; leader: boolean; avatar: string | null; theme: string };
@@ -460,6 +460,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const current = courses.find(x => x.id === id);
       const code = typeof data.code === 'string' ? data.code : '';
       if (code && normalizeCourseCode(code) !== normalizeCourseCode(current?.code)) {
+        const opsCodes = await db.select({ code: schema.opsCourses.code }).from(schema.opsCourses);
+        const known = knownCourseCodeIssue(code, opsCodes);
+        if (known) return { status: 400, body: { error: 'invalid', message: known } };
         const issue = courseCodeIssue(code, courses, id);
         if (issue) return { status: issue.includes('已被') ? 409 : 400, body: { error: issue.includes('已被') ? 'conflict' : 'invalid', message: issue } };
         data.code = normalizeCourseCode(code);

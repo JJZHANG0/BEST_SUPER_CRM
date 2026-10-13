@@ -1220,6 +1220,13 @@ html[data-workspace=public] body{background:#f4f2f7}
 .lesson-fb.off{padding-bottom:6px;background:#fff}
 .lesson-fb legend{padding:0 6px;font-size:.8125rem;color:#5d4f73}
 .lesson-fb legend .checkbox-label span{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+/* Locked course chip (课时记录 / 学情反馈 edit — no re-select) */
+.course-locked{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid #e7def4;border-radius:12px;background:linear-gradient(180deg,#fbf9fe,#f4eefb)}
+.course-locked strong{font-size:.875rem;color:#4a3d63;font-weight:600;overflow-wrap:anywhere}
+.course-locked small{font-size:.6875rem;color:#8a7a9e}
+.form-field textarea.fb-tall,.ops-dialog .form-field textarea.fb-tall{min-height:140px;rows:auto}
+.form-field textarea.fb-tall{line-height:1.75}
+
 @media(max-width:640px){.form-columns.three{grid-template-columns:1fr}}
 
 /* 新建课程 · 排课 */

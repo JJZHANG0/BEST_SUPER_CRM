@@ -12,15 +12,16 @@ export type ScheduleValue = { mode: ScheduleMode; slots: ManualSlot[]; issue: st
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 const wd = (d: string) => weekdayLabels[isoWeekday(d) - 1];
 
-export function ScheduleFields({ onChange, initialDate }: { onChange: (v: ScheduleValue) => void; initialDate?: string }) {
-  const start0 = initialDate || todayIso();
-  const [mode, setMode] = useState<ScheduleMode>('once');
+export function ScheduleFields({ onChange, initialDate, initialSlots }: { onChange: (v: ScheduleValue) => void; initialDate?: string; /** Prefill as 逐次添加 (edit course). */ initialSlots?: ManualSlot[] }) {
+  const start0 = initialSlots?.[0]?.date || initialDate || todayIso();
+  const editing = !!(initialSlots && initialSlots.length);
+  const [mode, setMode] = useState<ScheduleMode>(editing ? 'manual' : 'once');
   const [date, setDate] = useState(start0);
-  const [start, setStart] = useState('14:00'), [end, setEnd] = useState('15:30');
+  const [start, setStart] = useState(initialSlots?.[0]?.start || '14:00'), [end, setEnd] = useState(initialSlots?.[0]?.end || '15:30');
   const [weekdays, setWeekdays] = useState<number[]>([isoWeekday(start0)]);
   const [endBy, setEndBy] = useState<'count' | 'until'>('count');
   const [count, setCount] = useState('8'), [until, setUntil] = useState(addDays(start0, 56));
-  const [rows, setRows] = useState<ManualSlot[]>([{ date: start0, start: '14:00', end: '15:30' }, { date: addDays(start0, 7), start: '14:00', end: '15:30' }]);
+  const [rows, setRows] = useState<ManualSlot[]>(editing ? initialSlots!.map(x => ({ date: x.date, start: x.start, end: x.end })) : [{ date: start0, start: '14:00', end: '15:30' }, { date: addDays(start0, 7), start: '14:00', end: '15:30' }]);
 
   const value = useMemo<ScheduleValue>(() => {
     if (mode === 'once') { const t = timeRangeIssue(start, end); return { mode, slots: date && !t ? [{ date, start, end }] : [], issue: !date ? '请选择上课日期' : t }; }

@@ -125,8 +125,10 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     <DialogTitle>{record ? '编辑课时记录' : '记录课时'}</DialogTitle>
     <DialogDescription>津贴按课程的班级类型自动计算，记录时锁定当时的津贴标准；下方的学情反馈会自动生成关联的课情反馈。</DialogDescription>
     {!options.length ? <NoCourses /> : <form className="form-stack" onSubmit={submit}>
-      {/* div, not <label>: a label would re-click the input when an option is picked. */}
-      <div className="form-field"><span>课程</span><CourseCombobox courses={options} value={courseId} projectLabel={projectLabel} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} /></div>
+      {/* Editing an existing 课时记录 (incl. 「已有学情反馈」) keeps the row's course locked — no re-select. */}
+      <div className="form-field"><span>课程</span>{record && course
+        ? <div className="course-locked" aria-label="已绑定课程"><strong>{courseLabel(course)}</strong><small>{projectLabel(course.project)}{course.teacher ? ' · ' + course.teacher : ''}</small></div>
+        : <CourseCombobox courses={options} value={courseId} projectLabel={projectLabel} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} />}</div>
       <div className="form-columns four">
         <FormField label="上课日期"><input type="date" required value={date} onChange={e => setDate(e.target.value)} /></FormField>
         <FormField label="课时（小时）"><input type="number" required min="0.25" max="24" step="0.25" value={hours} onChange={e => setHours(e.target.value)} /></FormField>
@@ -147,8 +149,8 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
         <legend><label className="checkbox-label"><Checkbox checked={withFb} onCheckedChange={v => setWithFb(v === true)} /><span><MessageSquareText size={15} />同时记录学情反馈{linked ? '（已关联，保存时一并更新）' : '（自动生成课情反馈）'}</span></label></legend>
         {withFb && <>
           <FormField label={attTouched ? '到课情况' : '到课情况（按实到/应到自动填写，可修改）'}><input maxLength={200} value={attendance} onChange={e => { const v = e.target.value; setAttTouched(v !== ''); setFb(x => ({ ...x, attendance: v })); }} placeholder="填写实到人数后自动生成，例如：5/6 到课；李同学请假" /></FormField>
-          <FormField label="本次课程内容"><textarea rows={2} maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" /></FormField>
-          <FormField label="学生表现"><textarea rows={2} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" /></FormField>
+          <FormField label="本次课程内容"><textarea rows={6} maxLength={4000} value={fb.content} onChange={setF('content')} placeholder="本节课讲了什么、完成了哪些任务" className="fb-tall" /></FormField>
+          <FormField label="学生表现"><textarea rows={5} maxLength={4000} value={fb.performance} onChange={setF('performance')} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
           <div className="form-columns">
             <FormField label="问题与风险"><textarea rows={2} maxLength={4000} value={fb.issues} onChange={setF('issues')} placeholder="需要协调或关注的问题" /></FormField>
             <FormField label="下一步安排"><textarea rows={2} maxLength={2000} value={fb.nextSteps} onChange={setF('nextSteps')} placeholder="下次课前要完成的事项" /></FormField>
@@ -275,15 +277,17 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
     <DialogDescription>记录每节课的到课、内容、表现与下一步，可关联到对应的课时记录。</DialogDescription>
     {!options.length ? <NoCourses /> : <form className="form-stack" onSubmit={submit}>
       <div className="form-columns">
-        <FormField label="课程"><Picker label="课程" value={courseId} onChange={v => { setCourseId(v); setLesson(''); }} options={options.map(c => ({ value: c.id, label: courseLabel(c) }))} /></FormField>
+        <div className="form-field"><span>课程</span>{(record || fromLesson) && options.find(c => c.id === courseId)
+          ? <div className="course-locked" aria-label="已绑定课程"><strong>{courseLabel(options.find(c => c.id === courseId)!)}</strong><small>已关联课时记录，课程不可更改</small></div>
+          : <Picker label="课程" value={courseId} onChange={v => { setCourseId(v); setLesson(''); }} options={options.map(c => ({ value: c.id, label: courseLabel(c) }))} />}</div>
         <FormField label="上课日期"><input type="date" required value={date} onChange={e => setDate(e.target.value)} /></FormField>
       </div>
       <div className="form-columns">
         <FormField label="关联课时记录（可选）"><Picker label="关联课时记录" value={lesson} onChange={v => { setLesson(v); const l = s.lessons.find(x => x.id === v); if (l) setDate(l.date); }} options={[{ value: '', label: '不关联' }, ...lessonOptions.map(l => ({ value: l.id, label: `${l.date} · ${l.hours} 小时` }))]} /></FormField>
         <FormField label="到课情况"><input maxLength={200} value={attendance} onChange={e => setAttendance(e.target.value)} placeholder="例如：6/6 全勤；李同学请假" /></FormField>
       </div>
-      <FormField label="本次课程内容"><textarea required rows={3} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} placeholder="本节课讲了什么、完成了哪些任务" /></FormField>
-      <FormField label="学生表现"><textarea rows={3} maxLength={4000} value={performance} onChange={e => setPerformance(e.target.value)} placeholder="课堂参与、作业完成、个别同学情况" /></FormField>
+      <FormField label="本次课程内容"><textarea required rows={6} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} placeholder="本节课讲了什么、完成了哪些任务" className="fb-tall" /></FormField>
+      <FormField label="学生表现"><textarea rows={5} maxLength={4000} value={performance} onChange={e => setPerformance(e.target.value)} placeholder="课堂参与、作业完成、个别同学情况" className="fb-tall" /></FormField>
       <div className="form-columns">
         <FormField label="问题与风险"><textarea rows={3} maxLength={4000} value={issues} onChange={e => setIssues(e.target.value)} placeholder="需要协调或关注的问题" /></FormField>
         <FormField label="下一步安排"><textarea rows={3} maxLength={2000} value={nextSteps} onChange={e => setNextSteps(e.target.value)} placeholder="下次课前要完成的事项" /></FormField>

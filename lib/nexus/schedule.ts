@@ -178,6 +178,16 @@ export function courseCodeIssue(code: string, courses: readonly { id: string; co
   if (dup) return `课程编号 ${c} 已被其他课程使用`;
   return null;
 }
+/**
+ * Course code must match an existing 课时记录课程编号 in the library (ops_courses). Empty is still optional.
+ * Prefer this over inventing a new code at create/edit time.
+ */
+export function knownCourseCodeIssue(code: string, known: readonly { code?: string | null }[]): string | null {
+  const c = normalizeCourseCode(code);
+  if (!c) return null;
+  if (!known.some(x => normalizeCourseCode(x.code) === c)) return `课程编号「${String(code).trim()}」匹配不上 / 编号不存在，无法创建`;
+  return null;
+}
 export type ConflictReason = 'teacher' | 'team' | 'room';
 export const conflictReasonLabel: Record<ConflictReason, string> = { teacher: '同一老师', team: '同一队伍', room: '同一教室' };
 export type ScheduleConflict = { key: string; courseId: string; courseName: string; code: string; teacher: string; date: string; start: string; end: string; location: string; reasons: ConflictReason[] };
