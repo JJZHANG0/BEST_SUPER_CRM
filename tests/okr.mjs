@@ -46,7 +46,7 @@ const many=Array.from({length:400},(_, i)=>({id:'T'+i,title:'事项'+'很长'.re
 const tl=O.todoLines(many);
 assert(tl.lines.length<=O.OKR_MAX_INPUT_CHARS);assert(tl.used<=O.OKR_MAX_TODOS);assert.equal(tl.truncated,true);
 const msgs=O.buildOkrMessages({month:'2026-10',name:'徐瑾',todos:[{id:'T1',title:'排课',note:'周末',completedAt:'2026-10-02T00:00:00Z'}]});
-assert.equal(msgs.length,2);assert.match(msgs[0].content,/JSON/);assert.match(msgs[1].content,/\[T1\] 排课（备注：周末）/);
+assert.equal(msgs.length,2);assert.match(msgs[0].content,/JSON/);assert.match(msgs[0].content,/必须恰好 6 个 KR/);assert.match(msgs[0].content,/必须恰好 4 个 KR/);assert.match(msgs[1].content,/\[T1\] 排课（备注：周末）/);assert.match(msgs[1].content,/完整 OKR/);
 
 // Rate limiter.
 const rl=O.rateLimiter(20000);

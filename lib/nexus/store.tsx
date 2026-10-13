@@ -17,6 +17,7 @@ import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbac
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
 import type { CourseSession } from './schedule';
+import type { Announcement, AnnouncementAudience, AnnouncementDirectoryUser, AnnouncementReadRow } from './announcements';
 export type FileRecord=seed.Resource & {url?:string};
 export type LoginResult={ok:true;role:Role}|{ok:false;error:string};
 type St<T>=Dispatch<SetStateAction<T>>;
@@ -57,7 +58,18 @@ export type Store={authenticated:boolean;setAuthenticated:St<boolean>;enrollment
   lessonFeedbacks:LessonFeedback[];setLessonFeedbacks:St<LessonFeedback[]>;
   /** 课程排课: meetings of 课程安排 courses (weekly recurrence or manual dates). */
   courseSessions:CourseSession[];setCourseSessions:St<CourseSession[]>;
+  /** 资料中心 folders (per programme). */
+  resourceFolders:seed.ResourceFolder[];setResourceFolders:St<seed.ResourceFolder[]>;
+  /** 项目公告 visible to the signed-in user (API) / local demo list. */
+  announcements:Announcement[];
+  unreadAnnouncements:number;
+  createAnnouncement:(input:{title:string;body:string;tag?:string;program?:string|null;audience:AnnouncementAudience;recipientIds?:number[]})=>Promise<{ok:true;announcement:Announcement}|{ok:false;error:string}>;
+  markAnnouncementRead:(id:string)=>Promise<boolean>;
+  markAllAnnouncementsRead:()=>Promise<boolean>;
+  loadAnnouncementReads:(id:string)=>Promise<{rows:AnnouncementReadRow[];error?:string}>;
+  loadAnnouncementDirectory:()=>Promise<AnnouncementDirectoryUser[]>;
   /** Role + 部门负责人 flag, for the permission helpers in roles.ts. */
+
   viewer:Viewer;
   /** True for the 部门负责人 (only 张捷嘉). */
   leader:boolean;
@@ -92,7 +104,7 @@ const Context=createContext<Store>(null!);
  * API mode: data is loaded from /api/bootstrap after login and every record the UI changes is
  * written back with PUT /api/<collection>/<id>; the server is the source of truth.
  */
-export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v3',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',teamLogs:'nexus.demo.team-logs.v1',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1'} as const;
+export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v3',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',teamLogs:'nexus.demo.team-logs.v1',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1',announcements:'nexus.demo.announcements.v1',resourceFolders:'nexus.demo.resource-folders.v1'} as const;
 /** v2 → v3 of 项目/课程/课时/课情反馈 loads the real data imported from the 运营部 spreadsheet (lib/nexus/real-seed.ts). */
 export const LEGACY_KEYS=['nexus.demo.users.v2','nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2','nexus.demo.students.v2','nexus.demo.teams.v2','nexus.demo.enrollments.v2'];
 const PW_LATER_KEY='nexus.password-later.v1';
@@ -102,7 +114,7 @@ function write(key:string,value:unknown){try{localStorage.setItem(key,JSON.strin
 // users.v2 → v3: carry this browser's account overrides over, minus stale roles of demoted accounts (张雪航 → ops).
 if(typeof window!=='undefined'&&!API_ENABLED){try{const old=localStorage.getItem('nexus.demo.users.v2');if(old&&!localStorage.getItem(STORAGE_KEYS.users))localStorage.setItem(STORAGE_KEYS.users,JSON.stringify(migrateOverrides(JSON.parse(old))))}catch{/* storage unavailable */}}
 if(typeof window!=='undefined'&&!API_ENABLED){try{LEGACY_KEYS.forEach(k=>localStorage.removeItem(k))}catch{/* storage unavailable */}}
-type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];teamLogs?:seed.TeamLog[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[];courseSessions?:CourseSession[]};
+type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];teamLogs?:seed.TeamLog[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];resourceFolders?:seed.ResourceFolder[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[];courseSessions?:CourseSession[];announcements?:Announcement[]};
 /** Browser-only fields that never go to the API. */
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
@@ -136,6 +148,8 @@ export function Provider({children}:{children:ReactNode}){
  const [lessons,setLessons]=useState<LessonRecord[]>(()=>API_ENABLED?[]:readList<LessonRecord>(STORAGE_KEYS.lessons,realLessons as LessonRecord[]).map(normalizeLesson));
  const [lessonFeedbacks,setLessonFeedbacks]=useState<LessonFeedback[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.lessonFeedbacks,realLessonFeedbacks));
  const [courseSessions,setCourseSessions]=useState<CourseSession[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.courseSessions,[]));
+ const [resourceFolders,setResourceFolders]=useState<seed.ResourceFolder[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.resourceFolders,[]));
+ const [announcements,setAnnouncements]=useState<Announcement[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.announcements,[]));
  const [passwordDeferred,setPasswordDeferred]=useState(false);
  const [overrides,setOverrides]=useState<Overrides>(()=>{const v=read(STORAGE_KEYS.users);return v&&typeof v==='object'&&!Array.isArray(v)?v as Overrides:{}});
  const [apiStaff,setApiStaff]=useState<StaffMember[]>([]);
@@ -145,12 +159,12 @@ export function Provider({children}:{children:ReactNode}){
  /** Last server-confirmed JSON per collection and record id (API mode only). */
  const synced=useRef<Partial<Record<Collection,Map<string,string>>>>({});
  const inflight=useRef(new Map<string,string>());
- const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,teamLogs:setTeamLogs,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,posts:setPosts,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks,courseSessions:setCourseSessions} as never).current;
+ const setters=useRef<Record<Collection,(list:never[])=>void>>({programs:setPrograms,teams:setTeams,teamLogs:setTeamLogs,students:setStudents,enrollments:setEnrollments,courses:setCourses,feedbacks:setFeedbacks,resources:setFiles,assignments:setAssignments,articles:setArticles,posts:setPosts,classTypes:setClassTypes,projects:setProjects,teachers:setTeachers,opsCourses:setOpsCourses,lessons:setLessons,lessonFeedbacks:setLessonFeedbacks,courseSessions:setCourseSessions,resourceFolders:setResourceFolders} as never).current;
  const applyServer=useCallback((data:Bootstrap)=>{
-  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,teamLogs:data.teamLogs??[],students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,posts:data.posts??[],classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:(data.lessons??[]).map(normalizeLesson),lessonFeedbacks:data.lessonFeedbacks??[],courseSessions:data.courseSessions??[]};
+  const sets:Record<Collection,unknown[]>={programs:data.programs,teams:data.teams,teamLogs:data.teamLogs??[],students:data.students,enrollments:data.enrollments,courses:data.courses,feedbacks:data.feedbacks,resources:data.resources,assignments:data.assignments,articles:data.articles,posts:data.posts??[],classTypes:data.classTypes??[],projects:data.projects??[],teachers:data.teachers??[],opsCourses:data.opsCourses??[],lessons:(data.lessons??[]).map(normalizeLesson),lessonFeedbacks:data.lessonFeedbacks??[],courseSessions:data.courseSessions??[],resourceFolders:data.resourceFolders??[]};
   for(const [name,list] of Object.entries(sets) as [Collection,{id?:string;program?:string}[]][]){synced.current[name]=new Map(list.map(x=>[idOf(x),stableJson(x,OMIT[name])]));}
   setPrograms(data.programs);setTeams(data.teams);setTeamLogs(data.teamLogs??[]);setStudents(data.students);setEnrollments(data.enrollments);setCourses(data.courses);setFeedbacks(data.feedbacks);setAssignments(data.assignments);setArticles(data.articles);setPosts(data.posts??[]);
-  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons((data.lessons??[]).map(normalizeLesson));setLessonFeedbacks(data.lessonFeedbacks??[]);setCourseSessions(data.courseSessions??[]);setApiStaff(data.staff??[]);
+  setClassTypes(data.classTypes??[]);setProjects(data.projects??[]);setTeachers(data.teachers??[]);setOpsCourses(data.opsCourses??[]);setLessons((data.lessons??[]).map(normalizeLesson));setLessonFeedbacks(data.lessonFeedbacks??[]);setCourseSessions(data.courseSessions??[]);setResourceFolders(data.resourceFolders??[]);setAnnouncements(data.announcements??[]);setApiStaff(data.staff??[]);
   // Keep blob URLs of files uploaded in this tab.
   setFiles(prev=>data.resources.map(r=>({...r,url:prev.find(p=>p.id===r.id)?.url})));
   setUser(data.user);setRole(data.user.role);applyTheme(isThemeId(data.user.theme)?data.user.theme:(readStoredTheme()||DEFAULT_THEME));
@@ -174,13 +188,13 @@ export function Provider({children}:{children:ReactNode}){
    }).catch(e=>{setPersisted(false);toast.error(e instanceof ApiError&&e.status===403?'没有权限执行此操作，修改未保存':e instanceof ApiError&&(e.status===400||e.status===409)&&e.message&&e.message!==e.code?e.message:'保存到服务器失败，请稍后重试');if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}).finally(()=>{if(inflight.current.get(key)===body)inflight.current.delete(key);if(!inflight.current.size)setTimeout(()=>{if(!inflight.current.size)void refresh()},50)});
   }
  },[refresh,setters]);
- const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['teamLogs',teamLogs],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['posts',posts],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks],['courseSessions',courseSessions]];
+ const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['teamLogs',teamLogs],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['posts',posts],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks],['courseSessions',courseSessions],['resourceFolders',resourceFolders]];
  for(const [name,list] of collections){
   // eslint-disable-next-line react-hooks/rules-of-hooks -- fixed-length list, same order every render
   useEffect(()=>{if(authenticated)push(name,list)},[list,authenticated,push,name]);
  }
  // Demo mode: every collection except uploaded files is kept in localStorage.
- const demoPersist:[string,unknown][]=[[STORAGE_KEYS.programs,programs],[STORAGE_KEYS.teams,teams],[STORAGE_KEYS.teamLogs,teamLogs],[STORAGE_KEYS.students,students],[STORAGE_KEYS.enrollments,enrollments],[STORAGE_KEYS.courses,courses],[STORAGE_KEYS.feedbacks,feedbacks],[STORAGE_KEYS.assignments,assignments],[STORAGE_KEYS.classTypes,classTypes],[STORAGE_KEYS.projects,projects],[STORAGE_KEYS.teachers,teachers],[STORAGE_KEYS.opsCourses,opsCourses],[STORAGE_KEYS.lessons,lessons],[STORAGE_KEYS.lessonFeedbacks,lessonFeedbacks],[STORAGE_KEYS.courseSessions,courseSessions],[STORAGE_KEYS.users,overrides]];
+ const demoPersist:[string,unknown][]=[[STORAGE_KEYS.programs,programs],[STORAGE_KEYS.teams,teams],[STORAGE_KEYS.teamLogs,teamLogs],[STORAGE_KEYS.students,students],[STORAGE_KEYS.enrollments,enrollments],[STORAGE_KEYS.courses,courses],[STORAGE_KEYS.feedbacks,feedbacks],[STORAGE_KEYS.assignments,assignments],[STORAGE_KEYS.classTypes,classTypes],[STORAGE_KEYS.projects,projects],[STORAGE_KEYS.teachers,teachers],[STORAGE_KEYS.opsCourses,opsCourses],[STORAGE_KEYS.lessons,lessons],[STORAGE_KEYS.lessonFeedbacks,lessonFeedbacks],[STORAGE_KEYS.courseSessions,courseSessions],[STORAGE_KEYS.resourceFolders,resourceFolders],[STORAGE_KEYS.announcements,announcements],[STORAGE_KEYS.users,overrides]];
  const first=useRef(true);
  for(const [key,value] of demoPersist){
   // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/set-state-in-effect -- fixed-length list, same order every render; flags a localStorage quota failure
@@ -300,11 +314,66 @@ export function Provider({children}:{children:ReactNode}){
    return {ok:true,sheet:r.sheet};
   },
  };
- const removeRecord=async(name:OpsCollection,id:string)=>{
+ const unreadAnnouncements = announcements.filter(a => !a.read).length;
+ const createAnnouncement = async (input: { title: string; body: string; tag?: string; program?: string | null; audience: AnnouncementAudience; recipientIds?: number[] }) => {
+  if (API_ENABLED) {
+    try {
+      const { announcement } = await api.createAnnouncement(input);
+      setAnnouncements(l => [announcement, ...l]);
+      setPersisted(true);
+      return { ok: true as const, announcement };
+    } catch (e) { return { ok: false as const, error: apiError(e, '发布公告失败') }; }
+  }
+  const now = new Date();
+  const stamp = (() => { const pad = (n: number) => String(n).padStart(2, '0'); return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`; })();
+  const a: Announcement = {
+    id: 'ANN-' + Date.now().toString(36).toUpperCase(), title: input.title.trim(), body: input.body.trim(), tag: input.tag?.trim() || '公告',
+    program: input.program || null, audience: input.audience, recipientIds: input.recipientIds || [],
+    authorId: user?.id || 0, authorName: user?.name || '我', date: stamp, createdAt: now.toISOString(),
+    read: true, readCount: 1, recipientCount: (input.recipientIds || []).length || 1,
+  };
+  setAnnouncements(l => { const next = [a, ...l]; write(STORAGE_KEYS.announcements, next); return next; });
+  return { ok: true as const, announcement: a };
+ };
+ const markAnnouncementRead = async (id: string) => {
+  if (API_ENABLED) {
+    try { await api.markAnnouncementRead(id); setAnnouncements(l => l.map(a => a.id === id ? { ...a, read: true } : a)); return true; }
+    catch { toast.error('标记已读失败'); return false; }
+  }
+  setAnnouncements(l => { const next = l.map(a => a.id === id ? { ...a, read: true } : a); write(STORAGE_KEYS.announcements, next); return next; });
+  return true;
+ };
+ const markAllAnnouncementsRead = async () => {
+  if (API_ENABLED) {
+    try { await api.markAllAnnouncementsRead(); setAnnouncements(l => l.map(a => ({ ...a, read: true }))); return true; }
+    catch { toast.error('标记已读失败'); return false; }
+  }
+  setAnnouncements(l => { const next = l.map(a => ({ ...a, read: true })); write(STORAGE_KEYS.announcements, next); return next; });
+  return true;
+ };
+ const loadAnnouncementReads = async (id: string) => {
+  if (API_ENABLED) {
+    try { return { rows: (await api.announcementReads(id)).rows }; }
+    catch (e) { return { rows: [], error: apiError(e, '无法加载已读名单') }; }
+  }
+  const a = announcements.find(x => x.id === id);
+  if (!a) return { rows: [], error: '公告不存在' };
+  return { rows: [{ userId: a.authorId, name: a.authorName, email: user?.email || '', role: role, read: true, readAt: a.createdAt }] };
+ };
+ const loadAnnouncementDirectory = async () => {
+  if (API_ENABLED) {
+    try { return (await api.announcementDirectory()).users; }
+    catch { toast.error('无法加载留言对象'); return []; }
+  }
+  return directory(overrides).filter(u => u.active).map((u, i) => ({ id: -(i + 1), name: u.name, email: u.email, role: u.role }));
+ };
+
+  const removeRecord=async(name:OpsCollection,id:string)=>{
   const drop=()=>{
     (setters[name] as unknown as Dispatch<SetStateAction<{id:string}[]>>)(l=>l.filter(x=>x.id!==id));
     // Deleting a 课程安排 course also drops its 排课 sessions locally (API cascades too).
     if(name==='courses')setCourseSessions(l=>l.filter(x=>x.course!==id));
+    if(name==='resourceFolders')setFiles(l=>l.map(f=>f.folder===id?{...f,folder:undefined}:f));
   };
   if(!API_ENABLED){drop();return true}
   try{await api.remove(name,id);synced.current[name]?.delete(id);drop();setPersisted(true);return true}
@@ -360,7 +429,7 @@ export function Provider({children}:{children:ReactNode}){
   const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),theme:id}};setOverrides(next);setUser(u=>u?{...u,theme:id}:u);write(STORAGE_KEYS.users,next);return null;
  };
 const switchPortal=async(p:'ops'|'teacher'):Promise<string|null>=>{try{const res=await api.switchPortal(p);token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());go('dashboard');return null}catch(e){return e instanceof ApiError&&e.message?e.message:'切换失败，请稍后重试'}};
-return <Context.Provider value={{switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+return <Context.Provider value={{switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,resourceFolders,setResourceFolders,announcements,unreadAnnouncements,createAnnouncement,markAnnouncementRead,markAllAnnouncementsRead,loadAnnouncementReads,loadAnnouncementDirectory,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){
   const s=useNexus();

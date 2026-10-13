@@ -16,8 +16,8 @@ export type ApiUser = { id: number; email: string; username?: string | null; nam
 export type StaffMember = { email: string; name: string; role: Role; active: boolean; leader?: boolean };
 /** Row of 系统管理 · 用户管理. */
 export type AdminUser = { id: number; email: string; username: string | null; name: string; role: Role; active: boolean; mustChangePassword: boolean; salesName: string | null; leader?: boolean; salesRegion?: string | null; salesLead?: boolean };
-export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions' | 'courses';
-export type Collection = 'programs' | 'teams' | 'teamLogs' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'assignments' | 'articles' | 'posts' | OpsCollection;
+export type OpsCollection = 'classTypes' | 'projects' | 'teachers' | 'opsCourses' | 'lessons' | 'lessonFeedbacks' | 'courseSessions' | 'courses' | 'resourceFolders';
+export type Collection = 'programs' | 'teams' | 'teamLogs' | 'students' | 'enrollments' | 'courses' | 'feedbacks' | 'resources' | 'resourceFolders' | 'assignments' | 'articles' | 'posts' | OpsCollection;
 const TOKEN_KEY = 'nexus.api.token.v1';
 export class ApiError extends Error { constructor(public status: number, public code: string, message?: string) { super(message || code); } }
 
@@ -78,6 +78,13 @@ export const api = {
   createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   resetPassword: (id: number) => request<{ password: string }>(`/admin/users/${id}/reset-password`, { method: 'POST' }),
+  listAnnouncements: () => request<{ announcements: import('./announcements').Announcement[]; unread: number }>('/announcements'),
+  createAnnouncement: (body: { title: string; body: string; tag?: string; program?: string | null; audience: import('./announcements').AnnouncementAudience; recipientIds?: number[] }) =>
+    request<{ announcement: import('./announcements').Announcement }>('/announcements', { method: 'POST', body: JSON.stringify(body) }),
+  markAnnouncementRead: (id: string) => request<{ ok: true }>(`/announcements/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+  markAllAnnouncementsRead: () => request<{ ok: true; count: number }>('/announcements/read-all', { method: 'POST' }),
+  announcementReads: (id: string) => request<{ announcement: { id: string; title: string; audience: string; audienceLabel: string }; rows: import('./announcements').AnnouncementReadRow[] }>(`/announcements/${encodeURIComponent(id)}/reads`),
+  announcementDirectory: () => request<{ users: import('./announcements').AnnouncementDirectoryUser[] }>('/announcements/directory'),
 };
 
 /** Published 推文 as served to anyone (no login): GET /api/public/articles/:slug. */

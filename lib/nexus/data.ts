@@ -1,13 +1,18 @@
 export type { Role } from './roles';
 export type Program = {id:string;name:string;en:string;short:string;type:string;color:string;description:string;date:string;status:string;curriculum:string;draft?:string;published:boolean};
 import type { StudentHealth } from './students';
-/** Optional roster fields (union across Excel imports). Missing keys stay empty / omitted. */
+/** Optional roster fields (union across Excel imports — docs/roster-import-report.json). Missing keys stay empty / omitted. */
 export type StudentProfile = {
   gender?:string; school?:string; phone?:string; email?:string;
   guardianName?:string; guardianPhone?:string; role?:string;
   idType?:string; idNumber?:string; toeflIelts?:string; mbti?:string;
   awardsA?:string; awardsB?:string; inviter?:string; region?:string;
   filledAt?:string; source?:string;
+  bdTeacher?:string; opsTeacher?:string; payment?:string; filler?:string;
+  userType?:string; department?:string; intention1?:string; intention2?:string;
+  schedulePref?:string; knowsContest?:string; goal?:string; resume?:string;
+  wantCaptain?:string; commit?:string; offlineOk?:string; interview?:string;
+  bpaPassword?:string; paymentScreenshot?:string;
 };
 export type Student = {id:string;name:string;program:string;team:string;status:string;sales:string;updated:string;grade:string;
   /** 学生状态 — set by ops, drives the sales list order (worst first). */
@@ -47,8 +52,11 @@ export const teams:Team[]=[];
 export const students:Student[]=[];
 export const courses:Course[]=[];
 export const feedbacks:Feedback[]=[];
-export type Resource = {id:string;program:string;name:string;type:string;format:string;size:string;public:boolean;/** File name under public/materials when it differs from `${id}.pdf|svg`. */file?:string};
+export type Resource = {id:string;program:string;name:string;type:string;format:string;size:string;public:boolean;/** File name under public/materials when it differs from `${id}.pdf|svg`. */file?:string;/** 资料中心 folder id (resource_folders). */folder?:string};
+export type ResourceFolder = {id:string;program:string;name:string};
 export const resources:Resource[]=[];
+/** @deprecated static seed — live announcements come from the store / API (lib/nexus/announcements.ts). */
 export type Announcement = {title:string;tag:string;date:string;text:string;program:string};
 export const announcements:Announcement[]=[];
+
 export const enrollments:Enrollment[]=[];

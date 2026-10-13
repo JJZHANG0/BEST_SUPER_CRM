@@ -22,7 +22,8 @@ export const recordSchemas = {
   courses: z.object({ id, name: s(), program: id, team: s(80), teacher: s(80), date: s(20), time: s(40), status: s(40), code: s(60).optional(), location: s(80).optional(), conflictOverride: z.boolean().optional() }),
   courseSessions: z.object({ id, course: id, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/), location: s(80).optional() }),
   feedbacks: z.object({ id, student: id, course: s(80), content: s(4000), next: s(2000), visible: z.boolean(), date: s(20) }),
-  resources: z.object({ id, program: id, name: s(), type: s(40), format: s(20), size: s(40), public: z.boolean(), file: s(200).optional() }),
+  resources: z.object({ id, program: id, name: s(), type: s(40), format: s(20), size: s(40), public: z.boolean(), file: s(200).optional(), folder: s(80).optional() }),
+  resourceFolders: z.object({ id, program: id, name: s(80).min(1) }),
   assignments: z.object({ id, student: id, program: id, title: s(), due: s(20), submitted: s(20).nullable(), status: z.enum(assignmentStatuses as unknown as [string, ...string[]]), score: z.number().int().min(0).max(100).nullable(), feedback: s(2000), teacher: s(80) }),
   classTypes: z.object({ id, name: s(80).min(1), rate: z.number().min(0).max(100000), unit: unit, note: s(200), active: z.boolean() }),
   projects: z.object({ id, code: s(40).min(1), name: s().min(1), startDate: date, endDate: date, status, note: s(1000) }),
@@ -34,7 +35,7 @@ export const recordSchemas = {
 export type CollectionName = keyof typeof recordSchemas;
 export const tables = {
   programs: schema.programs, teams: schema.teams, teamLogs: schema.teamLogs, students: schema.students, enrollments: schema.enrollments,
-  courses: schema.courses, courseSessions: schema.courseSessions, feedbacks: schema.feedbacks, resources: schema.resources, assignments: schema.assignments,
+  courses: schema.courses, courseSessions: schema.courseSessions, feedbacks: schema.feedbacks, resources: schema.resources, resourceFolders: schema.resourceFolders, assignments: schema.assignments,
   classTypes: schema.classTypes, projects: schema.projects, teachers: schema.teachers, opsCourses: schema.opsCourses, lessons: schema.lessonRecords, lessonFeedbacks: schema.lessonFeedbacks,
 } as const;
 /** 系统管理 data: written by superadmins only. */
@@ -44,7 +45,9 @@ export const ownedCollections: readonly CollectionName[] = ['lessons', 'lessonFe
 /** Collections that accept DELETE. */
 /** 课程安排 + 排课: any ops-workspace account may add / remove courses and sessions. */
 export const scheduleCollections: readonly CollectionName[] = ['courses', 'courseSessions'];
-export const deletableCollections: readonly CollectionName[] = [...systemCollections, ...ownedCollections, ...scheduleCollections];
+/** Ops-managed folders (资料中心); any ops writer may delete. */
+export const folderCollections: readonly CollectionName[] = ['resourceFolders'];
+export const deletableCollections: readonly CollectionName[] = [...systemCollections, ...ownedCollections, ...scheduleCollections, ...folderCollections];
 export const isCollection = (name: string): name is CollectionName => Object.hasOwn(recordSchemas, name);
 
 /** Row → API record: keep only the public fields, turn optional NULLs into absent keys. */

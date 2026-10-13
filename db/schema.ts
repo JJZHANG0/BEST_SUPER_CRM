@@ -204,6 +204,8 @@ export const resources = pgTable('resources', {
   size: text('size').notNull(),
   public: boolean('public').notNull().default(false),
   file: text('file'),
+  /** Optional 资料中心 folder (resource_folders.id). */
+  folder: text('folder'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
@@ -375,3 +377,41 @@ export const articlePostEvents = pgTable('article_post_events', {
   bucket: text('bucket').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, t => [uniqueIndex('article_post_events_dedupe_idx').on(t.postId, t.visitor, t.bucket), index('article_post_events_post_idx').on(t.postId)]);
+
+/** 资料中心 folders under a programme (运营老师 create/edit). */
+export const resourceFolders = pgTable('resource_folders', {
+  id: text('id').primaryKey(),
+  program: text('program').notNull().references(() => programs.id),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [index('resource_folders_program_idx').on(t.program)]);
+
+/**
+ * 项目公告: ops-authored messages with audience targeting.
+ * audience: all | ops | teachers | selected_teachers | selected
+ * recipientIds holds user ids when audience is selected_* / selected.
+ */
+export const announcements = pgTable('announcements', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  tag: text('tag').notNull().default('公告'),
+  program: text('program').references(() => programs.id),
+  audience: text('audience').notNull().default('all'),
+  recipientIds: jsonb('recipient_ids').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+  authorId: integer('author_id').notNull().references(() => users.id),
+  authorName: text('author_name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [index('announcements_author_idx').on(t.authorId)]);
+
+/** Per-recipient read receipt for 项目公告. */
+export const announcementReads = pgTable('announcement_reads', {
+  announcementId: text('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('announcement_reads_pk').on(t.announcementId, t.userId),
+  index('announcement_reads_user_idx').on(t.userId),
+]);

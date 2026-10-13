@@ -15,7 +15,8 @@ import { schema } from './db';
 import type { Config } from './config';
 import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
-import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, deletableCollections, type CollectionName } from './collections';
+import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, folderCollections, deletableCollections, type CollectionName } from './collections';
+import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName } from '../lib/nexus/ops';
@@ -399,6 +400,140 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json({ sheet: ownerView(kpiRow(row, user.name)) });
   });
 
+  // ---- 项目公告 (定向留言 + 已读) ----
+  const annStamp = (d: Date) => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+    const g = (t: string) => parts.find(p => p.type === t)?.value || '';
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}`;
+  };
+  async function activeUsers() {
+    return db.select().from(schema.users).where(eq(schema.users.active, true)).orderBy(asc(schema.users.id));
+  }
+  async function resolveRecipients(audience: AnnouncementAudience, recipientIds: number[]) {
+    const users = await activeUsers();
+    return users.filter(u => isRecipient(audience, recipientIds, { id: u.id, role: u.role }));
+  }
+  function annView(row: typeof schema.announcements.$inferSelect, opts: { read: boolean; readCount?: number; recipientCount?: number }) {
+    return {
+      id: row.id, title: row.title, body: row.body, tag: row.tag, program: row.program ?? null,
+      audience: row.audience as AnnouncementAudience, recipientIds: (row.recipientIds || []) as number[],
+      authorId: row.authorId, authorName: row.authorName, date: annStamp(row.createdAt), createdAt: row.createdAt.toISOString(),
+      read: opts.read, ...(opts.readCount !== undefined ? { readCount: opts.readCount } : {}),
+      ...(opts.recipientCount !== undefined ? { recipientCount: opts.recipientCount } : {}),
+    };
+  }
+  async function announcementsFor(user: SessionUser) {
+    const [rows, reads] = await Promise.all([
+      db.select().from(schema.announcements).orderBy(desc(schema.announcements.createdAt)),
+      db.select().from(schema.announcementReads).where(eq(schema.announcementReads.userId, user.id)),
+    ]);
+    const readSet = new Set(reads.map(r => r.announcementId));
+    const role = user.baseRole ?? user.role;
+    const mine = rows.filter(r => r.authorId === user.id || isRecipient(r.audience as AnnouncementAudience, (r.recipientIds || []) as number[], { id: user.id, role }));
+    const authored = mine.filter(r => r.authorId === user.id).map(r => r.id);
+    const readCounts = new Map<string, number>();
+    const recipCounts = new Map<string, number>();
+    if (authored.length) {
+      const allReads = await db.select().from(schema.announcementReads).where(inArray(schema.announcementReads.announcementId, authored));
+      for (const r of allReads) readCounts.set(r.announcementId, (readCounts.get(r.announcementId) || 0) + 1);
+      for (const row of mine.filter(r => r.authorId === user.id)) {
+        recipCounts.set(row.id, (await resolveRecipients(row.audience as AnnouncementAudience, (row.recipientIds || []) as number[])).length);
+      }
+    }
+    return mine.map(r => annView(r, {
+      read: readSet.has(r.id) || r.authorId === user.id,
+      ...(r.authorId === user.id ? { readCount: readCounts.get(r.id) || 0, recipientCount: recipCounts.get(r.id) || 0 } : {}),
+    }));
+  }
+
+  app.get('/announcements/directory', async c => {
+    const user = c.get('user');
+    if (!canWrite(user)) return forbidden(c);
+    const users = await activeUsers();
+    return c.json({ users: users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })) });
+  });
+
+  app.get('/announcements', async c => {
+    const list = await announcementsFor(c.get('user'));
+    return c.json({ announcements: list, unread: list.filter(a => !a.read).length });
+  });
+
+  app.post('/announcements', async c => {
+    const user = c.get('user');
+    if (!canWrite(user)) return forbidden(c);
+    const body = await c.req.json().catch(() => null) as { title?: unknown; body?: unknown; tag?: unknown; program?: unknown; audience?: unknown; recipientIds?: unknown } | null;
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const content = typeof body?.body === 'string' ? body.body.trim() : '';
+    const tag = typeof body?.tag === 'string' && body.tag.trim() ? body.tag.trim().slice(0, 40) : '公告';
+    const program = typeof body?.program === 'string' && body.program ? body.program : null;
+    const audience = isAudience(body?.audience) ? body.audience : null;
+    const recipientIds = Array.isArray(body?.recipientIds) ? [...new Set(body.recipientIds.filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x > 0))] : [];
+    if (!title || title.length > 120) return c.json({ error: 'invalid', message: '请填写标题（≤120字）' }, 400);
+    if (!content || content.length > 4000) return c.json({ error: 'invalid', message: '请填写正文（≤4000字）' }, 400);
+    if (!audience) return c.json({ error: 'invalid', message: '请选择留言对象' }, 400);
+    if ((audience === 'selected' || audience === 'selected_teachers') && !recipientIds.length) return c.json({ error: 'invalid', message: '请至少选择一位留言对象' }, 400);
+    if (program) {
+      const [pr] = await db.select({ id: schema.programs.id }).from(schema.programs).where(eq(schema.programs.id, program)).limit(1);
+      if (!pr) return c.json({ error: 'invalid', message: '关联项目不存在' }, 400);
+    }
+    if (audience === 'selected_teachers' || audience === 'selected') {
+      const users = await activeUsers();
+      const byId = new Map(users.map(u => [u.id, u]));
+      for (const rid of recipientIds) {
+        const u = byId.get(rid);
+        if (!u) return c.json({ error: 'invalid', message: '所选对象不存在或已停用' }, 400);
+        if (audience === 'selected_teachers' && u.role !== 'teacher') return c.json({ error: 'invalid', message: '自选老师只能选择授课老师账号' }, 400);
+      }
+    }
+    const id = 'ANN-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const [row] = await db.insert(schema.announcements).values({
+      id, title, body: content, tag, program, audience, recipientIds, authorId: user.id, authorName: user.name,
+    }).returning();
+    await db.insert(schema.announcementReads).values({ announcementId: id, userId: user.id }).onConflictDoNothing();
+    const recipients = await resolveRecipients(audience, recipientIds);
+    return c.json({ announcement: annView(row, { read: true, readCount: 1, recipientCount: recipients.length }) });
+  });
+
+  app.post('/announcements/:id/read', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [row] = await db.select().from(schema.announcements).where(eq(schema.announcements.id, id)).limit(1);
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    const role = user.baseRole ?? user.role;
+    if (row.authorId !== user.id && !isRecipient(row.audience as AnnouncementAudience, (row.recipientIds || []) as number[], { id: user.id, role })) {
+      return c.json({ error: 'forbidden', message: '无权查看此公告' }, 403);
+    }
+    await db.insert(schema.announcementReads).values({ announcementId: id, userId: user.id }).onConflictDoNothing();
+    return c.json({ ok: true as const });
+  });
+
+  app.post('/announcements/read-all', async c => {
+    const user = c.get('user');
+    const listAnn = await announcementsFor(user);
+    const unread = listAnn.filter(a => !a.read);
+    for (const a of unread) {
+      await db.insert(schema.announcementReads).values({ announcementId: a.id, userId: user.id }).onConflictDoNothing();
+    }
+    return c.json({ ok: true as const, count: unread.length });
+  });
+
+  app.get('/announcements/:id/reads', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [row] = await db.select().from(schema.announcements).where(eq(schema.announcements.id, id)).limit(1);
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    if (row.authorId !== user.id && !canManageSystem(user.role)) return c.json({ error: 'forbidden', message: '仅作者可查看已读名单' }, 403);
+    const recipients = await resolveRecipients(row.audience as AnnouncementAudience, (row.recipientIds || []) as number[]);
+    const reads = await db.select().from(schema.announcementReads).where(eq(schema.announcementReads.announcementId, id));
+    const readMap = new Map(reads.map(r => [r.userId, r.readAt]));
+    return c.json({
+      announcement: { id: row.id, title: row.title, audience: row.audience, audienceLabel: AUDIENCE_LABELS[row.audience as AnnouncementAudience] || row.audience },
+      rows: recipients.map(u => {
+        const at = readMap.get(u.id);
+        return { userId: u.id, name: u.name, email: u.email, role: u.role, read: !!at, readAt: at ? at.toISOString() : null };
+      }),
+    });
+  });
+
+
   // ---- 生成OKR: completed todos of a month → Qwen (key only in server env) → OKR draft (not saved) ----
   const okrLimit = rateLimiter(20_000);
   app.post('/okr/generate', async c => {
@@ -422,7 +557,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 75_000);
       try {
         const res = await fetch(base + '/chat/completions', { method: 'POST', signal: ctl.signal, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 3000, enable_thinking: false, response_format: { type: 'json_object' } }) });
+          body: JSON.stringify({ model, messages, temperature: 0.35, max_tokens: 4500, enable_thinking: false, response_format: { type: 'json_object' } }) });
         const data = await res.json().catch(() => null) as { choices?: { message?: { content?: string } }[]; error?: { code?: string } } | null;
         if (!res.ok) { console.error('okr: model', model, 'http', res.status, data?.error?.code || ''); lastErr = res.status === 429 ? 'AI 服务繁忙，请稍后再试' : 'AI 服务返回错误'; continue; }
         const okr = parseOkr(data?.choices?.[0]?.message?.content || '', month, new Set(todos.map(t => t.id)));
@@ -482,7 +617,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
-    const [programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'teamLogs', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
+    const [programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'teamLogs', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'resourceFolders', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
     // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
@@ -503,6 +638,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const myTeams = teams.filter(t => scope.teamIds.has(t.id as string));
       const myStudents = students.filter(s => scope.studentIds.has(s.id as string));
       const myEnroll = enrollments.filter(e => scope.teamIds.has(e.team as string) || scope.studentIds.has(e.student as string));
+      const teacherAnn = await announcementsFor(user);
       return c.json({
         user: publicUser(user), programs,
         teams: myTeams,
@@ -512,15 +648,18 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         courses: scope.courses,
         feedbacks: feedbacks.filter(f => scope.studentIds.has(f.student as string)),
         resources: resources.filter(r => r.public),
+        resourceFolders: resourceFolders.filter(f => resources.some(r => r.public && r.folder === f.id)),
         assignments: assignments.filter(a => scope.studentIds.has(a.student as string)),
         articles: [], posts: postList, todos: [], classTypes: [], projects: [], teachers: [],
         opsCourses: scope.opsCourses,
         lessons: lessons.filter(r => scope.opsCourseIds.has(r.course as string) || sameTeacherName(r.teacher, scope.name)),
         lessonFeedbacks: lessonFeedbacks.filter(r => scope.opsCourseIds.has(r.course as string)),
         staff: [], courseSessions: courseSessions.filter(x => scope.courseIds.has(x.course as string)),
+        announcements: teacherAnn,
       });
     }
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions });
+    const announcementList = await announcementsFor(user);
+    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions, announcements: announcementList });
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));
@@ -531,9 +670,12 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       teams, teamLogs: [], students: mine,
       enrollments: enrollments.filter(e => ids.has(e.student as string)),
       courses, feedbacks: feedbacks.filter(f => f.visible && ids.has(f.student as string)),
-      resources: resources.filter(r => r.public), assignments: assignments.filter(a => ids.has(a.student as string)), articles, posts: postList, todos,
+      resources: resources.filter(r => r.public),
+      resourceFolders: resourceFolders.filter(f => resources.some(r => r.public && r.folder === f.id && r.program === f.program)),
+      assignments: assignments.filter(a => ids.has(a.student as string)), articles, posts: postList, todos,
       classTypes: [], projects: [], teachers: [], opsCourses: [], lessons: [], lessonFeedbacks: [], staff: [],
       courseSessions: courseSessions.filter(x => courses.some(c => c.id === x.course)),
+      announcements: announcementList,
     });
   });
 
@@ -711,7 +853,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const t = tables[name] as typeof schema.teams;
     const [current] = await db.select().from(t).where(eq(t.id, id)).limit(1) as unknown as Record<string, unknown>[];
     if (!current) return c.json({ error: 'not_found' }, 404);
-    let allowed = systemCollections.includes(name) ? canManageSystem(user.role) : scheduleCollections.includes(name) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
+    let allowed = systemCollections.includes(name) ? canManageSystem(user.role) : (scheduleCollections.includes(name) || folderCollections.includes(name)) ? canWrite(user) : canEditOwned(user, user.email, String(current.opsTeacher));
     if (isTeacher(user.role)) {
       allowed = false;
       if (name === 'lessonFeedbacks' && String(current.opsTeacher || '').toLowerCase() === user.email.toLowerCase()) {
@@ -722,6 +864,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));
+      if (name === 'resourceFolders') await db.update(schema.resources).set({ folder: null }).where(eq(schema.resources.folder, id));
       // 课程安排 has no FK to course_sessions (browser writes them in parallel); cascade in the API.
       if (name === 'courses') await db.delete(schema.courseSessions).where(eq(schema.courseSessions.course, id));
       await db.delete(t).where(eq(t.id, id));

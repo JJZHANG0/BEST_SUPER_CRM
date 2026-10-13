@@ -99,6 +99,13 @@
       "when": 1791740000000,
       "tag": "0013_users_sales_region",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791750000000,
+      "tag": "0014_announcements_folders",
+      "breakpoints": true
     }
   ]
 }

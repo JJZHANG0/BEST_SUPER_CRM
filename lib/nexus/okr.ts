@@ -40,21 +40,28 @@ export function todoLines(todos: readonly OkrTodoInput[], maxTodos = OKR_MAX_TOD
 export function buildOkrMessages(opts: { month: string; name: string; todos: readonly OkrTodoInput[] }) {
   const { lines, used } = todoLines(opts.todos);
   const system = [
-    '你是 B.E.S.T（国际学科竞赛与升学教育机构）运营部的绩效顾问，擅长把运营老师的日常工作整理成 OKR。',
-    '运营部月度 OKR 固定为三个 Objective（类别）：',
-    'A 教务管理（排课、课时、学生与老师对接、教务数据）最多 6 个 KR；',
-    'B 项目运营（竞赛/项目报名、组队、赛事执行、活动与推文）最多 6 个 KR；',
-    'C 团队支持（协助同事、内部流程、培训、跨部门支持）最多 4 个 KR。',
-    '要求：',
-    '1. 只依据给出的已完成待办归纳，不要编造未出现的事项、数字或人名；同类事项合并成一个 KR。',
-    '2. KR 标题 ≤ 30 字，结果导向（动词 + 对象 + 结果），描述 ≤ 150 字，写清做了什么和产出。',
-    '3. progress 为 0–100 的整数，表示该 KR 本月完成度；已完成事项通常为 100。',
-    '4. todoIds 填写该 KR 依据的待办 id（方括号中的内容）。',
-    '5. 某类没有相关事项时 keyResults 为空数组。',
+    '你是 B.E.S.T（国际学科竞赛与升学教育机构）运营部的绩效顾问，擅长把运营老师的日常工作整理成高质量、可落地的月度 OKR。',
+    '运营部月度 OKR 固定为三个 Objective，且必须全部填满对应 KR 槽位（不要留空）：',
+    'A 教务管理（排课、课时、学生与老师对接、教务数据、课情与档案）——必须恰好 6 个 KR（A1–A6）；',
+    'B 项目运营（竞赛/项目报名、组队、赛事执行、活动、推文、资料与招生协作）——必须恰好 6 个 KR（B1–B6）；',
+    'C 团队支持（协助同事、内部流程、培训、跨部门支持、知识沉淀）——必须恰好 4 个 KR（C1–C4）。',
+    '写作与归纳规则：',
+    '1. 优先依据已完成待办归纳：同类事项合并成一个 KR；todoIds 填入该 KR 依据的待办 id（方括号中的内容）；无关待办不要硬塞。',
+    '2. 无论待办多少，都必须填满全部 16 个 KR。待办不足或偏科时：结合运营老师岗位与月份节奏，补全合理、可执行、结果导向的 KR（覆盖典型工作：排课核对、课时/课情闭环、学生状态跟进、组队与赛事节点、推文/资料、跨岗协作、流程优化等）；补全的 KR 的 todoIds 为空数组，描述中写清「基于岗位常态推进」或「结合本月待办延伸规划」，不要编造具体人名、虚构金额或未出现的赛事结果。',
+    '3. 每个 Objective 写一句 ≤30 字的目标；KR 标题 ≤30 字（动词+对象+结果），描述 ≤150 字（做了什么 / 产出 / 如何验收）。',
+    '4. progress 为 0–100 的整数：有充分已完成待办支撑的 KR 通常 80–100；延伸规划类 KR 可用 40–70，表示进行中或待确认。',
+    '5. summary ≤80 字，概括本月工作主线与重点产出。',
     '6. 只输出一个 JSON 对象，不要 Markdown 代码块或任何解释。格式：',
-    '{"summary":"本月工作概述（≤80字）","objectives":[{"category":"A","objective":"目标（≤30字）","keyResults":[{"title":"…","description":"…","progress":100,"todoIds":["…"]}]},{"category":"B",…},{"category":"C",…}]}',
+    '{"summary":"…","objectives":[{"category":"A","objective":"…","keyResults":[{"title":"…","description":"…","progress":100,"todoIds":["…"]}, …共6条]},{"category":"B",…共6条KR},{"category":"C",…共4条KR}]}',
   ].join('\n');
-  const user = `老师：${opts.name || '运营老师'}\n月份：${opts.month}\n本月已完成待办（共 ${used} 项）：\n${lines || '（无）'}\n\n请生成本月 OKR，严格输出 JSON。`;
+  const user = [
+    `老师：${opts.name || '运营老师'}`,
+    `月份：${opts.month}`,
+    `本月已完成待办（共 ${used} 项${used ? '' : '；请按岗位常态补全全部 KR'}）：`,
+    lines || '（无）',
+    '',
+    '请生成本月完整 OKR：A 必须 6 个 KR、B 必须 6 个 KR、C 必须 4 个 KR，严格输出 JSON。',
+  ].join('\n');
   return [{ role: 'system' as const, content: system }, { role: 'user' as const, content: user }];
 }
 
