@@ -136,7 +136,7 @@ const api=readFileSync('server/app.ts','utf8');assert(api.includes('normalizeLes
 assert(store.includes('.map(normalizeLesson)'),'localStorage + bootstrap lessons migrated');
 const opsUi=readFileSync('components/nexus/ops-pages.tsx','utf8');
 assert(opsUi.includes('<CourseCombobox')&&opsUi.includes('应到人数')&&opsUi.includes('实到人数')&&opsUi.includes('attendanceText(n, expected)'));
-assert(/<FormField label="本次课程内容"><textarea rows=\{2\}/.test(opsUi)&&/<FormField label="学生表现"><textarea rows=\{2\}/.test(opsUi),'课程内容 and 学生表现 same size');
+assert(/<FormField label="本次课程内容"><textarea[^>]*rows=\{6\}/.test(opsUi)&&/<FormField label="学生表现"><textarea[^>]*rows=\{6\}/.test(opsUi),'课程内容 and 学生表现 same taller size');
 const cc=readFileSync('components/nexus/course-combobox.tsx','utf8');assert(cc.includes('role="combobox"')&&cc.includes('aria-activedescendant')&&cc.includes("'ArrowDown'")&&cc.includes("'Escape'"));
 const css=readFileSync('app/globals.css','utf8');
 assert(css.includes('.ops-table .num{text-align:left')&&css.includes('.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}'),'ops tables left-aligned');
