@@ -85,6 +85,20 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json({ status: database === 'ok' ? 'ok' : 'degraded', env: config.env, database, uptime: Math.round((Date.now() - startedAt.getTime()) / 1000) }, database === 'ok' ? 200 : 503);
   });
 
+  /** Imported media (课题海报 / 课程计划 images). Public by unguessable content-hash name; served from MEDIA_DIR. */
+  app.get('/media/:name', async c => {
+    const name = c.req.param('name');
+    if (!/^[a-z0-9][a-z0-9-]{5,80}\.(jpg|jpeg|png|webp)$/.test(name)) return c.json({ error: 'not_found' }, 404);
+    const { readFile } = await import('node:fs/promises');
+    const { join, resolve } = await import('node:path');
+    const dir = config.mediaDir || resolve(process.cwd(), '../../../media');
+    try {
+      const buf = await readFile(join(dir, name));
+      const type = name.endsWith('.png') ? 'image/png' : name.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+      return new Response(new Uint8Array(buf), { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=31536000, immutable' } });
+    } catch { return c.json({ error: 'not_found' }, 404); }
+  });
+
   /** Portals a user may open. Teacher capability: role=teacher, or an ops-workspace account named as 授课老师 in the directory, a 课程编号 or a team. */
   async function portalsFor(row: typeof schema.users.$inferSelect): Promise<Portal[]> {
     const r = row.role as Role;
@@ -887,14 +901,19 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const caps = types.map(capacityFromClassType).filter((n): n is number => n != null);
       const members = [...ids].map(id => studentById.get(id)).filter((s): s is NonNullable<typeof s> => !!s);
       const visible = sales ? members.filter(s => salesOwns(s.sales, user)) : members;
+      // 项目总览 sheet facts win when present (the sheet is the source of truth for 招募进度).
+      const sheet = t.recruitCapacity != null;
       return {
-        id: t.id, program: t.program, name: t.name, teacher: t.teacher, enrolled: ids.size,
-        capacity: caps.length ? Math.max(...caps) : null, classType: types[0] || null,
+        id: t.id, program: t.program, name: t.name, teacher: t.teacher,
+        enrolled: sheet ? (t.recruitEnrolled ?? 0) : ids.size,
+        capacity: sheet ? t.recruitCapacity : caps.length ? Math.max(...caps) : null, classType: types[0] || null,
+        recruitStatus: t.recruitStatus ?? null, posterUrl: t.posterUrl ?? null, scheduleUrl: t.scheduleUrl ?? null,
         members: visible.map(s => ({ id: s.id, name: s.name, grade: s.grade, status: s.status, health: s.health, school: (s.profile as Record<string, string> | null)?.school || '' })),
         hiddenMembers: members.length - visible.length,
       };
     });
-    return c.json({ teams });
+    const programRows = await db.select({ id: schema.programs.id, target: schema.programs.recruitTarget, enrolled: schema.programs.recruitEnrolled }).from(schema.programs);
+    return c.json({ teams, programs: programRows.filter(p => p.target != null).map(p => ({ id: p.id, target: p.target as number, enrolled: p.enrolled ?? 0 })) });
   });
 
   app.get('/students/:id/history', async c => {

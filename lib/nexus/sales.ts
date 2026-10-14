@@ -53,8 +53,17 @@ export type ProjectRecruitment = {
   teams: number; unknownTeams: number; recruiting: boolean; status: string;
 };
 /** Aggregate team seats per project. Teams without a known capacity count their members as both enrolled and capacity (no invented spare seats). */
-export function projectRecruitment(programs: readonly { id: string; status: string }[], teams: readonly TeamSeat[]): ProjectRecruitment[] {
+export function projectRecruitment(programs: readonly { id: string; status: string }[], teams: readonly TeamSeat[], targets: readonly ProgramTarget[] = []): ProjectRecruitment[] {
   return programs.map(p => {
+    const goal = targets.find(x => x.id === p.id);
+    if (goal) {
+      // Sheet project progress wins: remaining = 招生目标 − 已招生人数 (never negative); full when nothing remains.
+      const n = teams.filter(t => t.program === p.id);
+      const remaining = Math.max(0, goal.target - goal.enrolled);
+      const open = RECRUITING_STATUSES.includes(p.status) || remaining > 0;
+      return { program: p.id, enrolled: goal.enrolled, capacity: goal.target, remaining, progress: goal.target ? Math.min(100, Math.round(goal.enrolled / goal.target * 100)) : 0,
+        teams: n.length, unknownTeams: n.filter(t => t.capacity == null).length, recruiting: remaining > 0 && open, status: remaining > 0 ? (RECRUITING_STATUSES.includes(p.status) ? p.status : '招生中') : '已满员' };
+    }
     const list = teams.filter(t => t.program === p.id);
     const enrolled = list.reduce((n, t) => n + t.enrolled, 0);
     const capacity = list.reduce((n, t) => n + (t.capacity ?? t.enrolled), 0);
@@ -71,4 +80,8 @@ export const sortRecruitment = (a: ProjectRecruitment, b: ProjectRecruitment) =>
   Number(b.recruiting) - Number(a.recruiting) || b.remaining - a.remaining || a.progress - b.progress || a.program.localeCompare(b.program);
 
 export type SalesMember = { id: string; name: string; grade: string; status: string; health: string; school: string };
-export type SalesTeam = TeamSeat & { members: SalesMember[]; hiddenMembers: number };
+export type SalesTeam = TeamSeat & { members: SalesMember[]; hiddenMembers: number; recruitStatus?: string | null; posterUrl?: string | null; scheduleUrl?: string | null };
+/** Project-level 招生目标 / 已招生人数 (项目总览 sheet). */
+export type ProgramTarget = { id: string; target: number; enrolled: number };
+/** Sheet 招募状态 → still recruiting? (火热招募 / 正常招募 yes; 招生结束 no). Unknown → null. */
+export const sheetRecruiting = (s: unknown): boolean | null => s == null || s === '' ? null : /招生结束|结束|截止|满员/.test(String(s)) ? false : true;

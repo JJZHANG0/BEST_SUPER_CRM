@@ -141,6 +141,13 @@
       "when": 1791800000000,
       "tag": "0019_course_session_unique_slot",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791810000000,
+      "tag": "0020_recruit_overview",
+      "breakpoints": true
     }
   ]
 }

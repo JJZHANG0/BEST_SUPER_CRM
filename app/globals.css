@@ -2315,3 +2315,5 @@ button.sh-row:active{transform:scale(.985)}
 @keyframes sh-sheet-in{from{transform:translateY(100%)}to{transform:none}}
 @keyframes sh-sheet-out{from{transform:none}to{transform:translateY(100%)}}
 @media(prefers-reduced-motion:reduce){.sh-tile,.sh-list>li,.sh-group,.sh-stage,.sh-panel,.sh-overlay,.sh-spark i,.sh-avatars i{animation:none!important}.sh-ring-bar,.sh-bar i{transition:none}}
+.sh-schedule-img{margin-bottom:10px}.sh-schedule-img img{max-height:520px}
+.sh-row-side .badge{margin-top:3px;font-size:.625rem}

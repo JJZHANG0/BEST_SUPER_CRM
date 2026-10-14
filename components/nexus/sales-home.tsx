@@ -11,7 +11,7 @@ import { useNexus, useVisible, type FileRecord } from '@/lib/nexus/store';
 import { api } from '@/lib/nexus/api';
 import { assetUrl } from '@/lib/nexus/assets';
 import { occurrences } from '@/lib/nexus/schedule';
-import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment } from '@/lib/nexus/sales';
+import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment, type ProgramTarget, sheetRecruiting } from '@/lib/nexus/sales';
 import type { Program } from '@/lib/nexus/data';
 import { ProgramMark, Badge } from './ui';
 import { greeting } from './recruitment';
@@ -106,14 +106,14 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
   }
   if (level.kind === 'project') {
     const p = prog(level.id); const r = rows.find(x => x.program === level.id);
-    const list = teams.filter(t => t.program === level.id).sort((a, b) => ((b.capacity ?? b.enrolled) - b.enrolled) - ((a.capacity ?? a.enrolled) - a.enrolled) || a.name.localeCompare(b.name, 'zh-CN'));
+    const list = teams.filter(t => t.program === level.id).sort((a, b) => Number(sheetRecruiting(b.recruitStatus) !== false) - Number(sheetRecruiting(a.recruitStatus) !== false) || ((b.capacity ?? b.enrolled) - b.enrolled) - ((a.capacity ?? a.enrolled) - a.enrolled) || a.name.localeCompare(b.name, 'zh-CN'));
     return <>
       {p && r && <div className="sh-hero"><Ring value={r.progress} size={78} label={<><b>{r.progress}%</b><small>完成度</small></>} /><div><span className="sh-eyebrow">{p.short} · {r.status}</span><h3>{p.name}</h3><p>已报 {r.enrolled} / {r.capacity} 人 · 剩余 <b>{r.remaining}</b> 个名额</p></div></div>}
       {list.length ? <ul className="sh-list">{list.map((t, i) => { const pct = t.capacity ? Math.min(100, Math.round(t.enrolled / t.capacity * 100)) : 0; const left = t.capacity != null ? Math.max(0, t.capacity - t.enrolled) : null; return <li key={t.id} style={{ '--i': i } as CSSProperties}>
         <button type="button" className="sh-row" onClick={() => go({ kind: 'team', id: t.id }, 1)}>
           <span className="sh-team-dot"><Users size={17} /></span>
           <span className="sh-row-main"><strong>{t.name}</strong><small>{t.teacher || '授课老师待定'} · 已报 <b>{t.enrolled}</b>{t.capacity != null ? ` / ${t.capacity}` : ''} 人{t.classType ? ` · ${t.classType.replace(/^\d+\.\s*/, '')}` : ''}</small>{t.capacity != null && <Bar value={pct} />}</span>
-          <span className="sh-row-side">{left != null ? <><b className={left ? 'sh-hot' : ''}>{left}</b><small>剩余</small></> : <small className="sh-pending">名额待定</small>}</span>
+          <span className="sh-row-side">{left != null ? <><b className={left ? 'sh-hot' : ''}>{left}</b><small>剩余</small></> : <small className="sh-pending">名额待定</small>}{t.recruitStatus && <Badge tone={sheetRecruiting(t.recruitStatus) === false ? 'neutral' : t.recruitStatus.includes('火热') ? 'pink' : 'green'}>{t.recruitStatus}</Badge>}</span>
           <ChevronRight size={18} className="sh-chev" />
         </button></li>; })}</ul>
         : <Empty icon={Users} title="该项目暂无开班队伍" text="运营在队伍管理中建队后，这里会显示每支队伍的招募进度。" />}
@@ -127,7 +127,7 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
 function TeamDetail({ team, program }: { team: SalesTeam; program?: Program }) {
   const s = useNexus();
   const article = s.articles.find(a => a.program === team.program)?.published;
-  const poster = article?.cover || (program ? assetUrl(`materials/poster-${program.id}.svg`) : '');
+  const poster = team.posterUrl || article?.cover || (program ? assetUrl(`materials/poster-${program.id}.svg`) : '');
   const schedule = (article?.blocks || []).filter(b => b.type === 'highlight' && b.kind === 'schedule').flatMap(b => b.type === 'highlight' ? b.items : []).filter(i => i.label && i.value);
   const courses = s.courses.filter(c => c.team === team.id);
   const occ = occurrences(courses, s.courseSessions);
@@ -144,14 +144,15 @@ function TeamDetail({ team, program }: { team: SalesTeam; program?: Program }) {
       {team.hiddenMembers > 0 && <p className="sh-note">另有 {team.hiddenMembers} 位队员由其他顾问负责，姓名与档案已隐藏。</p>}
       {!team.enrolled && <p className="sh-note">本队伍暂未有报名成员。</p>}
     </section>
-    <section className="sh-section"><h4><ImageIcon size={16} />项目海报</h4>
+    <section className="sh-section"><h4><ImageIcon size={16} />{team.posterUrl ? '课题海报' : '项目海报'}</h4>
       {poster && !posterBroken ? <a className="sh-poster" href={poster} target="_blank" rel="noopener noreferrer"><img src={poster} alt={`${program?.name || ''} 海报`} loading="lazy" onError={() => setPosterBroken(true)} /><span><ExternalLink size={14} />查看大图</span></a> : <p className="sh-note">该项目尚未上传海报。</p>}
     </section>
     <section className="sh-section"><h4><CalendarDays size={16} />课程计划</h4>
+      {team.scheduleUrl && <a className="sh-poster sh-schedule-img" href={team.scheduleUrl} target="_blank" rel="noopener noreferrer"><img src={team.scheduleUrl} alt={`${team.name} 课程计划`} loading="lazy" /><span><ExternalLink size={14} />查看课表大图</span></a>}
       {shown.length ? <ul className="sh-sessions">{shown.map(o => <li key={o.key}><time>{o.date.slice(5).replace('-', '/')}</time><span><strong>{o.start}{o.end ? '–' + o.end : ''}</strong><small>{o.course.name}{o.location ? ' · ' + o.location : ''}</small></span></li>)}</ul> : null}
       {occ.length > shown.length && <p className="sh-note">共 {occ.length} 节，显示{upcoming.length ? '接下来' : '最近'}的 {shown.length} 节。</p>}
       {schedule.length > 0 && <dl className="sh-facts">{schedule.map(i => <div key={i.label}><dt>{i.label}</dt><dd>{i.value}</dd></div>)}</dl>}
-      {!shown.length && !schedule.length && <p className="sh-note">尚未排课，项目书中也没有时间安排。</p>}
+      {!shown.length && !schedule.length && !team.scheduleUrl && <p className="sh-note">尚未排课，项目书中也没有时间安排。</p>}
     </section>
   </div>;
 }
@@ -170,6 +171,7 @@ export default function SalesHome() {
   const s = useNexus(), v = useVisible();
   const [apiTeams, setApiTeams] = useState<SalesTeam[] | null>(null);
   const [apiFailed, setApiFailed] = useState(false);
+  const [targets, setTargets] = useState<ProgramTarget[]>([]);
   const [open, setOpen] = useState<Panel | null>(null);
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const [level, setLevel] = useState<Level>({ kind: 'list' });
@@ -186,12 +188,12 @@ export default function SalesHome() {
   useEffect(() => {
     if (!s.apiMode) return;
     let alive = true;
-    api.salesRecruitment().then(r => { if (alive) setApiTeams(r.teams); }).catch(() => { if (alive) setApiFailed(true); });
+    api.salesRecruitment().then(r => { if (alive) { setApiTeams(r.teams); setTargets(r.programs || []); } }).catch(() => { if (alive) setApiFailed(true); });
     return () => { alive = false; };
   }, [s.apiMode, s.teams, s.enrollments]);
   const teams = !s.apiMode || apiFailed ? localTeams : apiTeams;
 
-  const rows = useMemo(() => teams ? projectRecruitment(s.programs, teams) : [], [teams, s.programs]);
+  const rows = useMemo(() => teams ? projectRecruitment(s.programs, teams, s.apiMode && !apiFailed ? targets : []) : [], [teams, s.programs, targets, s.apiMode, apiFailed]);
   const recruiting = rows.filter(r => r.recruiting);
   const totals = recruiting.reduce((a, r) => ({ enrolled: a.enrolled + r.enrolled, capacity: a.capacity + r.capacity, remaining: a.remaining + r.remaining }), { enrolled: 0, capacity: 0, remaining: 0 });
   const recruitPct = totals.capacity ? Math.round(totals.enrolled / totals.capacity * 100) : 0;

@@ -56,6 +56,10 @@ export const programs = pgTable('programs', {
   /** Ops-only unpublished curriculum draft. */
   draft: text('draft'),
   published: boolean('published').notNull().default(false),
+  /** 招生目标 / 已招生人数 from the 「2026 BEST 项目招生总览」 sheet (营收总览); NULL = not provided. */
+  recruitTarget: integer('recruit_target'),
+  recruitEnrolled: integer('recruit_enrolled'),
+  recruitSource: text('recruit_source'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
@@ -74,6 +78,14 @@ export const teams = pgTable('teams', {
   progress: jsonb('progress').$type<{ summary?: string; milestones?: string; risks?: string; updated?: string; updatedBy?: string }>(),
   /** 成果材料 */
   materials: jsonb('materials').$type<{ checklist?: string; links?: string; notes?: string; updated?: string; updatedBy?: string }>(),
+  /** 招募 facts from the 项目超级管理 sheet: 招募状态 (火热招募 / 正常招募 / 招生结束), seats, 课题海报 and 课程计划 images. */
+  recruitStatus: text('recruit_status'),
+  recruitCapacity: integer('recruit_capacity'),
+  recruitEnrolled: integer('recruit_enrolled'),
+  recruitRemaining: integer('recruit_remaining'),
+  posterUrl: text('poster_url'),
+  scheduleUrl: text('schedule_url'),
+  sheetRef: text('sheet_ref'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
