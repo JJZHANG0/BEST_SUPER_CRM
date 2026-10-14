@@ -20,7 +20,9 @@ from PIL import Image
 
 def norm_status(v):
     v = str(v or '').strip()
-    return {'正常招募': '招募中', '招生结束': '已结束'}.get(v, v) or None
+    # Manual flags (已满员 / 已结束) are set by ops only; the sheet never flags a team.
+    if not v or re.search(r'结束|截止|满|停', v): return '招募中' if v else None
+    return {'正常招募': '招募中'}.get(v, v)
 
 PROGRAM_BY_TAG = {'BPA': 'bpa', 'CTB': 'ctb', 'iHOSA': 'ihosa', '康莱德': 'conrad'}
 PROGRAM_BY_NAME = [('康莱德', 'conrad'), ('CTB', 'ctb'), ('BPA', 'bpa'), ('iHOSA', 'ihosa'), ('暑假', 'summer'), ('寒假', 'winter'), ('PrimeTeach', 'prime'), ('MVP', 'mvp')]
