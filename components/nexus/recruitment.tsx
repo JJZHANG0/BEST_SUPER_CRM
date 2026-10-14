@@ -11,16 +11,16 @@ import type { Team } from '@/lib/nexus/data';
 import { salesOwns } from '@/lib/nexus/sales';
 export const greeting=()=>{const h=Number(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Shanghai',hour:'numeric',hourCycle:'h23'}).format(new Date()));return h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好'};
 
-export function Poster({program}:{program:string}) {
+export function Poster({program,src:custom,label}:{program:string;src?:string|null;label?:string}) {
   const {programs}=useNexus();const [open,setOpen]=useState(false);
   const p=programs.find(x=>x.id===program)!;
-  const src=assetUrl(`materials/poster-${program}.svg`);
+  const src=custom||assetUrl(`materials/poster-${program}.svg`);
   return <>
-    <button className="secondary" onClick={()=>setOpen(true)}><Eye size={17}/>查看招生海报</button>
+    <button className="secondary" onClick={()=>setOpen(true)}><Eye size={17}/>{label||'查看招生海报'}</button>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="file-preview">
-      <DialogTitle>{p.name} · 招生海报</DialogTitle><DialogDescription>项目与价格信息以正式发布版本为准。</DialogDescription>
+      <DialogTitle>{p.name} · 招生海报</DialogTitle><DialogDescription>{custom?'队伍课题海报 · 长按或下载保存':'项目与价格信息以正式发布版本为准。'}</DialogDescription>
       <img className="preview-image" src={src} alt={`${p.name}招生海报`}/>
-      <a className="primary" href={src} download={`${p.short}-招生海报.svg`} onClick={e=>{if(/MicroMessenger/i.test(navigator.userAgent)){e.preventDefault();toast.info('请在微信右上角菜单选择在浏览器中打开，再下载海报。')}}}><Download size={17}/>下载海报</a>
+      <a className="primary" href={src} download={custom?`${p.short}-课题海报.jpg`:`${p.short}-招生海报.svg`} onClick={e=>{if(/MicroMessenger/i.test(navigator.userAgent)){e.preventDefault();toast.info('请在微信右上角菜单选择在浏览器中打开，再下载海报。')}}}><Download size={17}/>下载海报</a>
     </DialogContent></Dialog>
   </>;
 }
@@ -37,7 +37,7 @@ function SalesCohortDialog({team,open,onOpenChange}:{team:Team|null;open:boolean
     <div className="sales-modal-progress"><div><span>当前招生完成度</span><b>{a.progress}%</b></div><Meter value={a.progress}/></div>
     <dl className="sales-detail-grid"><div><dt>计划开课</dt><dd>{cohort?.opens||'待安排'}</dd></div><div><dt>报名截止</dt><dd>{cohort?.deadline||'待发布'}</dd></div><div><dt>授课老师</dt><dd>{team.teacher}</dd></div><div><dt>运营对接</dt><dd>{offer.operations||'待指定'}</dd></div><div><dt>上课时间</dt><dd>{cohort?.schedule||'待安排'}</dd></div><div><dt>课程计划</dt><dd>{planText(offer)}</dd></div></dl>
     <p className="sales-price-note">{offer.feeNote}</p>
-    <div className="sales-modal-actions"><Poster program={team.program}/><button className="primary" onClick={()=>{onOpenChange(false);s.go('programs/'+team.program)}}>查看项目资料<ChevronRight size={16}/></button></div>
+    <div className="sales-modal-actions"><Poster program={team.program} src={team.posterUrl} label={team.posterUrl?'查看课题海报':undefined}/><button className="primary" onClick={()=>{onOpenChange(false);s.go('programs/'+team.program)}}>查看项目资料<ChevronRight size={16}/></button></div>
   </DialogContent></Dialog>;
 }
 export function CohortCard({team}:{team:Team}) {

@@ -911,8 +911,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         hiddenMembers: members.length - visible.length,
       };
     });
-    const programRows = await db.select({ id: schema.programs.id, target: schema.programs.recruitTarget, enrolled: schema.programs.recruitEnrolled }).from(schema.programs);
-    return c.json({ teams, programs: programRows.filter(p => p.target != null).map(p => ({ id: p.id, target: p.target as number, enrolled: p.enrolled ?? 0 })) });
+    const programRows = await db.select({ id: schema.programs.id, target: schema.programs.recruitTarget, enrolled: schema.programs.recruitEnrolled, flag: schema.programs.recruitFlag }).from(schema.programs);
+    return c.json({ teams, programs: programRows.map(p => ({ id: p.id, target: p.target, enrolled: p.enrolled ?? 0, flag: p.flag ?? null })) });
   });
 
   app.get('/students/:id/history', async c => {
@@ -1074,6 +1074,11 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!parsed.success) return c.json({ error: 'invalid', issues: issuesOf(parsed.error) }, 400);
     if (parsed.data.id !== id) return c.json({ error: 'invalid', issues: ['id mismatch'] }, 400);
     if (name === 'students') return c.json({ record: await saveStudent(parsed.data, user) });
+    if (name === 'programs' && !canManageSystem(user.role)) {
+      // Only superadmins set the project-level 已满员 / 停止招生 flag.
+      const [cur] = await db.select({ f: schema.programs.recruitFlag }).from(schema.programs).where(eq(schema.programs.id, id)).limit(1);
+      (parsed.data as Record<string, unknown>).recruitFlag = cur?.f ?? null;
+    }
     if (name === 'teams') {
       const [cur] = await db.select().from(schema.teams).where(eq(schema.teams.id, id)).limit(1);
       if (cur && !canEditTeam(user, cur)) return c.json({ error: 'forbidden', message: '仅队伍负责人或超级管理员可编辑该队伍' }, 403);

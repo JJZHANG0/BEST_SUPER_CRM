@@ -2334,3 +2334,12 @@ button.sh-row:active{transform:scale(.985)}
 .sh-row.locked{opacity:.55;filter:grayscale(1);cursor:not-allowed;background:color-mix(in srgb,#888 10%,transparent)}
 .sh-row.locked .sh-team-dot{background:#bbb;color:#fff}
 @media (max-width:640px){.team-editor-grid,.team-editor-grid.three{grid-template-columns:1fr}.team-editor{width:100vw!important}}
+/* ── sales: fullscreen image lightbox ── */
+.sh-poster{display:block;width:100%;padding:0;border:0;background:none;text-align:left;cursor:zoom-in}
+.sh-lightbox-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.92)}
+.sh-lightbox{position:fixed;inset:0;z-index:1001;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 52px) 8px calc(env(safe-area-inset-bottom) + 40px);overflow:auto;transform:translateY(var(--dy,0));outline:none;touch-action:pinch-zoom pan-x pan-y}
+.sh-lightbox-img{max-width:100%;max-height:100%;object-fit:contain;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;pointer-events:auto;touch-action:pinch-zoom}
+.sh-lightbox-close{position:fixed;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;display:grid;place-items:center;z-index:2}
+.sh-lightbox-hint{position:fixed;bottom:calc(env(safe-area-inset-bottom) + 10px);left:0;right:0;text-align:center;color:rgba(255,255,255,.6);font-size:.75rem;margin:0;pointer-events:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.recruit-flag-select{min-height:30px;border-radius:10px;padding:2px 6px;font-size:.75rem;border:1px solid color-mix(in srgb,currentColor 20%,transparent);background:transparent}

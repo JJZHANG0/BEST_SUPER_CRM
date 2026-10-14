@@ -50,62 +50,63 @@ export const isPseudoTeam = (name: unknown) => /退费|退班/.test(String(name 
 export type TeamSeat = { id: string; program: string; name: string; teacher: string; enrolled: number; capacity: number | null; classType: string | null };
 export type ProjectRecruitment = {
   program: string; enrolled: number; capacity: number; remaining: number; progress: number;
-  teams: number; unknownTeams: number; recruiting: boolean; status: string;
+  teams: number; unknownTeams: number; recruiting: boolean; status: string; known: boolean;
 };
-/** Aggregate team seats per project. Teams without a known capacity count their members as both enrolled and capacity (no invented spare seats). */
-export function projectRecruitment(programs: readonly { id: string; status: string }[], teams: readonly TeamSeat[], targets: readonly ProgramTarget[] = []): ProjectRecruitment[] {
+/** Project-level manual flags (superadmin, 项目中心). */
+export const PROGRAM_RECRUIT_FLAGS = ['已满员', '停止招生'] as const;
+/** Aggregate per project. Visibility is manual only: a project shows while its status takes sign-ups and no 已满员 / 停止招生 flag is set,
+ *  even when its numbers say full. Sheet targets (招生目标 / 已招生人数) win over team sums. */
+export function projectRecruitment(programs: readonly { id: string; status: string; recruitFlag?: string | null }[], teams: readonly TeamSeat[], targets: readonly ProgramTarget[] = []): ProjectRecruitment[] {
   return programs.map(p => {
-    const goal = targets.find(x => x.id === p.id);
-    if (goal) {
-      // Sheet project progress wins: remaining = 招生目标 − 已招生人数 (never negative); full when nothing remains.
-      const n = teams.filter(t => t.program === p.id);
-      const remaining = Math.max(0, goal.target - goal.enrolled);
-      const open = RECRUITING_STATUSES.includes(p.status) || remaining > 0;
-      return { program: p.id, enrolled: goal.enrolled, capacity: goal.target, remaining, progress: goal.target ? Math.min(100, Math.round(goal.enrolled / goal.target * 100)) : 0,
-        teams: n.length, unknownTeams: n.filter(t => t.capacity == null).length, recruiting: remaining > 0 && open, status: remaining > 0 ? (RECRUITING_STATUSES.includes(p.status) ? p.status : '招生中') : '已满员' };
-    }
     const list = teams.filter(t => t.program === p.id);
-    const enrolled = list.reduce((n, t) => n + t.enrolled, 0);
-    const capacity = list.reduce((n, t) => n + (t.capacity ?? t.enrolled), 0);
-    const remaining = list.reduce((n, t) => n + (t.capacity != null ? Math.max(0, t.capacity - t.enrolled) : 0), 0);
+    const goal = targets.find(x => x.id === p.id);
+    const flag = goal?.flag ?? p.recruitFlag ?? null;
     const unknownTeams = list.filter(t => t.capacity == null).length;
-    const open = RECRUITING_STATUSES.includes(p.status);
-    const full = list.length > 0 && unknownTeams === 0 && remaining === 0;
-    const status = !open ? (p.status || '已结束') : full ? '已满员' : p.status;
-    return { program: p.id, enrolled, capacity, remaining, progress: capacity ? Math.min(100, Math.round(enrolled / capacity * 100)) : 0, teams: list.length, unknownTeams, recruiting: open && !full, status };
+    let enrolled: number, capacity: number, remaining: number, known: boolean;
+    if (goal && goal.target != null) { enrolled = goal.enrolled; capacity = goal.target; remaining = Math.max(0, capacity - enrolled); known = true; }
+    else {
+      enrolled = list.reduce((n, t) => n + t.enrolled, 0);
+      capacity = list.reduce((n, t) => n + (t.capacity ?? t.enrolled), 0);
+      remaining = list.reduce((n, t) => n + (t.capacity != null ? Math.max(0, t.capacity - t.enrolled) : 0), 0);
+      known = list.length > 0 && unknownTeams === 0;
+    }
+    const recruiting = !flag && RECRUITING_STATUSES.includes(p.status);
+    return { program: p.id, enrolled, capacity, remaining, progress: capacity ? Math.min(100, Math.round(enrolled / capacity * 100)) : 0, teams: list.length, unknownTeams, recruiting, status: flag || p.status || '已结束', known };
   });
 }
-/** Recruiting first, by remaining seats (desc), then progress (asc) and name. */
+/** Recruiting first; then fewest remaining seats first; projects with no teams / unknown capacity last. */
 export const sortRecruitment = (a: ProjectRecruitment, b: ProjectRecruitment) =>
-  Number(b.recruiting) - Number(a.recruiting) || b.remaining - a.remaining || a.progress - b.progress || a.program.localeCompare(b.program);
-
+  Number(b.recruiting) - Number(a.recruiting) || Number(b.known) - Number(a.known) || a.remaining - b.remaining || b.progress - a.progress || a.program.localeCompare(b.program);
+/** Teams: unflagged first, then fewest remaining first, unknown capacity last. */
+export const sortTeams = (a: TeamSeat & { recruitStatus?: string | null }, b: TeamSeat & { recruitStatus?: string | null }) =>
+  Number(teamLocked(a)) - Number(teamLocked(b)) || Number(a.capacity == null) - Number(b.capacity == null) ||
+  (a.capacity != null && b.capacity != null ? Math.max(0, a.capacity - a.enrolled) - Math.max(0, b.capacity - b.enrolled) : 0) || a.name.localeCompare(b.name, 'zh-CN');
 export type SalesMember = { id: string; name: string; grade: string; status: string; health: string; school: string };
 export type SalesTeam = TeamSeat & { members: SalesMember[]; hiddenMembers: number; recruitStatus?: string | null; posterUrl?: string | null; scheduleUrl?: string | null };
 /** Project-level 招生目标 / 已招生人数 (项目总览 sheet). */
-export type ProgramTarget = { id: string; target: number; enrolled: number };
+export type ProgramTarget = { id: string; target: number | null; enrolled: number; flag?: string | null };
 /** Sheet 招募状态 → still recruiting? (火热招募 / 正常招募 yes; 招生结束 no). Unknown → null. */
 export const sheetRecruiting = (s: unknown): boolean | null => s == null || s === '' ? null : /招生结束|结束|截止|满员/.test(String(s)) ? false : true;
 
 /** 队伍招募状态 options in 队伍管理. Legacy sheet values (火热招募 / 正常招募 / 招生结束) are still understood. */
-export const TEAM_RECRUIT_STATUSES = ['招募中', '火热招募', '已满', '已结束', '筹备中'] as const;
+export const TEAM_RECRUIT_STATUSES = ['招募中', '火热招募', '已满员', '已结束', '筹备中'] as const;
 /** Normalise the sheet wording onto the 队伍管理 options. */
 export const normalizeRecruitStatus = (s: unknown): string | null => {
   const v = String(s ?? '').trim();
   if (!v) return null;
   if (v === '正常招募') return '招募中';
   if (/招生结束|结束|截止/.test(v)) return '已结束';
-  if (/满/.test(v)) return '已满';
+  if (/满/.test(v)) return '已满员';
   return v;
 };
 /** Enrolled = the larger of live active members and the recorded 已招人数 (sheet), so adding a member counts at once. */
 export const teamEnrolled = (live: number, recorded: number | null | undefined) => Math.max(live, recorded ?? 0);
 /** Remaining seats, live: capacity − enrolled (null when capacity unknown). */
 export const teamRemaining = (capacity: number | null | undefined, enrolled: number) => capacity == null ? null : Math.max(0, capacity - enrolled);
-/** A team is locked for sales (grey + lock, not clickable) when it is full or no longer recruiting. */
-export function teamLocked(t: { capacity: number | null; enrolled: number; recruitStatus?: string | null }): boolean {
+/** A team is locked for sales (grey + lock, not clickable) only by a manual flag: 已满员 or 已结束 (never by computed remaining = 0). */
+export function teamLocked(t: { recruitStatus?: string | null }): boolean {
   const st = normalizeRecruitStatus(t.recruitStatus);
-  if (st === '已满' || st === '已结束') return true;
-  return t.capacity != null && t.capacity - t.enrolled <= 0;
+  return st === '已满员' || st === '已结束';
 }
 /** 队伍 edit rights: superadmin always; otherwise the team's 负责人 (ops owner, matched by name or e-mail). Teams without an owner stay editable by any ops writer. */
 export function canEditTeam(user: { role?: string | null; name?: string | null; email?: string | null } | null | undefined, team: { opsOwner?: string | null }): boolean {

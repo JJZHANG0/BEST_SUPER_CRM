@@ -79,6 +79,8 @@ export function ProgramHub() {
           <p>{c?.summary || p.description}</p>
           <div className="project-card-foot">
             <Badge tone={p.status === '筹备中' ? 'neutral' : 'green'}>{p.status}</Badge>
+            {p.recruitFlag && <Badge tone="neutral">{p.recruitFlag}</Badge>}
+            {s.user?.role === 'superadmin' && <select className="recruit-flag-select" aria-label={`${p.name} 招募标记`} title="销售端「火热招募中」显示控制（仅超级管理员）" value={p.recruitFlag || ''} onChange={e => { const v = e.target.value || null; s.setPrograms(l => l.map(x => x.id === p.id ? { ...x, recruitFlag: v } : x)); }}><option value="">招募中</option><option value="已满员">已满员</option><option value="停止招生">停止招生</option></select>}
             {ops && <span title={'项目书' + state}><Badge tone={stateTone(state)}>{state === '已发布' ? '书·已发布' : state === '未发布' ? '书·草稿' : '书·待更新'}</Badge></span>}
             <span className="project-card-posts" title="推文数量"><Newspaper size={13} />{n}</span>
             {ops && <button className="icon-button compact-icon" aria-label={`编辑${p.name}项目书`} onClick={() => s.go('programs/' + p.id + '/compose')}><PenLine size={15} /></button>}

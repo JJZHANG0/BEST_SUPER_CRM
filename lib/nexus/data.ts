@@ -1,5 +1,6 @@
 export type { Role } from './roles';
-export type Program = {id:string;name:string;en:string;short:string;type:string;color:string;description:string;date:string;status:string;curriculum:string;draft?:string;published:boolean};
+export type Program = {id:string;name:string;en:string;short:string;type:string;color:string;description:string;date:string;status:string;curriculum:string;draft?:string;published:boolean;
+  /** Manual 招募 flag: 已满员 / 停止招生 (hides the project from sales 火热招募) */ recruitFlag?:string|null};
 import type { StudentHealth } from './students';
 /** Optional roster fields (union across Excel imports — docs/roster-import-report.json). Missing keys stay empty / omitted. */
 export type StudentProfile = {

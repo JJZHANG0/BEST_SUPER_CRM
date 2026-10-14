@@ -60,6 +60,7 @@ export const programs = pgTable('programs', {
   recruitTarget: integer('recruit_target'),
   recruitEnrolled: integer('recruit_enrolled'),
   recruitSource: text('recruit_source'),
+  recruitFlag: text('recruit_flag'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });

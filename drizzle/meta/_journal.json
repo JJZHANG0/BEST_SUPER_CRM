@@ -148,6 +148,13 @@
       "when": 1791810000000,
       "tag": "0020_recruit_overview",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791810001000,
+      "tag": "0021_program_recruit_flag",
+      "breakpoints": true
     }
   ]
 }

@@ -6,12 +6,12 @@
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { Lock, Flame, CircleDollarSign, UserRoundCheck, FolderSearch, ChevronRight, ChevronLeft, X, Users, CalendarDays, ExternalLink, FileText, Image as ImageIcon, Search, Eye, EyeOff } from 'lucide-react';
+import { Maximize2, Lock, Flame, CircleDollarSign, UserRoundCheck, FolderSearch, ChevronRight, ChevronLeft, X, Users, CalendarDays, ExternalLink, FileText, Image as ImageIcon, Search, Eye, EyeOff } from 'lucide-react';
 import { useNexus, useVisible, type FileRecord } from '@/lib/nexus/store';
 import { api } from '@/lib/nexus/api';
 import { assetUrl } from '@/lib/nexus/assets';
 import { occurrences } from '@/lib/nexus/schedule';
-import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment, type ProgramTarget, sheetRecruiting, teamLocked } from '@/lib/nexus/sales';
+import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment, type ProgramTarget, sheetRecruiting, teamLocked, sortTeams } from '@/lib/nexus/sales';
 import type { Program } from '@/lib/nexus/data';
 import { ProgramMark, Badge } from './ui';
 import { greeting } from './recruitment';
@@ -88,8 +88,8 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
     const list = rows.filter(r => showEnded || r.recruiting).sort(sortRecruitment);
     const ended = rows.filter(r => !r.recruiting).length;
     return <>
-      <div className="sh-toolbar"><span>{list.length} 个项目 · 按剩余名额从多到少</span>
-        {ended > 0 && <button type="button" className="sh-toggle" aria-pressed={showEnded} onClick={() => setShowEnded(!showEnded)}>{showEnded ? <EyeOff size={15} /> : <Eye size={15} />}{showEnded ? '隐藏已结束' : `显示已结束（${ended}）`}</button>}
+      <div className="sh-toolbar"><span>{list.length} 个项目 · 按剩余名额从少到多</span>
+        {ended > 0 && <button type="button" className="sh-toggle" aria-pressed={showEnded} onClick={() => setShowEnded(!showEnded)}>{showEnded ? <EyeOff size={15} /> : <Eye size={15} />}{showEnded ? '隐藏已停招' : `显示已满员 / 停招（${ended}）`}</button>}
       </div>
       {list.length ? <ul className="sh-list">{list.map((r, i) => { const p = prog(r.program); if (!p) return null; return <li key={r.program} style={{ '--i': i } as CSSProperties}>
         <button type="button" className="sh-row" onClick={() => go({ kind: 'project', id: r.program }, 1)}>
@@ -101,16 +101,16 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
           <span className="sh-row-side"><b className={r.remaining ? 'sh-hot' : ''}>{r.remaining}</b><small>剩余名额</small>{!r.recruiting && <Badge tone="neutral">{r.status}</Badge>}</span>
           <ChevronRight size={18} className="sh-chev" />
         </button></li>; })}</ul>
-        : <Empty icon={Flame} title="暂无招募中的项目" text="项目状态为招生中 / 滚动招生 / 预报名时会出现在这里。" />}
+        : <Empty icon={Flame} title="暂无招募中的项目" text="项目状态为招生中 / 滚动招生 / 预报名且未被标记为已满员 / 停止招生时会出现在这里。" />}
     </>;
   }
   if (level.kind === 'project') {
     const p = prog(level.id); const r = rows.find(x => x.program === level.id);
-    const list = teams.filter(t => t.program === level.id).sort((a, b) => Number(teamLocked(a)) - Number(teamLocked(b)) || ((b.capacity ?? b.enrolled) - b.enrolled) - ((a.capacity ?? a.enrolled) - a.enrolled) || a.name.localeCompare(b.name, 'zh-CN'));
+    const list = teams.filter(t => t.program === level.id).sort(sortTeams);
     return <>
       {p && r && <div className="sh-hero"><Ring value={r.progress} size={78} label={<><b>{r.progress}%</b><small>完成度</small></>} /><div><span className="sh-eyebrow">{p.short} · {r.status}</span><h3>{p.name}</h3><p>已报 {r.enrolled} / {r.capacity} 人 · 剩余 <b>{r.remaining}</b> 个名额</p></div></div>}
       {list.length ? <ul className="sh-list">{list.map((t, i) => { const pct = t.capacity ? Math.min(100, Math.round(t.enrolled / t.capacity * 100)) : 0; const left = t.capacity != null ? Math.max(0, t.capacity - t.enrolled) : null; return <li key={t.id} style={{ '--i': i } as CSSProperties}>
-        {(() => { const locked = teamLocked(t); return <button type="button" className={'sh-row' + (locked ? ' locked' : '')} disabled={locked} aria-disabled={locked} title={locked ? '该队伍已满员 / 停止招募' : undefined} onClick={locked ? undefined : () => go({ kind: 'team', id: t.id }, 1)}>
+        {(() => { const locked = teamLocked(t); return <button type="button" className={'sh-row' + (locked ? ' locked' : '')} disabled={locked} aria-disabled={locked} title={locked ? `该队伍已标记为${t.recruitStatus}` : undefined} onClick={locked ? undefined : () => go({ kind: 'team', id: t.id }, 1)}>
           <span className="sh-team-dot">{locked ? <Lock size={16} /> : <Users size={17} />}</span>
           <span className="sh-row-main"><strong>{t.name}</strong><small>{t.teacher || '授课老师待定'} · 已报 <b>{t.enrolled}</b>{t.capacity != null ? ` / ${t.capacity}` : ''} 人{t.classType ? ` · ${t.classType.replace(/^\d+\.\s*/, '')}` : ''}</small>{t.capacity != null && <Bar value={pct} />}</span>
           <span className="sh-row-side">{left != null ? <><b className={left ? 'sh-hot' : ''}>{left}</b><small>剩余</small></> : <small className="sh-pending">名额待定</small>}{t.recruitStatus && <Badge tone={sheetRecruiting(t.recruitStatus) === false ? 'neutral' : t.recruitStatus.includes('火热') ? 'pink' : 'green'}>{t.recruitStatus}</Badge>}</span>
@@ -122,12 +122,39 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
   }
   const t = teams.find(x => x.id === level.id);
   if (!t) return <Empty icon={Users} title="队伍不存在" />;
-  if (teamLocked(t)) return <Empty icon={Lock} title="该队伍已满员" text="已满或停止招募的队伍不开放详情。" />;
+  if (teamLocked(t)) return <Empty icon={Lock} title="该队伍已停止招募" text="运营已将该队伍标记为已满员 / 已结束，不开放详情。" />;
   return <TeamDetail team={t} program={prog(t.program)} />;
 }
+/** Image thumbnail that opens an in-page fullscreen lightbox (real <img>: iOS long-press → 存储图像 works). */
+function ImageCard({ src, alt, label, className, onError }: { src: string; alt: string; label: string; className?: string; onError?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const startY = useRef<number | null>(null);
+  const [dy, setDy] = useState(0);
+  const zoomed = () => typeof window !== 'undefined' && (window.visualViewport?.scale ?? 1) > 1.05;
+  return <>
+    <button type="button" className={'sh-poster ' + (className || '')} onClick={() => setOpen(true)}><img src={src} alt={alt} loading="lazy" onError={onError} /><span><Maximize2 size={14} />{label}</span></button>
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="sh-lightbox-backdrop" />
+        <DialogPrimitive.Content className="sh-lightbox" aria-describedby={undefined} style={{ '--dy': dy + 'px', opacity: dy ? Math.max(0.35, 1 - dy / 400) : undefined } as CSSProperties}
+          onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
+          onTouchStart={e => { startY.current = e.touches.length === 1 && !zoomed() ? e.touches[0].clientY : null; }}
+          onTouchMove={e => { if (startY.current == null || e.touches.length !== 1) return; setDy(Math.max(0, e.touches[0].clientY - startY.current)); }}
+          onTouchEnd={() => { if (dy > 90) setOpen(false); setDy(0); startY.current = null; }}>
+          <DialogPrimitive.Title className="sr-only">{alt}</DialogPrimitive.Title>
+          <DialogPrimitive.Close className="sh-lightbox-close" aria-label="关闭"><X size={22} /></DialogPrimitive.Close>
+          <img src={src} alt={alt} className="sh-lightbox-img" />
+          <p className="sh-lightbox-hint">双指缩放 · 长按图片可保存 · 下滑或点空白处关闭</p>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  </>;
+}
+
 function TeamDetail({ team, program }: { team: SalesTeam; program?: Program }) {
   const s = useNexus();
   const article = s.articles.find(a => a.program === team.program)?.published;
+  // The team's own 课题海报 wins; the project cover / demo poster is only a fallback when the team has none.
   const poster = team.posterUrl || article?.cover || (program ? assetUrl(`materials/poster-${program.id}.svg`) : '');
   const schedule = (article?.blocks || []).filter(b => b.type === 'highlight' && b.kind === 'schedule').flatMap(b => b.type === 'highlight' ? b.items : []).filter(i => i.label && i.value);
   const courses = s.courses.filter(c => c.team === team.id);
@@ -145,15 +172,15 @@ function TeamDetail({ team, program }: { team: SalesTeam; program?: Program }) {
       {team.hiddenMembers > 0 && <p className="sh-note">另有 {team.hiddenMembers} 位队员由其他顾问负责，姓名与档案已隐藏。</p>}
       {!team.enrolled && <p className="sh-note">本队伍暂未有报名成员。</p>}
     </section>
-    <section className="sh-section"><h4><ImageIcon size={16} />{team.posterUrl ? '课题海报' : '项目海报'}</h4>
-      {poster && !posterBroken ? <a className="sh-poster" href={poster} target="_blank" rel="noopener noreferrer"><img src={poster} alt={`${program?.name || ''} 海报`} loading="lazy" onError={() => setPosterBroken(true)} /><span><ExternalLink size={14} />查看大图</span></a> : <p className="sh-note">该项目尚未上传海报。</p>}
-    </section>
     <section className="sh-section"><h4><CalendarDays size={16} />课程计划</h4>
-      {team.scheduleUrl && <a className="sh-poster sh-schedule-img" href={team.scheduleUrl} target="_blank" rel="noopener noreferrer"><img src={team.scheduleUrl} alt={`${team.name} 课程计划`} loading="lazy" /><span><ExternalLink size={14} />查看课表大图</span></a>}
+      {team.scheduleUrl && <ImageCard src={team.scheduleUrl} alt={`${team.name} 课程计划`} label="查看课程计划大图" className="sh-schedule-img" />}
       {shown.length ? <ul className="sh-sessions">{shown.map(o => <li key={o.key}><time>{o.date.slice(5).replace('-', '/')}</time><span><strong>{o.start}{o.end ? '–' + o.end : ''}</strong><small>{o.course.name}{o.location ? ' · ' + o.location : ''}</small></span></li>)}</ul> : null}
       {occ.length > shown.length && <p className="sh-note">共 {occ.length} 节，显示{upcoming.length ? '接下来' : '最近'}的 {shown.length} 节。</p>}
-      {schedule.length > 0 && <dl className="sh-facts">{schedule.map(i => <div key={i.label}><dt>{i.label}</dt><dd>{i.value}</dd></div>)}</dl>}
-      {!shown.length && !schedule.length && !team.scheduleUrl && <p className="sh-note">尚未排课，项目书中也没有时间安排。</p>}
+      {!team.scheduleUrl && schedule.length > 0 && <dl className="sh-facts">{schedule.map(i => <div key={i.label}><dt>{i.label}</dt><dd>{i.value}</dd></div>)}</dl>}
+      {!shown.length && !schedule.length && !team.scheduleUrl && <p className="sh-note">尚未上传课程计划，也未排课。</p>}
+    </section>
+    <section className="sh-section"><h4><ImageIcon size={16} />项目海报{team.posterUrl ? ' · 课题海报' : ''}</h4>
+      {poster && !posterBroken ? <ImageCard src={poster} alt={`${team.name} 海报`} label="查看大图" onError={() => setPosterBroken(true)} /> : <p className="sh-note">该队伍尚未上传海报。</p>}
     </section>
   </div>;
 }
@@ -184,7 +211,7 @@ export default function SalesHome() {
   const localTeams = useMemo<SalesTeam[]>(() => s.teams.filter(t => !isPseudoTeam(t.name)).map(t => {
     const ids = new Set(s.enrollments.filter(e => e.team === t.id && !inactiveEnrollment(e.status)).map(e => e.student));
     const members = s.students.filter(x => ids.has(x.id) && salesOwns(x.sales, { name: myName, salesName: mySalesName }));
-    return { id: t.id, program: t.program, name: t.name, teacher: t.teacher, enrolled: ids.size, capacity: null, classType: null, members: members.map(x => ({ id: x.id, name: x.name, grade: x.grade, status: x.status, health: x.health, school: x.profile?.school || '' })), hiddenMembers: ids.size - members.length };
+    return { id: t.id, program: t.program, name: t.name, teacher: t.teacher, enrolled: Math.max(ids.size, t.recruitEnrolled ?? 0), capacity: t.recruitCapacity ?? null, classType: null, recruitStatus: t.recruitStatus ?? null, posterUrl: t.posterUrl ?? null, scheduleUrl: t.scheduleUrl ?? null, members: members.map(x => ({ id: x.id, name: x.name, grade: x.grade, status: x.status, health: x.health, school: x.profile?.school || '' })), hiddenMembers: ids.size - members.length };
   }), [s.teams, s.enrollments, s.students, myName, mySalesName]);
   useEffect(() => {
     if (!s.apiMode) return;
