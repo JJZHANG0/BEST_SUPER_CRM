@@ -81,6 +81,7 @@ export const api = {
   weather: (city?: string) => request<import('./weather').WeatherPayload>('/weather' + (city ? `?city=${encodeURIComponent(city)}` : '')),
   workHours: (month?: string) => request<{ month: string; totalMs: number }>('/work-hours' + (month ? `?month=${encodeURIComponent(month)}` : '')),
   reportWorkHours: (month: string, deltaMs: number) => request<{ month: string; totalMs: number }>('/work-hours', { method: 'POST', body: JSON.stringify({ month, deltaMs }) }),
+  salesRecruitment: () => request<{ teams: import('./sales').SalesTeam[] }>('/sales/recruitment'),
   adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),
   createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: number, body: { name?: string; username?: string; role?: Role; active?: boolean; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

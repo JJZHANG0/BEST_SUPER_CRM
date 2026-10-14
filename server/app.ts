@@ -19,6 +19,7 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
+import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam } from '../lib/nexus/sales';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
@@ -842,7 +843,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses: visibleOpsCourses, lessons: myLessons, lessonFeedbacks: myLessonFeedbacks, staff, courseSessions, announcements: announcementList, lessonMonthLocks });
     }
     // Sales: own students only, no drafts, public files, visible feedback.
-    const mine = students.filter(s => s.sales === user.salesName);
+    const mine = students.filter(s => salesOwns(s.sales, user));
     const ids = new Set(mine.map(s => s.id as string));
     articles = articles.filter(a => a.published).map(a => ({ ...a, draft: a.published! }));
     return c.json({
@@ -861,11 +862,46 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     });
   });
 
+  /**
+   * 销售工作台 · 火热招募中: seats per team (enrolled / capacity from the 课时课程 班级类型) plus members.
+   * Sales see names only for their own students; other members are counted, not listed.
+   */
+  app.get('/sales/recruitment', async c => {
+    const user = c.get('user');
+    if (isTeacher(user.role)) return forbidden(c);
+    const [teamRows, enrollRows, studentRows, courseRows, opsRows, typeRows] = await Promise.all([
+      db.select().from(schema.teams), db.select().from(schema.enrollments), db.select().from(schema.students),
+      db.select({ team: schema.courses.team, code: schema.courses.code }).from(schema.courses),
+      db.select({ code: schema.opsCourses.code, classType: schema.opsCourses.classType }).from(schema.opsCourses),
+      db.select({ id: schema.classTypes.id, name: schema.classTypes.name }).from(schema.classTypes),
+    ]);
+    const codeKey = (v: unknown) => String(v ?? '').replace(/\s+/g, '').toUpperCase();
+    const typeName = new Map(typeRows.map(r => [r.id, r.name]));
+    const typeByCode = new Map(opsRows.map(r => [codeKey(r.code), typeName.get(r.classType) || '']));
+    const studentById = new Map(studentRows.map(s => [s.id, s]));
+    const sales = user.role === 'sales';
+    const teams = teamRows.filter(t => !isPseudoTeam(t.name)).map(t => {
+      const ids = new Set(enrollRows.filter(e => e.team === t.id && !inactiveEnrollment(e.status)).map(e => e.student));
+      for (const s of studentRows) if (s.team === t.id && !inactiveEnrollment(s.status)) ids.add(s.id);
+      const types = [...new Set(courseRows.filter(x => x.team === t.id).map(x => typeByCode.get(codeKey(x.code)) || '').filter(Boolean))];
+      const caps = types.map(capacityFromClassType).filter((n): n is number => n != null);
+      const members = [...ids].map(id => studentById.get(id)).filter((s): s is NonNullable<typeof s> => !!s);
+      const visible = sales ? members.filter(s => salesOwns(s.sales, user)) : members;
+      return {
+        id: t.id, program: t.program, name: t.name, teacher: t.teacher, enrolled: ids.size,
+        capacity: caps.length ? Math.max(...caps) : null, classType: types[0] || null,
+        members: visible.map(s => ({ id: s.id, name: s.name, grade: s.grade, status: s.status, health: s.health, school: (s.profile as Record<string, string> | null)?.school || '' })),
+        hiddenMembers: members.length - visible.length,
+      };
+    });
+    return c.json({ teams });
+  });
+
   app.get('/students/:id/history', async c => {
     const user = c.get('user'), id = c.req.param('id');
     const [student] = await db.select().from(schema.students).where(eq(schema.students.id, id)).limit(1);
     if (!student) return c.json({ error: 'not_found' }, 404);
-    if (user.role === 'sales' && student.sales !== user.salesName) return c.json({ error: 'not_found' }, 404);
+    if (user.role === 'sales' && !salesOwns(student.sales, user)) return c.json({ error: 'not_found' }, 404);
     if (isTeacher(user.role)) {
       const [tTeams, tEnroll, tOps, tCourses, tStudents] = await Promise.all(
         (['teams', 'enrollments', 'opsCourses', 'courses', 'students'] as const).map(list),

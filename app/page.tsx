@@ -9,7 +9,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {Toaster,toast} from 'sonner';
 import Login from '@/components/nexus/login';
 import {BrandMark} from '@/components/nexus/brand';
-import SalesHome from '@/components/nexus/recruitment';
+import SalesHome from '@/components/nexus/sales-home';
 import Dashboard, {TeacherHome} from '@/components/nexus/dashboard';
 import LiquidGlassLayer from '@/components/nexus/liquid-glass';
 import { PixelChase } from '@/components/nexus/pixel-chase';

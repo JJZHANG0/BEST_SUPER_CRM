@@ -18,6 +18,7 @@ import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbac
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
 import { dedupeSessions, type CourseSession } from './schedule';
+import { salesOwns } from './sales';
 import type { Announcement, AnnouncementAudience, AnnouncementDirectoryUser, AnnouncementReadRow } from './announcements';
 export type FileRecord=seed.Resource & {url?:string};
 export type LoginResult={ok:true;role:Role}|{ok:false;error:string};
@@ -499,7 +500,7 @@ export function useVisible(){
   const teacherScope=s.role==='teacher'?teacherRosterScope(myName,{
     opsCourses:s.opsCourses,courses:s.courses,teams:s.teams,enrollments:s.enrollments,students:s.students,
   }):null;
-  const students=s.role==='sales'?s.students.filter(x=>x.sales===salesName)
+  const students=s.role==='sales'?s.students.filter(x=>salesOwns(x.sales,{name:myName,salesName}))
     :s.role==='teacher'?s.students.filter(x=>teacherScope!.studentIds.has(x.id))
     :s.students;
   const teams=s.role==='teacher'?s.teams.filter(t=>teacherScope!.teamIds.has(t.id)):s.teams;
