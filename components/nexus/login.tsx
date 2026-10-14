@@ -11,7 +11,7 @@ const CREW_WEBP=assetUrl('brand/login-crew.webp'),CREW_SM=assetUrl('brand/login-
 export default function Login() {
   const s=useNexus();
   const sales=s.role==='sales';const teacher=s.role==='teacher';
-  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[show,setShow]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[help,setHelp]=useState(false),[caps,setCaps]=useState(false);
+  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[show,setShow]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[help,setHelp]=useState(false),[caps,setCaps]=useState(false),[kb,setKb]=useState(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current)},[]);
   // Hero parallax: pointer position -> CSS vars (skipped for reduced motion / touch).
@@ -22,6 +22,12 @@ export default function Login() {
     const leave=()=>{el.style.setProperty('--px','0');el.style.setProperty('--py','0')};
     el.addEventListener('pointermove',move);el.addEventListener('pointerleave',leave);
     return()=>{cancelAnimationFrame(raf);el.removeEventListener('pointermove',move);el.removeEventListener('pointerleave',leave)}},[]);
+  useEffect(()=>{
+    const vv=window.visualViewport; if(!vv) return;
+    const sync=()=>setKb(window.innerHeight-vv.height>120);
+    sync(); vv.addEventListener('resize',sync); vv.addEventListener('scroll',sync);
+    return()=>{vv.removeEventListener('resize',sync);vv.removeEventListener('scroll',sync)};
+  },[]);
   const choose=(role:'sales'|'ops'|'teacher')=>{s.setRole(role);setEmail('');setPassword('');setError('');setHelp(false)};
   const submit=(event:FormEvent)=>{
     event.preventDefault();if(busy)return;
@@ -29,7 +35,7 @@ export default function Login() {
     setError('');setBusy(true);
     s.login(email,password).then(r=>{if(r.ok)s.go('dashboard');else{setError(r.error);setBusy(false)}});
   };
-  return <main className="access-page">
+  return <main className={"access-page"+(kb?" keyboard-open":"")}>
     <div className="access-aura" aria-hidden="true"/>
     <header className="access-header"><BrandMark href="#/login" className="access-brand" label="B.E.S.T 内部超级管理系统 · 登录页"/></header>
     <div className="access-layout">
@@ -52,9 +58,9 @@ export default function Login() {
         <h2 id="access-title">欢迎回来</h2><p className="access-subtitle">请选择身份并登录您的账号</p>
         <fieldset className="access-role access-role-3" disabled={busy}><legend className="sr-only">选择登录身份</legend>{workspaces.map(a=>{const on=a.role==='sales'?sales:a.role==='teacher'?teacher:!sales&&!teacher;return <button type="button" key={a.role} data-ws={a.role} aria-pressed={on} onClick={()=>choose(a.role)}>{a.role==='sales'?<UsersRound size={17}/>:a.role==='teacher'?<GraduationCap size={17}/>:<Layers3 size={17}/>}<span>{a.label}</span>{on&&<Check size={14} className="access-role-check" aria-hidden="true"/>}</button>})}</fieldset>
         <form onSubmit={submit} className="access-form" aria-busy={busy}>
-          <label htmlFor="access-email">用户名（姓名）</label><div className="access-input"><UserRound size={18}/><input id="access-email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={120} placeholder={'例如：张捷嘉'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}}/></div>
+          <label htmlFor="access-email">用户名（姓名）</label><div className="access-input"><UserRound size={18}/><input id="access-email" name="username" type="text" inputMode="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" required maxLength={120} placeholder={'例如：张捷嘉'} value={email} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onChange={e=>{setEmail(e.target.value);setError('')}} onFocus={e=>e.currentTarget.scrollIntoView({block:'center',behavior:'smooth'})}/></div>
           <div className="access-password-label"><label htmlFor="access-password">登录密码</label><button type="button" disabled={busy} onClick={()=>setHelp(!help)} aria-expanded={help}>需要帮助？</button></div>
-          <div className="access-input"><LockKeyhole size={18}/><input id="access-password" type={show?'text':'password'} autoComplete="current-password" required placeholder="请输入账号密码" value={password} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onKeyUp={e=>setCaps(e.getModifierState('CapsLock'))} onBlur={()=>setCaps(false)} onChange={e=>{setPassword(e.target.value);setError('')}}/><button type="button" className="access-reveal" aria-label={show?'隐藏密码':'显示密码'} aria-pressed={show} onClick={()=>setShow(!show)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>
+          <div className="access-input"><LockKeyhole size={18}/><input id="access-password" name="password" type={show?'text':'password'} autoComplete="current-password" enterKeyHint="go" required placeholder="请输入账号密码" value={password} disabled={busy} aria-invalid={!!error} aria-describedby={error?'access-error':undefined} onKeyUp={e=>setCaps(e.getModifierState('CapsLock'))} onBlur={()=>setCaps(false)} onChange={e=>{setPassword(e.target.value);setError('')}} onFocus={e=>e.currentTarget.scrollIntoView({block:'center',behavior:'smooth'})}/><button type="button" className="access-reveal" aria-label={show?'隐藏密码':'显示密码'} aria-pressed={show} onClick={()=>setShow(!show)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>
           {caps&&<p className="access-help" role="status">大写锁定已开启，请注意密码大小写。</p>}
           {help&&<p className="access-help" role="status">内部账号由管理员分配，不开放注册。运营老师使用本人姓名作为用户名登录（也可使用邮箱），首次登录需修改初始密码；忘记密码请联系超级管理员重置。</p>}
           {error&&<p id="access-error" role="alert" className="access-error">{error}</p>}

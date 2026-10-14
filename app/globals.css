@@ -2095,3 +2095,70 @@ html[data-workspace=teacher] .session-chip-title{color:#374151}
 .timetable-name-mode button span{font-size:.6875rem;font-weight:500;color:#9a8bb0}
 .timetable-name-mode button.selected{border-color:#8b5cf6;background:#f3edff;color:#4a3480;box-shadow:inset 0 0 0 1px #c4b0f0}
 @media(max-width:560px){.timetable-name-mode{grid-template-columns:1fr}.teacher-course-card{flex-direction:column;align-items:flex-start}.tcc-meta{width:100%;justify-content:space-between}}
+
+/* ——— Mobile polish (≤640 / ≤767): login keyboard, shell, tables, pet ——— */
+.ops-mobile-cards{display:none;list-style:none;margin:12px 0 0;padding:0;flex-direction:column;gap:10px}
+.ops-mobile-card{display:flex;flex-direction:column;gap:6px;padding:14px 14px 12px;border:1px solid #eee8f4;border-radius:14px;background:#fffd}
+.ops-mobile-card.is-locked-month{opacity:.82}
+.ops-mobile-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#8d7f9b;font-size:.8125rem}
+.ops-mobile-amount{color:#3f354c;font-size:1rem;font-variant-numeric:tabular-nums}
+.ops-mobile-course{font-size:.9375rem;font-weight:600;color:#3f354c;line-height:1.45;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ops-mobile-code{font-size:.75rem;color:#9a8aae}
+.ops-mobile-meta{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:.8125rem;color:#7a6e8a;margin-top:2px}
+.ops-mobile-actions{display:flex;gap:4px;margin-top:4px;padding-top:8px;border-top:1px solid #f0eaf6}
+.ops-mobile-actions .icon-button{min-width:44px;min-height:44px}
+
+@media(max-width:767px){
+  .desktop-only-table{display:none}
+  .ops-mobile-cards{display:flex}
+  /* Course name in any remaining tables: clamp instead of ballooning row height */
+  .ops-table .course-stack .cell-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
+  .ops-table [data-slot=table-cell].course-cell{padding-bottom:12px}
+  .ops-table .course-stack .cell-sub{position:static;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .ops-table-wrap{margin:0;-webkit-overflow-scrolling:touch}
+  .ops-table{min-width:720px}
+  .ops-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}
+  .ops-stats>div{padding:14px!important}
+  .ops-filters{flex-wrap:wrap}
+  .ops-filters .search-box{flex:1 1 100%;min-width:0}
+  .teacher-summary{grid-template-columns:1fr}
+  /* Pixel pet: tuck smaller, clear of bottom nav */
+  .pixel-pet{width:44px;height:60px;right:10px;bottom:calc(88px + env(safe-area-inset-bottom));opacity:.92;z-index:35}
+  .pixel-pet-canvas{width:44px;height:60px}
+  .pixel-pet-quip{display:none}
+  .keyboard-open .pixel-pet{display:none}
+  /* Bottom nav: sit above home indicator; content already padded */
+  .bottom-nav{padding-bottom:max(8px,env(safe-area-inset-bottom));bottom:max(6px,env(safe-area-inset-bottom));left:10px;right:10px}
+  .bottom-nav button{min-height:52px;font-size:.625rem;gap:3px}
+  .main-content{padding-bottom:calc(118px + env(safe-area-inset-bottom))}
+  /* Stats / workbench: single column when very cramped */
+  .stats-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* Touch-friendly row actions everywhere */
+  .row-actions .icon-button{min-width:44px;min-height:44px}
+}
+
+@media(max-width:640px){
+  /* Login: safe areas, no fixed chrome fighting the keyboard */
+  .access-page{padding:max(16px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .access-page.keyboard-open{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:8px}
+  .access-page.keyboard-open .access-header,
+  .access-page.keyboard-open .access-hero,
+  .access-page.keyboard-open .access-footer{display:none}
+  .access-page.keyboard-open .access-layout{margin:0 auto;max-width:100%}
+  .access-page.keyboard-open .access-card{padding:18px 16px;border-radius:18px;box-shadow:0 8px 28px #4e426218}
+  .access-role{position:sticky;top:0;z-index:2;background:#fffffff8;padding-bottom:8px;margin-bottom:12px}
+  .access-role.access-role-3 button{min-height:52px;touch-action:manipulation}
+  .access-input{min-height:52px}
+  .access-input input{font-size:16px!important;line-height:1.4} /* ≥16px prevents iOS zoom */
+  .access-submit{min-height:52px;touch-action:manipulation}
+  .access-reveal{min-width:44px;min-height:44px}
+  .access-hero-art{max-width:min(260px,72vw);margin-inline:auto}
+  .access-hero-img img{width:100%;height:auto;max-height:160px;object-fit:contain}
+  html,body{overflow-x:hidden}
+  .app-body,.main-content{max-width:100vw}
+}
+
+@media(max-width:374px){
+  .ops-mobile-course{font-size:.875rem}
+  .pixel-pet{display:none} /* very small phones: hide pet entirely so nav stays clear */
+}

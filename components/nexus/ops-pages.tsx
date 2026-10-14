@@ -321,7 +321,8 @@ export function LessonsPage() {
         <TeacherHours rows={rows} month={month} />
         {all && teacher === ALL && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <button type="button" key={t.opsTeacher} onClick={() => setTeacher(s.staff.find(u => u.email.toLowerCase() === t.opsTeacher.toLowerCase())?.email || t.opsTeacher)} title={'只看 ' + s.staffName(t.opsTeacher)}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></button>)}</div>}
         <div className="results-meta">{rows.length} 条记录<span>{all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
-        {rows.length ? <div className="ops-table-wrap"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '实到/应到', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
+        {rows.length ? <>
+          <div className="ops-table-wrap desktop-only-table"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '实到/应到', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{rows.map(r => { const c = course(r.course); const editable = rowEditable(r); return <TableRow key={r.id} className={editable ? undefined : 'is-locked-month'}>
             <TableCell className="nowrap">{r.date}</TableCell>
             <TableCell className="course-cell"><div className="course-stack"><strong className="cell-title">{c?.name || '已删除的课程'}</strong>{c?.code ? <small className="cell-sub">{c.code}</small> : null}</div></TableCell>
@@ -340,6 +341,20 @@ export function LessonsPage() {
                 : <span className="row-lock-hint" title="该月已确认锁定，仅张捷嘉可修改"><Lock size={14} /></span>}
             </TableCell>
           </TableRow>; })}</TableBody></Table></div>
+          <ul className="ops-mobile-cards">{rows.map(r => { const c = course(r.course); const editable = rowEditable(r); return <li key={r.id} className={'ops-mobile-card' + (editable ? '' : ' is-locked-month')}>
+            <div className="ops-mobile-card-top"><time dateTime={r.date}>{r.date}</time><b className="ops-mobile-amount">{money2(r.amount)}</b></div>
+            <strong className="ops-mobile-course" title={c?.name}>{c?.name || '已删除的课程'}</strong>
+            {c?.code ? <small className="ops-mobile-code">{c.code}</small> : null}
+            <div className="ops-mobile-meta"><span>{r.hours} 课时</span><span>{headcount(r)}</span><span>{lessonTeacher(r, s.opsCourses)}</span></div>
+            <div className="ops-mobile-actions">
+              <button type="button" className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('该月课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={18} /></button>
+              {editable
+                ? <><button type="button" className="icon-button" aria-label="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={18} /></button>
+                  <button type="button" className="icon-button" aria-label="删除" onClick={() => remove(r)}><Trash2 size={18} /></button></>
+                : <span className="row-lock-hint" title="该月已确认锁定，仅张捷嘉可修改"><Lock size={16} /></span>}
+            </div>
+          </li>; })}</ul>
+        </>
           : <EmptyState icon={Clock} title={month ? `${monthLabel(month)}${person ? ' · ' + person : ''}还没有课时记录` : '还没有课时记录'} description="每上完一节课记录一次（可同时填写学情反馈），月底即可直接核对教务津贴。" action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />}
       </>}
     </section>
