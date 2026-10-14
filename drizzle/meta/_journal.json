@@ -134,6 +134,13 @@
       "when": 1791790000000,
       "tag": "0018_user_pixel_pet",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0019_course_session_unique_slot",
+      "breakpoints": true
     }
   ]
 }

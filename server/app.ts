@@ -941,6 +941,9 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       const hits = scheduleConflicts(slots, { courseId: id, teacher: String(data.teacher || ''), opsTeacher: opsName, team: String(data.team || ''), location: String(data.location || '') }, courses, sessions);
       return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。请调整时间，或在表单中选择「强制设定」。', conflicts: hits } } : null;
     }
+    // One meeting per (course, date, start): a second row for the same slot is a duplicate, not a new session.
+    const twin = sessions.find(x => x.id !== id && x.course === data.course && x.date === data.date && x.start === data.start);
+    if (twin) return { status: 409, body: { error: 'conflict', message: `该课程在 ${String(data.date)} ${String(data.start)} 已有一节排课，不能重复添加。` } };
     const course = courses.find(x => x.id === data.course);
     if (!course || course.conflictOverride) return null; // the course PUT re-checks its sessions when it arrives
     const current = sessions.find(x => x.id === id);

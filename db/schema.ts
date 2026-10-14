@@ -173,7 +173,7 @@ export const courseSessions = pgTable('course_sessions', {
   references: text('reference_materials'),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
-}, t => [index('course_sessions_course_idx').on(t.course), index('course_sessions_date_idx').on(t.date)]);
+}, t => [index('course_sessions_course_idx').on(t.course), index('course_sessions_date_idx').on(t.date), uniqueIndex('course_sessions_course_slot_uq').on(t.course, t.date, t.start)]);
 
 /** 教学反馈 */
 export const feedbacks = pgTable('feedbacks', {

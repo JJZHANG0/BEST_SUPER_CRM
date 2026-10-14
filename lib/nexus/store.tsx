@@ -17,7 +17,7 @@ import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type L
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
-import type { CourseSession } from './schedule';
+import { dedupeSessions, type CourseSession } from './schedule';
 import type { Announcement, AnnouncementAudience, AnnouncementDirectoryUser, AnnouncementReadRow } from './announcements';
 export type FileRecord=seed.Resource & {url?:string};
 export type LoginResult={ok:true;role:Role}|{ok:false;error:string};
@@ -513,7 +513,7 @@ export function useVisible(){
   });
   const opsCourses=ownScope?ownScope.opsCourses:teacherScope?teacherScope.opsCourses:s.opsCourses;
   const courseIds=new Set(courses.map(c=>c.id));
-  const courseSessions=s.courseSessions.filter(x=>courseIds.has(x.course));
+  const courseSessions=dedupeSessions(s.courseSessions.filter(x=>courseIds.has(x.course)));
   return {
     students,teams,courses,opsCourses,courseSessions,
     files:s.files.filter(f=>s.role!=='sales'||f.public),

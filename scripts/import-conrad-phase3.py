@@ -657,7 +657,8 @@ def main():
             stmts.append(
                 "INSERT INTO course_sessions (id, course_id, date, start_time, end_time, location, sort_order) "
                 f"VALUES ({sql_str(s['id'])}, {sql_str(s['course'])}, {sql_str(s['date'])}, "
-                f"{sql_str(s['start'])}, {sql_str(s['end'])}, {sql_str(s['location'])}, {s['sort_order']});"
+                f"{sql_str(s['start'])}, {sql_str(s['end'])}, {sql_str(s['location'])}, {s['sort_order']}) "
+                "ON CONFLICT DO NOTHING;"
             )
 
     stmts.append("COMMIT;")

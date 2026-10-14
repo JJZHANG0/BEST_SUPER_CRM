@@ -87,6 +87,31 @@ export function buildSessions(course: string, slots: readonly ManualSlot[], newI
   return slots.slice().sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
     .map(x => ({ id: newId(), course, date: x.date, start: x.start, end: x.end, location: (x.location || '').trim() }));
 }
+/** Same meeting of one course: (course, date, start). Sessions are unique on this key (migration 0019). */
+export const sessionKey = (x: { course: string; date: string; start: string }) => `${x.course}|${x.date}|${x.start}`;
+const hasContent = (x: CourseSession) => !!(x.title || x.content || x.handouts || x.homework || x.slides || x.references);
+/**
+ * Re-saving a course's schedule: a new slot that matches an existing session (same date + start) keeps that
+ * session's id and lesson content, so the edit updates rows instead of inserting duplicates next to them.
+ */
+export function reconcileSessions(prev: readonly CourseSession[], next: readonly CourseSession[]): CourseSession[] {
+  const byKey = new Map<string, CourseSession>();
+  for (const x of prev) { const k = sessionKey(x), cur = byKey.get(k); if (!cur || (!hasContent(cur) && hasContent(x))) byKey.set(k, x); }
+  const seen = new Set<string>();
+  const out: CourseSession[] = [];
+  for (const n of next) {
+    const k = sessionKey(n); if (seen.has(k)) continue; seen.add(k);
+    const old = byKey.get(k);
+    out.push(old ? { ...old, end: n.end, location: n.location } : n);
+  }
+  return out;
+}
+/** Display guard: one row per (course, date, start), preferring the session that carries lesson content. */
+export function dedupeSessions(list: readonly CourseSession[]): CourseSession[] {
+  const byKey = new Map<string, CourseSession>();
+  for (const x of list) { const k = sessionKey(x), cur = byKey.get(k); if (!cur || (!hasContent(cur) && hasContent(x))) byKey.set(k, x); }
+  return list.filter(x => byKey.get(sessionKey(x)) === x);
+}
 export const slotsFromRule = (rule: WeeklyRule, location = ''): ManualSlot[] => weeklyDates(rule).dates.map(date => ({ date, start: rule.start, end: rule.end, location }));
 
 /** Minimal course shape (lib/nexus/data.ts Course). time is 'HH:MM–HH:MM'. */
@@ -96,7 +121,7 @@ const splitTime = (time: string) => { const [a = '', b = ''] = String(time || ''
 /** Every scheduled meeting: a course's sessions, or (courses without sessions) its single date/time. */
 export function occurrences<C extends CourseLike>(courses: readonly C[], sessions: readonly CourseSession[]): Occurrence<C>[] {
   const by = new Map<string, CourseSession[]>();
-  for (const x of sessions) { const l = by.get(x.course); if (l) l.push(x); else by.set(x.course, [x]); }
+  for (const x of dedupeSessions(sessions)) { const l = by.get(x.course); if (l) l.push(x); else by.set(x.course, [x]); }
   const out: Occurrence<C>[] = [];
   for (const c of courses) {
     const list = by.get(c.id);
