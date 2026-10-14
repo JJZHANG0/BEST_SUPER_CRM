@@ -6,12 +6,12 @@
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { Flame, CircleDollarSign, UserRoundCheck, FolderSearch, ChevronRight, ChevronLeft, X, Users, CalendarDays, ExternalLink, FileText, Image as ImageIcon, Search, Eye, EyeOff } from 'lucide-react';
+import { Lock, Flame, CircleDollarSign, UserRoundCheck, FolderSearch, ChevronRight, ChevronLeft, X, Users, CalendarDays, ExternalLink, FileText, Image as ImageIcon, Search, Eye, EyeOff } from 'lucide-react';
 import { useNexus, useVisible, type FileRecord } from '@/lib/nexus/store';
 import { api } from '@/lib/nexus/api';
 import { assetUrl } from '@/lib/nexus/assets';
 import { occurrences } from '@/lib/nexus/schedule';
-import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment, type ProgramTarget, sheetRecruiting } from '@/lib/nexus/sales';
+import { priceFromArticle, projectRecruitment, sortRecruitment, salesOwns, inactiveEnrollment, isPseudoTeam, type SalesTeam, type ProjectRecruitment, type ProgramTarget, sheetRecruiting, teamLocked } from '@/lib/nexus/sales';
 import type { Program } from '@/lib/nexus/data';
 import { ProgramMark, Badge } from './ui';
 import { greeting } from './recruitment';
@@ -106,22 +106,23 @@ function RecruitPanel({ programs, rows, teams, level, go, showEnded, setShowEnde
   }
   if (level.kind === 'project') {
     const p = prog(level.id); const r = rows.find(x => x.program === level.id);
-    const list = teams.filter(t => t.program === level.id).sort((a, b) => Number(sheetRecruiting(b.recruitStatus) !== false) - Number(sheetRecruiting(a.recruitStatus) !== false) || ((b.capacity ?? b.enrolled) - b.enrolled) - ((a.capacity ?? a.enrolled) - a.enrolled) || a.name.localeCompare(b.name, 'zh-CN'));
+    const list = teams.filter(t => t.program === level.id).sort((a, b) => Number(teamLocked(a)) - Number(teamLocked(b)) || ((b.capacity ?? b.enrolled) - b.enrolled) - ((a.capacity ?? a.enrolled) - a.enrolled) || a.name.localeCompare(b.name, 'zh-CN'));
     return <>
       {p && r && <div className="sh-hero"><Ring value={r.progress} size={78} label={<><b>{r.progress}%</b><small>完成度</small></>} /><div><span className="sh-eyebrow">{p.short} · {r.status}</span><h3>{p.name}</h3><p>已报 {r.enrolled} / {r.capacity} 人 · 剩余 <b>{r.remaining}</b> 个名额</p></div></div>}
       {list.length ? <ul className="sh-list">{list.map((t, i) => { const pct = t.capacity ? Math.min(100, Math.round(t.enrolled / t.capacity * 100)) : 0; const left = t.capacity != null ? Math.max(0, t.capacity - t.enrolled) : null; return <li key={t.id} style={{ '--i': i } as CSSProperties}>
-        <button type="button" className="sh-row" onClick={() => go({ kind: 'team', id: t.id }, 1)}>
-          <span className="sh-team-dot"><Users size={17} /></span>
+        {(() => { const locked = teamLocked(t); return <button type="button" className={'sh-row' + (locked ? ' locked' : '')} disabled={locked} aria-disabled={locked} title={locked ? '该队伍已满员 / 停止招募' : undefined} onClick={locked ? undefined : () => go({ kind: 'team', id: t.id }, 1)}>
+          <span className="sh-team-dot">{locked ? <Lock size={16} /> : <Users size={17} />}</span>
           <span className="sh-row-main"><strong>{t.name}</strong><small>{t.teacher || '授课老师待定'} · 已报 <b>{t.enrolled}</b>{t.capacity != null ? ` / ${t.capacity}` : ''} 人{t.classType ? ` · ${t.classType.replace(/^\d+\.\s*/, '')}` : ''}</small>{t.capacity != null && <Bar value={pct} />}</span>
           <span className="sh-row-side">{left != null ? <><b className={left ? 'sh-hot' : ''}>{left}</b><small>剩余</small></> : <small className="sh-pending">名额待定</small>}{t.recruitStatus && <Badge tone={sheetRecruiting(t.recruitStatus) === false ? 'neutral' : t.recruitStatus.includes('火热') ? 'pink' : 'green'}>{t.recruitStatus}</Badge>}</span>
-          <ChevronRight size={18} className="sh-chev" />
-        </button></li>; })}</ul>
+          {!locked && <ChevronRight size={18} className="sh-chev" />}
+        </button>; })()}</li>; })}</ul>
         : <Empty icon={Users} title="该项目暂无开班队伍" text="运营在队伍管理中建队后，这里会显示每支队伍的招募进度。" />}
       <button type="button" className="sh-link" onClick={() => s.go('programs/' + level.id)}>查看项目书与资料<ChevronRight size={15} /></button>
     </>;
   }
   const t = teams.find(x => x.id === level.id);
   if (!t) return <Empty icon={Users} title="队伍不存在" />;
+  if (teamLocked(t)) return <Empty icon={Lock} title="该队伍已满员" text="已满或停止招募的队伍不开放详情。" />;
   return <TeamDetail team={t} program={prog(t.program)} />;
 }
 function TeamDetail({ team, program }: { team: SalesTeam; program?: Program }) {

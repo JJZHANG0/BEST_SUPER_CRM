@@ -18,3 +18,7 @@ ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "poster_url" text;
 ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "schedule_url" text;
 --> statement-breakpoint
 ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "sheet_ref" text;
+--> statement-breakpoint
+ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "ops_owner" text;
+--> statement-breakpoint
+ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "archived" boolean DEFAULT false;

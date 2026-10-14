@@ -18,6 +18,10 @@ from datetime import datetime
 import openpyxl
 from PIL import Image
 
+def norm_status(v):
+    v = str(v or '').strip()
+    return {'正常招募': '招募中', '招生结束': '已结束'}.get(v, v) or None
+
 PROGRAM_BY_TAG = {'BPA': 'bpa', 'CTB': 'ctb', 'iHOSA': 'ihosa', '康莱德': 'conrad'}
 PROGRAM_BY_NAME = [('康莱德', 'conrad'), ('CTB', 'ctb'), ('BPA', 'bpa'), ('iHOSA', 'ihosa'), ('暑假', 'summer'), ('寒假', 'winter'), ('PrimeTeach', 'prime'), ('MVP', 'mvp')]
 # Sheet team → CRM team name when the wording differs beyond the automatic rules (reviewed by hand).
@@ -110,7 +114,7 @@ def main():
         tid = team[0] if team else 'T-OV-' + hashlib.md5((program + c).encode()).hexdigest()[:8].upper()
         if team: used.add(tid)
         plan.append(dict(row=i, program=program, sheet=name, id=tid, new=not team, crm=team[2] if team else None, status=status, cap=cap, enrolled=enrolled, rem=rem,
-                         coach=(r[12] or '').strip(), poster=cell_img.get((i, 10)), schedule=cell_img.get((i, 9)), ref=(r[8] or '').strip()))
+                         coach=(r[12] or '').strip(), owner=(str(r[7] or '').strip() or None), poster=cell_img.get((i, 10)), schedule=cell_img.get((i, 9)), ref=(r[8] or '').strip()))
     progs = []
     for r in rev_rows[1:]:
         pid = next((v for k, v in PROGRAM_BY_NAME if k in str(r[0])), None)
@@ -135,7 +139,8 @@ def main():
     for p in plan:
         if p['new']:
             stmts.append(f"INSERT INTO teams (id, name, program, teacher, stage, status, note, sort_order) VALUES ({q(p['id'])}, {q(re.sub(r'^(CBPA|iHOSA|康莱德创新挑战赛)\s*', '', p['sheet']).strip())}, {q(p['program'])}, {q(p['coach'])}, 0, '正常进行', '项目总览导入', 900) ON CONFLICT (id) DO NOTHING;")
-        stmts.append(f"UPDATE teams SET recruit_status={q(p['status'])}, recruit_capacity={p['cap'] if p['cap'] is not None else 'NULL'}, recruit_enrolled={p['enrolled'] if p['enrolled'] is not None else 'NULL'}, recruit_remaining={p['rem']}, poster_url={q(p['poster'])}, schedule_url={q(p['schedule'])}, sheet_ref={q(p['ref'] or None)} WHERE id={q(p['id'])};")
+        # COALESCE: the first import fills empty fields; later edits in 队伍管理 are never overwritten by a re-run.
+        stmts.append(f"UPDATE teams SET recruit_status=COALESCE(recruit_status, {q(norm_status(p['status']))}), recruit_capacity=COALESCE(recruit_capacity, {p['cap'] if p['cap'] is not None else 'NULL'}), recruit_enrolled=COALESCE(recruit_enrolled, {p['enrolled'] if p['enrolled'] is not None else 'NULL'}), recruit_remaining={p['rem']}, poster_url=COALESCE(poster_url, {q(p['poster'])}), schedule_url=COALESCE(schedule_url, {q(p['schedule'])}), sheet_ref={q(p['ref'] or None)}, ops_owner=COALESCE(ops_owner, {q(p['owner'])}) WHERE id={q(p['id'])};")
     for p in progs:
         stmts.append(f"UPDATE programs SET recruit_target={p['target']}, recruit_enrolled={p['enrolled']}, recruit_source='2026 BEST 项目招生总览 · 营收总览' WHERE id={q(p['id'])};")
     if a.prices:

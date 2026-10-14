@@ -503,7 +503,8 @@ export function useVisible(){
   const students=s.role==='sales'?s.students.filter(x=>salesOwns(x.sales,{name:myName,salesName}))
     :s.role==='teacher'?s.students.filter(x=>teacherScope!.studentIds.has(x.id))
     :s.students;
-  const teams=s.role==='teacher'?s.teams.filter(t=>teacherScope!.teamIds.has(t.id)):s.teams;
+  const live=s.teams.filter(t=>!t.archived);
+  const teams=s.role==='teacher'?live.filter(t=>teacherScope!.teamIds.has(t.id)):live;
   // 运营端 (ops / superadmin / admin): only courses where I am 授课老师 or 运营老师. 系统管理 reads s.opsCourses directly.
   const ownScope=s.role!=='sales'&&s.role!=='teacher'&&(myName||s.user?.email)?opsOwnScope({name:myName,email:s.user?.email||''},s.opsCourses,s.courses):null;
   const courses=s.courses.filter(c=>{

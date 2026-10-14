@@ -19,7 +19,7 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam } from '../lib/nexus/sales';
+import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled } from '../lib/nexus/sales';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
@@ -894,19 +894,18 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const typeByCode = new Map(opsRows.map(r => [codeKey(r.code), typeName.get(r.classType) || '']));
     const studentById = new Map(studentRows.map(s => [s.id, s]));
     const sales = user.role === 'sales';
-    const teams = teamRows.filter(t => !isPseudoTeam(t.name)).map(t => {
+    const teams = teamRows.filter(t => !isPseudoTeam(t.name) && !t.archived).map(t => {
       const ids = new Set(enrollRows.filter(e => e.team === t.id && !inactiveEnrollment(e.status)).map(e => e.student));
       for (const s of studentRows) if (s.team === t.id && !inactiveEnrollment(s.status)) ids.add(s.id);
       const types = [...new Set(courseRows.filter(x => x.team === t.id).map(x => typeByCode.get(codeKey(x.code)) || '').filter(Boolean))];
       const caps = types.map(capacityFromClassType).filter((n): n is number => n != null);
       const members = [...ids].map(id => studentById.get(id)).filter((s): s is NonNullable<typeof s> => !!s);
       const visible = sales ? members.filter(s => salesOwns(s.sales, user)) : members;
-      // 项目总览 sheet facts win when present (the sheet is the source of truth for 招募进度).
-      const sheet = t.recruitCapacity != null;
+      // 队伍管理 名额 (or the imported 项目总览 value) wins over the class-type guess; enrolled counts live members.
       return {
         id: t.id, program: t.program, name: t.name, teacher: t.teacher,
-        enrolled: sheet ? (t.recruitEnrolled ?? 0) : ids.size,
-        capacity: sheet ? t.recruitCapacity : caps.length ? Math.max(...caps) : null, classType: types[0] || null,
+        enrolled: teamEnrolled(ids.size, t.recruitEnrolled),
+        capacity: t.recruitCapacity != null ? t.recruitCapacity : caps.length ? Math.max(...caps) : null, classType: types[0] || null,
         recruitStatus: t.recruitStatus ?? null, posterUrl: t.posterUrl ?? null, scheduleUrl: t.scheduleUrl ?? null,
         members: visible.map(s => ({ id: s.id, name: s.name, grade: s.grade, status: s.status, health: s.health, school: (s.profile as Record<string, string> | null)?.school || '' })),
         hiddenMembers: members.length - visible.length,
@@ -1007,6 +1006,49 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return hits.length ? { status: 409, body: { error: 'schedule_conflict', message: '排课冲突：' + conflictSummary(hits) + '。请调整时间，或在表单中选择「强制设定」。', conflicts: hits } } : null;
   }
 
+  /** 队伍 poster upload (负责人 / superadmin). Body: raw image bytes (jpeg/png/webp, ≤ 8 MB). */
+  app.post('/teams/:id/poster', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [team] = await db.select().from(schema.teams).where(eq(schema.teams.id, id)).limit(1);
+    if (!team) return c.json({ error: 'not_found' }, 404);
+    if (!canEditTeam(user, team)) return c.json({ error: 'forbidden', message: '仅队伍负责人或超级管理员可上传海报' }, 403);
+    const type = (c.req.header('content-type') || '').split(';')[0];
+    const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as Record<string, string>)[type];
+    if (!ext) return c.json({ error: 'invalid', message: '仅支持 JPG / PNG / WebP 图片' }, 400);
+    const buf = Buffer.from(await c.req.arrayBuffer());
+    if (!buf.length || buf.length > 8 * 1024 * 1024) return c.json({ error: 'too_large', message: '图片需小于 8 MB' }, 413);
+    const { createHash } = await import('node:crypto');
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    const { join, resolve } = await import('node:path');
+    const dir = config.mediaDir || resolve(process.cwd(), '../../../media');
+    const file = `tp-${createHash('sha1').update(buf).digest('hex').slice(0, 20)}.${ext}`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, file), buf);
+    const url = '/api/media/' + file;
+    await db.update(schema.teams).set({ posterUrl: url, updatedAt: new Date() }).where(eq(schema.teams.id, id));
+    return c.json({ url });
+  });
+
+  /** Delete a 队伍 (负责人 / superadmin). With courses, students or enrollments attached it is archived instead (kept for history). */
+  app.delete('/teams/:id', async c => {
+    const user = c.get('user'), id = c.req.param('id');
+    const [team] = await db.select().from(schema.teams).where(eq(schema.teams.id, id)).limit(1);
+    if (!team) return c.json({ error: 'not_found' }, 404);
+    if (!canEditTeam(user, team) || isTeacher(user.role) || !canWrite(user)) return c.json({ error: 'forbidden', message: '仅队伍负责人或超级管理员可删除队伍' }, 403);
+    const [[co], [en], [st]] = await Promise.all([
+      db.select({ n: sql<number>`count(*)::int` }).from(schema.courses).where(eq(schema.courses.team, id)),
+      db.select({ n: sql<number>`count(*)::int` }).from(schema.enrollments).where(eq(schema.enrollments.team, id)),
+      db.select({ n: sql<number>`count(*)::int` }).from(schema.students).where(eq(schema.students.team, id)),
+    ]);
+    if (co.n || en.n || st.n) {
+      await db.update(schema.teams).set({ archived: true, status: '已解散', recruitStatus: '已结束', updatedAt: new Date() }).where(eq(schema.teams.id, id));
+      return c.json({ ok: true as const, archived: true, courses: co.n, enrollments: en.n, students: st.n });
+    }
+    await db.delete(schema.teamLogs).where(eq(schema.teamLogs.team, id));
+    await db.delete(schema.teams).where(eq(schema.teams.id, id));
+    return c.json({ ok: true as const, archived: false });
+  });
+
   /** Upsert one record of a collection (ops/admin). The body is the full frontend record. */
   app.put('/:collection/:id', async c => {
     const user = c.get('user'), name = c.req.param('collection'), id = c.req.param('id');
@@ -1032,6 +1074,15 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (!parsed.success) return c.json({ error: 'invalid', issues: issuesOf(parsed.error) }, 400);
     if (parsed.data.id !== id) return c.json({ error: 'invalid', issues: ['id mismatch'] }, 400);
     if (name === 'students') return c.json({ record: await saveStudent(parsed.data, user) });
+    if (name === 'teams') {
+      const [cur] = await db.select().from(schema.teams).where(eq(schema.teams.id, id)).limit(1);
+      if (cur && !canEditTeam(user, cur)) return c.json({ error: 'forbidden', message: '仅队伍负责人或超级管理员可编辑该队伍' }, 403);
+      // Only superadmins may hand a team to another 负责人; archiving goes through DELETE.
+      const d = parsed.data as Record<string, unknown>;
+      if (cur && !canManageSystem(user.role) && (cur.opsOwner || '')) d.opsOwner = cur.opsOwner;
+      if (cur) d.archived = cur.archived ?? false; else d.archived = false;
+      if (!cur && !canManageSystem(user.role) && !d.opsOwner) d.opsOwner = user.name;
+    }
     const t = tables[name] as typeof schema.teams; // every table has id, sortOrder, updatedAt
     const data = { ...parsed.data } as Record<string, unknown>;
     if (systemCollections.includes(name) && !canManageSystem(user.role)) return onlySuperadmin(c);

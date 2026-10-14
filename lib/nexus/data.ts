@@ -25,7 +25,13 @@ export type TeamMaterials = {checklist:string;links:string;notes:string;updated?
 export type TeamLog = {id:string;team:string;at:string;by:string;byName:string;action:string;detail:string};
 export type Team = {id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string;
   /** 队伍进度 — PM 定义字段，队伍老师/运营老师后续填写 */ progress?:TeamProgress;
-  /** 成果材料 */ materials?:TeamMaterials};
+  /** 成果材料 */ materials?:TeamMaterials;
+  /** 运营负责人 (name) — may edit 名额 / 招募状态 / 海报 / 成员 */ opsOwner?:string;
+  /** 招募状态: 招募中 / 火热招募 / 已满 / 已结束 / 筹备中 */ recruitStatus?:string|null;
+  /** 名额 (capacity) */ recruitCapacity?:number|null;
+  /** 已招人数 recorded (e.g. from the 项目总览 sheet); live members count if larger */ recruitEnrolled?:number|null;
+  posterUrl?:string|null;scheduleUrl?:string|null;
+  /** Soft-deleted (has courses / students) */ archived?:boolean|null};
 
 /** A course (课程安排). date/time are its first meeting; repeated meetings live in course_sessions (lib/nexus/schedule.ts). */
 export type Course = {id:string;name:string;program:string;team:string;teacher:string;date:string;time:string;status:string;

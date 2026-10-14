@@ -85,3 +85,34 @@ export type SalesTeam = TeamSeat & { members: SalesMember[]; hiddenMembers: numb
 export type ProgramTarget = { id: string; target: number; enrolled: number };
 /** Sheet 招募状态 → still recruiting? (火热招募 / 正常招募 yes; 招生结束 no). Unknown → null. */
 export const sheetRecruiting = (s: unknown): boolean | null => s == null || s === '' ? null : /招生结束|结束|截止|满员/.test(String(s)) ? false : true;
+
+/** 队伍招募状态 options in 队伍管理. Legacy sheet values (火热招募 / 正常招募 / 招生结束) are still understood. */
+export const TEAM_RECRUIT_STATUSES = ['招募中', '火热招募', '已满', '已结束', '筹备中'] as const;
+/** Normalise the sheet wording onto the 队伍管理 options. */
+export const normalizeRecruitStatus = (s: unknown): string | null => {
+  const v = String(s ?? '').trim();
+  if (!v) return null;
+  if (v === '正常招募') return '招募中';
+  if (/招生结束|结束|截止/.test(v)) return '已结束';
+  if (/满/.test(v)) return '已满';
+  return v;
+};
+/** Enrolled = the larger of live active members and the recorded 已招人数 (sheet), so adding a member counts at once. */
+export const teamEnrolled = (live: number, recorded: number | null | undefined) => Math.max(live, recorded ?? 0);
+/** Remaining seats, live: capacity − enrolled (null when capacity unknown). */
+export const teamRemaining = (capacity: number | null | undefined, enrolled: number) => capacity == null ? null : Math.max(0, capacity - enrolled);
+/** A team is locked for sales (grey + lock, not clickable) when it is full or no longer recruiting. */
+export function teamLocked(t: { capacity: number | null; enrolled: number; recruitStatus?: string | null }): boolean {
+  const st = normalizeRecruitStatus(t.recruitStatus);
+  if (st === '已满' || st === '已结束') return true;
+  return t.capacity != null && t.capacity - t.enrolled <= 0;
+}
+/** 队伍 edit rights: superadmin always; otherwise the team's 负责人 (ops owner, matched by name or e-mail). Teams without an owner stay editable by any ops writer. */
+export function canEditTeam(user: { role?: string | null; name?: string | null; email?: string | null } | null | undefined, team: { opsOwner?: string | null }): boolean {
+  if (!user) return false;
+  if (user.role === 'superadmin') return true;
+  if (!(user.role === 'ops' || user.role === 'admin')) return false;
+  const owner = norm(team.opsOwner);
+  if (!owner) return true;
+  return owner === norm(user.name) || owner === norm(user.email) || (/[\u4e00-\u9fff]{2,}/.test(norm(user.name)) && owner.includes(norm(user.name)));
+}

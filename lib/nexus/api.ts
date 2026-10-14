@@ -81,6 +81,8 @@ export const api = {
   weather: (city?: string) => request<import('./weather').WeatherPayload>('/weather' + (city ? `?city=${encodeURIComponent(city)}` : '')),
   workHours: (month?: string) => request<{ month: string; totalMs: number }>('/work-hours' + (month ? `?month=${encodeURIComponent(month)}` : '')),
   reportWorkHours: (month: string, deltaMs: number) => request<{ month: string; totalMs: number }>('/work-hours', { method: 'POST', body: JSON.stringify({ month, deltaMs }) }),
+  deleteTeam: (id: string) => request<{ ok: true; archived: boolean; courses?: number; enrollments?: number; students?: number }>(`/teams/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  uploadTeamPoster: (id: string, file: Blob) => request<{ url: string }>(`/teams/${encodeURIComponent(id)}/poster`, { method: 'POST', body: file, headers: { 'Content-Type': file.type } }),
   salesRecruitment: () => request<{ teams: import('./sales').SalesTeam[]; programs?: import('./sales').ProgramTarget[] }>('/sales/recruitment'),
   adminUsers: () => request<{ users: AdminUser[] }>('/admin/users'),
   createUser: (body: { email: string; username: string; name: string; role: Role; salesName?: string | null; salesRegion?: string | null; salesLead?: boolean }) => request<{ user: AdminUser; password: string }>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),

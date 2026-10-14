@@ -86,6 +86,8 @@ export const teams = pgTable('teams', {
   posterUrl: text('poster_url'),
   scheduleUrl: text('schedule_url'),
   sheetRef: text('sheet_ref'),
+  opsOwner: text('ops_owner'),
+  archived: boolean('archived').default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 });
