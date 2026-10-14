@@ -19,7 +19,7 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -828,7 +828,19 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       });
     }
     const announcementList = await announcementsFor(user);
-    if (user.role !== 'sales') return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses, lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own), staff, courseSessions, announcements: announcementList, lessonMonthLocks });
+    if (user.role !== 'sales') {
+      const myLessons = lessons.filter(own), myLessonFeedbacks = lessonFeedbacks.filter(own);
+      // 运营端只看「我是授课老师或运营老师」的课时课程; superadmins keep the full list for 系统管理 · 课程管理
+      // (their ops views filter client-side). Courses referenced by visible 课时 / 反馈 stay so names resolve.
+      // 课程安排 / 排课 stay complete: the client needs every slot for 排课冲突 checks and scopes the views itself.
+      let visibleOpsCourses = opsCourses;
+      if (!canManageSystem(user.role)) {
+        const scope = opsOwnScope(user, opsCourses as { id: string; code: string; teacher: string; opsTeacher: string }[], []);
+        const referenced = new Set([...myLessons, ...myLessonFeedbacks].map(r => r.course as string));
+        visibleOpsCourses = opsCourses.filter(oc => scope.opsCourseIds.has(oc.id as string) || referenced.has(oc.id as string));
+      }
+      return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses: visibleOpsCourses, lessons: myLessons, lessonFeedbacks: myLessonFeedbacks, staff, courseSessions, announcements: announcementList, lessonMonthLocks });
+    }
     // Sales: own students only, no drafts, public files, visible feedback.
     const mine = students.filter(s => s.sales === user.salesName);
     const ids = new Set(mine.map(s => s.id as string));

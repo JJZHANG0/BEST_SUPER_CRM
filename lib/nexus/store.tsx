@@ -13,7 +13,7 @@ import { isPetId, DEFAULT_PET, writeStoredPet, readStoredPet, type PetId } from 
 import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope } from './ops';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
@@ -503,13 +503,19 @@ export function useVisible(){
     :s.role==='teacher'?s.students.filter(x=>teacherScope!.studentIds.has(x.id))
     :s.students;
   const teams=s.role==='teacher'?s.teams.filter(t=>teacherScope!.teamIds.has(t.id)):s.teams;
+  // 运营端 (ops / superadmin / admin): only courses where I am 授课老师 or 运营老师. 系统管理 reads s.opsCourses directly.
+  const ownScope=s.role!=='sales'&&s.role!=='teacher'&&(myName||s.user?.email)?opsOwnScope({name:myName,email:s.user?.email||''},s.opsCourses,s.courses):null;
   const courses=s.courses.filter(c=>{
+    if(ownScope)return ownScope.courseIds.has(c.id);
     if(s.role==='sales')return teams.some(t=>t.id===c.team)&&!!s.programs.find(p=>p.id===c.program)?.published;
     if(s.role==='teacher')return teacherScope!.courseIds.has(c.id)||teacherScope!.teamIds.has(c.team);
     return true;
   });
+  const opsCourses=ownScope?ownScope.opsCourses:teacherScope?teacherScope.opsCourses:s.opsCourses;
+  const courseIds=new Set(courses.map(c=>c.id));
+  const courseSessions=s.courseSessions.filter(x=>courseIds.has(x.course));
   return {
-    students,teams,courses,
+    students,teams,courses,opsCourses,courseSessions,
     files:s.files.filter(f=>s.role!=='sales'||f.public),
     feedbacks:s.feedbacks.filter(f=>{
       if(s.role==='sales')return f.visible&&students.some(x=>x.id===f.student);

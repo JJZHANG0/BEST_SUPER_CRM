@@ -15,6 +15,7 @@ import {
   visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
   isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
+  opsOwnScope,
 } from '@/lib/nexus/ops';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState } from './ui';
@@ -57,14 +58,14 @@ function useOpsFilters() {
 }
 
 /** Courses the signed-in user may log against: own + unassigned (superadmin: all). */
-function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string, teacherName = '') {
-  if (canSeeAllLessons(viewer)) return courses;
+function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string, teacherName = '', keep = '') {
   if (isTeacher(viewer.role)) {
     const n = teacherName.trim();
     return n ? courses.filter(c => c.teacher === n || c.teacher.includes(n)) : courses;
   }
-  const me = email.toLowerCase();
-  return courses.filter(c => !c.opsTeacher || c.opsTeacher.toLowerCase() === me);
+  // 运营端（含部门负责人）: only courses where I am the 授课老师 or the 运营老师; keep the edited record's course.
+  const own = opsOwnScope({ name: teacherName, email }, courses, []).opsCourseIds;
+  return courses.filter(c => own.has(c.id) || c.id === keep);
 }
 const courseLabel = (c: OpsCourse) => `${c.code} · ${c.name}`;
 /** 「5/6」 (实到/应到), 「5」 or 「—」 for the table. */
@@ -81,7 +82,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const s = useNexus();
   const me = s.user?.email || '';
   const all = canSeeAllLessons(s.viewer);
-  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '');
+  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '', record?.course || '');
   const linked = record ? s.lessonFeedbacks.find(f => f.lesson === record.id) ?? null : null;
   const [courseId, setCourseId] = useState(record?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || today());
@@ -350,8 +351,8 @@ function FeedbackDialog({ record, lessonId, open, onClose }: { record: LessonFee
   const s = useNexus();
   const me = s.user?.email || '';
   const all = canSeeAllLessons(s.viewer);
-  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '');
   const fromLesson = lessonId ? s.lessons.find(l => l.id === lessonId) : undefined;
+  const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '', record?.course || fromLesson?.course || '');
   const [courseId, setCourseId] = useState(record?.course || fromLesson?.course || options[0]?.id || '');
   const [date, setDate] = useState(record?.date || fromLesson?.date || today());
   const [lesson, setLesson] = useState(record?.lesson || fromLesson?.id || '');

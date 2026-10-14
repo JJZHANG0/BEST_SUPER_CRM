@@ -551,3 +551,19 @@ export function importCourses(text: string, ctx: {
 export function newRecordId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+/**
+ * 运营端「我的课程」: 课时课程 where I am the 授课老师 (name match) or the 运营老师 (login email);
+ * 课程安排 courses where I am the 授课老师 or whose 课程编号 belongs to one of those 课时课程.
+ * Used server-side (bootstrap) and client-side (useVisible / pickers). 系统管理 keeps the full list.
+ */
+export function opsOwnScope<
+  OC extends { id: string; code: string; teacher: string; opsTeacher: string },
+  C extends { id: string; teacher: string; code?: string | null },
+>(me: { name?: string | null; email?: string | null }, opsCourses: readonly OC[], courses: readonly C[]) {
+  const name = canonicalTeacherName(me.name || ''), email = String(me.email || '').trim().toLowerCase();
+  const isMine = (teacher: unknown, ops?: unknown) => (!!name && canonicalTeacherName(teacher) === name) || (!!email && String(ops || '').trim().toLowerCase() === email);
+  const mineOps = opsCourses.filter(c => isMine(c.teacher, c.opsTeacher));
+  const codes = new Set(mineOps.map(c => String(c.code || '').replace(/\s+/g, '').toUpperCase()).filter(Boolean));
+  const mineCourses = courses.filter(c => isMine(c.teacher) || (!!c.code && codes.has(String(c.code).replace(/\s+/g, '').toUpperCase())));
+  return { opsCourses: mineOps, courses: mineCourses, opsCourseIds: new Set(mineOps.map(c => c.id)), courseIds: new Set(mineCourses.map(c => c.id)) };
+}
