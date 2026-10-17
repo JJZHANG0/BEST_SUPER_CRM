@@ -88,6 +88,16 @@ assert.equal(made.issue,null);
 assert.deepEqual(made.feedback,{id:'F1',course:'C1',lesson:'L1',date:'2026-10-20',attendance:'4/4',content:'商业模式画布',performance:'积极',issues:'',nextSteps:'完成财务表',opsTeacher:'xujin@nexus.local',createdBy:'xujin@nexus.local'});
 const upd=O.lessonWithFeedback({lesson:{...lesson,date:'2026-10-21'},feedback:{...empty,content:'改'},withFeedback:true,existing:{...made.feedback,createdBy:'orig'},newId:()=>'NEW'});
 assert.equal(upd.feedback.id,'F1','editing updates the linked feedback in place');assert.equal(upd.feedback.date,'2026-10-21');assert.equal(upd.feedback.createdBy,'orig');
+// Filling 实到人数 auto-writes 到课情况. That line alone must not demand 本次课程内容, or 课时记录 cannot be saved.
+assert.equal(O.lessonFeedbackRequested(true, empty, false), false);
+assert.equal(O.lessonFeedbackRequested(true, {...empty, attendance:'5/6 到课'}, false), false, 'auto 到课情况 is not typed feedback');
+assert.equal(O.lessonFeedbackRequested(true, {...empty, attendance:'李同学请假'}, true), true);
+assert.equal(O.lessonFeedbackRequested(true, {...empty, content:'画布'}, false), true);
+assert.equal(O.lessonFeedbackRequested(false, {...empty, content:'画布'}, true), false);
+const pasted=O.parentFeedbackText({courseName:'商业计划',courseCode:'BPA-01',date:'2026-10-20',teacher:'Dora',hours:1.5,actualCount:4,expectedCount:5,content:'商业模式画布',performance:'积极',note:'补课',replayUrl:' https://meet.example/r '});
+assert.match(pasted,/^【课程反馈】\n课程：商业计划 · BPA-01\n日期：2026-10-20\n授课老师：Dora\n课时：1.5 小时\n到课：4\/5 到课/);
+assert.match(pasted,/本次课程内容：\n商业模式画布/);assert.match(pasted,/课程回放：https:\/\/meet\.example\/r$/);
+assert.equal(O.parentFeedbackText({teacher:'未填写',date:'2026-10-20'}).includes('授课老师'), false);
 
 // 授课老师 + per-teacher hours for the month (older records fall back to the course's teacher).
 const rec=(id,ops,date,hours,teacher,course='C1')=>({id,course,date,hours,expectedCount:null,actualCount:null,opsTeacher:ops,rate:10,unit:'hour',amount:hours*10,note:'',createdBy:ops,...(teacher?{teacher}:{})});
@@ -108,7 +118,8 @@ assert(!opsPages.includes('超级管理员可查看全部老师'),'old superadmi
 // API: bootstrap filters 课时 / 反馈 by the leader flag, writes check ownership with the whole user.
 const app=readFileSync('server/app.ts','utf8');
 assert(app.includes('const own = (r: Record<string, unknown>) => canSeeAllLessons(user) ||'));
-assert(app.includes('lessons: lessons.filter(own), lessonFeedbacks: lessonFeedbacks.filter(own)'));
+assert(app.includes('String(r.opsTeacher).toLowerCase() === user.email.toLowerCase()'), 'own-record filter ignores email case so a saved lesson stays visible');
+assert(app.includes('const myLessons = lessons.filter(own), myLessonFeedbacks = lessonFeedbacks.filter(own)'));
 assert(app.includes("canEditOwned(user, user.email, String(data.opsTeacher))"));
 assert(!/canSeeAllLessons\(user\.role\)|canAssignTodos\(user\.role\)|canReviewKpi\(user\.role\)|canFillKpi\(user\.role\)/.test(app),'permission helpers receive the user (leader flag), never a bare role');
 assert(/leader: row\.leader === true/.test(app));

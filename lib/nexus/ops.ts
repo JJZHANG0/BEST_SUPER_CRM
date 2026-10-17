@@ -95,6 +95,8 @@ export type LessonRecord = {
   rate: number; unit: AllowanceUnit; amount: number; note: string; createdBy: string;
   /** 授课老师 of this lesson (prefilled from the course; older records fall back to the course's teacher). */
   teacher?: string;
+  /** 课程回放链接, included when the 课程反馈 is copied into the parent group. */
+  replayUrl?: string;
 };
 const countOrNull = (v: unknown): number | null => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n) : null; };
 /**
@@ -424,6 +426,38 @@ export function hoursByLessonTeacher(records: readonly LessonRecord[], courses: 
 /** 学情反馈 fields captured together with a 课时记录. */
 export type FeedbackDraft = { attendance: string; content: string; performance: string; issues: string; nextSteps: string };
 export const feedbackDraftEmpty = (d: FeedbackDraft) => !Object.values(d).some(v => (v || '').trim());
+/**
+ * Whether saving should also write a 课情反馈.
+ * The 到课情况 line is filled from 实到/应到 until the teacher types their own text, so that
+ * automatic line must not force 「本次课程内容」 (otherwise a normal 课时记录 cannot be saved).
+ */
+export function lessonFeedbackRequested(withFeedback: boolean, draft: FeedbackDraft, attendanceTouched: boolean): boolean {
+  if (!withFeedback) return false;
+  return !feedbackDraftEmpty({ ...draft, attendance: attendanceTouched ? draft.attendance : '' });
+}
+/** Plain text a teacher pastes into the parent group. Skips empty sections and the internal 津贴 fields. */
+export function parentFeedbackText(input: {
+  courseName?: string; courseCode?: string; date?: string; teacher?: string; hours?: number | null;
+  attendance?: string; expectedCount?: number | null; actualCount?: number | null;
+  content?: string; performance?: string; issues?: string; nextSteps?: string; note?: string; replayUrl?: string;
+}): string {
+  const lines: string[] = ['【课程反馈】'];
+  const course = [input.courseName, input.courseCode].map(v => (v || '').trim()).filter(Boolean).join(' · ');
+  if (course) lines.push(`课程：${course}`);
+  if ((input.date || '').trim()) lines.push(`日期：${input.date!.trim()}`);
+  const teacher = (input.teacher || '').trim();
+  if (teacher && teacher !== '未填写') lines.push(`授课老师：${teacher}`);
+  if (input.hours != null && Number.isFinite(input.hours)) lines.push(`课时：${input.hours} 小时`);
+  const attendance = (input.attendance || '').trim() || attendanceText(input.actualCount ?? null, input.expectedCount ?? null);
+  if (attendance) lines.push(`到课：${attendance}`);
+  for (const [label, value] of [['本次课程内容', input.content], ['学生布置', input.performance], ['问题与风险', input.issues], ['下一步安排', input.nextSteps], ['备注', input.note]] as const) {
+    const v = (value || '').trim();
+    if (v) lines.push('', `${label}：`, v);
+  }
+  const url = (input.replayUrl || '').trim();
+  if (url) lines.push('', `课程回放：${url}`);
+  return lines.join('\n');
+}
 /**
  * 记录课时 + 学情反馈 in one form: returns the lesson record and, when any feedback field is filled
  * (and `withFeedback`), the linked 课情反馈 (same course / date / 教务老师, lesson = record id).

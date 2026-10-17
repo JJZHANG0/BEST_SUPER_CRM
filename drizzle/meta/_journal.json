@@ -155,6 +155,13 @@
       "when": 1791810001000,
       "tag": "0021_program_recruit_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791820000000,
+      "tag": "0022_lesson_replay_url",
+      "breakpoints": true
     }
   ]
 }

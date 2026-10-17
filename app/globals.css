@@ -1271,6 +1271,8 @@ html[data-workspace=public] body{background:#f4f2f7}
 .icon-button.has-feedback{color:#7c4ddb}
 .icon-button.has-feedback::after{content:'';position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:#1f9d6b;border:1px solid #fff}
 .lesson-dialog .form-stack{gap:14px}
+.lesson-dialog .lesson-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end}
+.lesson-dialog .lesson-actions .copy-feedback{margin-right:auto}
 .lesson-fb{margin:0;border:1px solid #e7def4;border-radius:14px;padding:6px 14px 14px;background:#fbf9fe;display:flex;flex-direction:column;gap:12px}
 .lesson-fb.off{padding-bottom:6px;background:#fff}
 .lesson-fb legend{padding:0 6px;font-size:.8125rem;color:#5d4f73}

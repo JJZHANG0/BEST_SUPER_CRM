@@ -1,19 +1,21 @@
 'use client';
 /** 课时记录 (lesson hours + 教务津贴) and 课情反馈 (lesson feedback) for ops teachers. */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { Clock, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap, Lock, CheckCircle2 } from 'lucide-react';
+import { Clock, Copy, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap, Lock, CheckCircle2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TeacherPicker } from './teacher-picker';
 import { CourseCombobox } from './course-combobox';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from '@/components/ui/table';
+import { copyText } from '@/lib/nexus/clipboard';
 import { useNexus } from '@/lib/nexus/store';
 import { canSeeAllLessons, canManageSystem, isTeacher, type Viewer } from '@/lib/nexus/roles';
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
   visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
   isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours,
+  lessonFeedbackRequested, parentFeedbackText,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
   opsOwnScope,
 } from '@/lib/nexus/ops';
@@ -91,6 +93,8 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const [ops, setOps] = useState(record?.opsTeacher || options[0]?.opsTeacher || me);
   const [teacher, setTeacher] = useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : options[0]?.teacher || '');
   const [note, setNote] = useState(record?.note || '');
+  const [replay, setReplay] = useState(record?.replayUrl || '');
+  const formRef = useRef<HTMLFormElement>(null);
   // 学情反馈 captured in the same form (creates / updates the linked 课情反馈).
   const [withFb, setWithFb] = useState(!record || !!linked);
   // 到课情况 follows 实到/应到 (「5/6 到课」) until the user types their own text.
@@ -115,6 +119,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!course || !type) return toast.error('请选择课程');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return toast.error('请选择上课日期');
     if (!(h > 0 && h <= 24)) return toast.error('课时需在 0–24 小时之间');
     if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 1000)) return toast.error('实到人数需为 0–1000 的整数');
     if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写实到人数');
@@ -122,8 +127,9 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
       return toast.error('该月课时已确认锁定，仅张捷嘉可修改');
     }
     const owner = all ? (ops || me) : me;
-    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, expectedCount: expected ?? null, actualCount: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim() };
-    const r = lessonWithFeedback({ lesson: rec, feedback: { ...fb, attendance }, withFeedback: withFb, existing: linked, newId: () => newRecordId('LF') });
+    const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, expectedCount: expected ?? null, actualCount: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim(), replayUrl: replay.trim() };
+    // Auto 到课情况 (from 实到/应到) must not count as written feedback, or the save is blocked until 本次课程内容 is filled.
+    const r = lessonWithFeedback({ lesson: rec, feedback: { ...fb, attendance }, withFeedback: lessonFeedbackRequested(withFb, fb, attTouched), existing: linked, newId: () => newRecordId('LF') });
     if (r.issue) return toast.error(r.issue);
     s.setLessons(l => record ? l.map(x => x.id === rec.id ? rec : x) : [rec, ...l]);
     if (r.feedback) { const f = r.feedback; s.setLessonFeedbacks(l => l.some(x => x.id === f.id) ? l.map(x => x.id === f.id ? f : x) : [f, ...l]); }
@@ -131,10 +137,19 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     toast.success(record ? '课时记录已更新' : `已记录课时，津贴 ${money2(amount)}${r.feedback ? '，学情反馈已同步到课情反馈' : ''}`);
     onClose();
   };
+  const copyFeedback = async () => {
+    const text = parentFeedbackText({
+      courseName: course?.name, courseCode: course?.code, date, teacher, hours: Number.isFinite(h) ? h : null,
+      attendance, expectedCount: expected, actualCount: n, content: fb.content, performance: fb.performance,
+      issues: fb.issues, nextSteps: fb.nextSteps, note, replayUrl: replay,
+    });
+    if (await copyText(text, formRef.current)) toast.success('课程反馈已复制，可直接粘贴到家长群');
+    else toast.error('浏览器限制了复制，请手动选择文字');
+  };
   return <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog wide lesson-dialog">
     <DialogTitle>{record ? '编辑课时记录' : '记录课时'}</DialogTitle>
     <DialogDescription>津贴按课程的班级类型自动计算，记录时锁定当时的津贴标准；下方的学情反馈会自动生成关联的课情反馈。</DialogDescription>
-    {!options.length ? <NoCourses /> : <form className="form-stack" onSubmit={submit}>
+    {!options.length ? <NoCourses /> : <form ref={formRef} className="form-stack" noValidate onSubmit={submit}>
       {/* Editing an existing 课时记录 (incl. 「已有学情反馈」) keeps the row's course locked — no re-select. */}
       <div className="form-field"><span>课程</span>{record && course
         ? <div className="course-locked" aria-label="已绑定课程"><strong>{courseLabel(course)}</strong><small>{projectLabel(course.project)}{course.teacher ? ' · ' + course.teacher : ''}</small></div>
@@ -150,6 +165,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
         <FormField label="教务老师">{all ? <Picker label="教务老师" value={ops} onChange={setOps} options={s.staff.filter(u => u.active || u.email === ops).map(u => ({ value: u.email, label: u.name }))} /> : <input value={s.staffName(me)} disabled />}</FormField>
       </div>
       <FormField label="备注（可选）"><input maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="例如：补课、调课说明" /></FormField>
+      <FormField label="课程回放链接（可选）"><input maxLength={2000} inputMode="url" value={replay} onChange={e => setReplay(e.target.value)} placeholder="https:// 粘贴会议或录播链接，会一起复制到家长群" aria-label="课程回放链接" /></FormField>
       <div className="allowance-preview" aria-live="polite">
         <span>{type ? `${type.name} · ¥${rate} ${unitLabel(unit)}` : '未选择课程'}</span>
         <span>{unit === 'person_hour' ? `¥${rate} × ${n || 0} 人 × ${h || 0} 小时` : unit === 'session' ? `¥${rate} × 1 次` : `¥${rate} × ${h || 0} 小时`}</span>
@@ -167,7 +183,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
           </div>
         </>}
       </fieldset>
-      <div className="actions"><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">{record ? '保存修改' : withFb && fb.content.trim() ? '保存课时与反馈' : '保存课时'}</button></div>
+      <div className="actions lesson-actions"><button type="button" className="secondary copy-feedback" onClick={copyFeedback}><Copy size={16} />复制课程反馈</button><button type="button" className="secondary" onClick={onClose}>取消</button><button className="primary" type="submit">{record ? '保存修改' : withFb && fb.content.trim() ? '保存课时与反馈' : '保存课时'}</button></div>
     </form>}
   </DialogContent></Dialog>;
 }
@@ -287,8 +303,19 @@ export function LessonsPage() {
   const myFee = myLessonTeachingFee(myHours);
   const canBypassLock = canEditLockedLessonMonth(s.user);
   const exportCsv = () => {
-    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '应到人数', '实到人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注'];
-    download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.expectedCount ?? '', r.actualCount ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note]; })]));
+    const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '应到人数', '实到人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注', '课程回放链接'];
+    download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.expectedCount ?? '', r.actualCount ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note, r.replayUrl || '']; })]));
+  };
+  const copyRow = async (r: LessonRecord, el: HTMLElement) => {
+    const c = course(r.course);
+    const f = s.lessonFeedbacks.find(x => x.lesson === r.id);
+    const text = parentFeedbackText({
+      courseName: c?.name, courseCode: c?.code, date: r.date, teacher: lessonTeacher(r, s.opsCourses), hours: r.hours,
+      attendance: f?.attendance, expectedCount: r.expectedCount, actualCount: r.actualCount,
+      content: f?.content, performance: f?.performance, issues: f?.issues, nextSteps: f?.nextSteps, note: r.note, replayUrl: r.replayUrl,
+    });
+    if (await copyText(text, el)) toast.success('课程反馈已复制，可直接粘贴到家长群');
+    else toast.error('浏览器限制了复制，请手动选择文字');
   };
   const remove = async (r: LessonRecord) => {
     if (!canBypassLock && isLessonMonthLocked(s.lessonMonthLocks, r.date)) return toast.error('该月课时已确认锁定，仅张捷嘉可修改');
@@ -334,6 +361,7 @@ export function LessonsPage() {
             <TableCell className="nowrap">{lessonTeacher(r, s.opsCourses)}</TableCell>
             <TableCell className="nowrap">{s.staffName(r.opsTeacher)}</TableCell>
             <TableCell className="row-actions">
+              <button type="button" className="icon-button" aria-label="复制课程反馈" title="复制课程反馈" onClick={e => copyRow(r, e.currentTarget)}><Copy size={15} /></button>
               <button className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} title={hasFb(r) ? '已有学情反馈' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('该月课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={15} /></button>
               {editable
                 ? <><button className="icon-button" aria-label="编辑" title="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={15} /></button>
@@ -347,6 +375,7 @@ export function LessonsPage() {
             {c?.code ? <small className="ops-mobile-code">{c.code}</small> : null}
             <div className="ops-mobile-meta"><span>{r.hours} 课时</span><span>{headcount(r)}</span><span>{lessonTeacher(r, s.opsCourses)}</span></div>
             <div className="ops-mobile-actions">
+              <button type="button" className="icon-button" aria-label="复制课程反馈" onClick={e => copyRow(r, e.currentTarget)}><Copy size={18} /></button>
               <button type="button" className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('该月课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={18} /></button>
               {editable
                 ? <><button type="button" className="icon-button" aria-label="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={18} /></button>

@@ -349,6 +349,8 @@ export const lessonRecords = pgTable('lesson_records', {
   createdBy: text('created_by').notNull().default(''),
   /** 授课老师 (prefilled from the course). NULL on older rows: the course's teacher is shown. */
   teacher: text('teacher'),
+  /** 课程回放链接, copied into the parent-group 课程反馈. */
+  replayUrl: text('replay_url').notNull().default(''),
   sortOrder: integer('sort_order').notNull().default(0),
   ...stamps,
 }, t => [index('lesson_records_ops_teacher_idx').on(t.opsTeacher, t.date), index('lesson_records_course_idx').on(t.course)]);

@@ -137,6 +137,10 @@ assert(store.includes('.map(normalizeLesson)'),'localStorage + bootstrap lessons
 const opsUi=readFileSync('components/nexus/ops-pages.tsx','utf8');
 assert(opsUi.includes('<CourseCombobox')&&opsUi.includes('应到人数')&&opsUi.includes('实到人数')&&opsUi.includes('attendanceText(n, expected)'));
 assert(/<FormField label="本次课程内容"><textarea[^>]*rows=\{6\}/.test(opsUi)&&/<FormField label="学生布置"><textarea[^>]*rows=\{6\}/.test(opsUi),'课程内容 and 学生布置 same taller size');
+assert(opsUi.includes('lessonFeedbackRequested(withFb, fb, attTouched)')&&opsUi.includes('noValidate')&&opsUi.includes('课程回放链接')&&opsUi.includes('复制课程反馈'),'auto 到课情况 does not block save; replay link + copy feedback');
+assert(schema.includes("replayUrl: text('replay_url')")&&cols.includes('replayUrl: s(2000).optional()'));
+assert(readFileSync('drizzle/0022_lesson_replay_url.sql','utf8').includes('ADD COLUMN IF NOT EXISTS "replay_url"'));
+assert(JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries.some(e=>e.tag==='0022_lesson_replay_url'));
 const cc=readFileSync('components/nexus/course-combobox.tsx','utf8');assert(cc.includes('role="combobox"')&&cc.includes('aria-activedescendant')&&cc.includes("'ArrowDown'")&&cc.includes("'Escape'"));
 const css=readFileSync('app/globals.css','utf8');
 assert(css.includes('.ops-table .num{text-align:left')&&css.includes('.ops-table [data-slot=table-head],.ops-table [data-slot=table-cell]:not(.row-actions){text-align:left}'),'ops tables left-aligned');

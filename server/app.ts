@@ -804,7 +804,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
     // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
-    const own = (r: Record<string, unknown>) => canSeeAllLessons(user) || String(r.opsTeacher).toLowerCase() === user.email;
+    const own = (r: Record<string, unknown>) => canSeeAllLessons(user) || String(r.opsTeacher).toLowerCase() === user.email.toLowerCase();
     const articleRows = await db.select().from(schema.articles);
     const todos = await todosFor(user);
     const postList = visiblePosts(await posts.list(), user.role);
@@ -1117,6 +1117,7 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         if (!isUnit(unit)) return c.json({ error: 'invalid', message: '津贴单位无效' }, 400);
         if (unit === 'person_hour' && !(Number(data.actualCount) > 0)) return c.json({ error: 'invalid', message: '该班型按人数计算，请填写实到人数' }, 400);
         data.rate = rate; data.unit = unit; data.amount = computeAllowance(rate, unit, Number(data.hours), data.actualCount as number | null);
+        data.replayUrl = String(data.replayUrl ?? '').trim().slice(0, 2000);
       }
     }
     if (isTeacher(user.role) && name === 'courseSessions') {

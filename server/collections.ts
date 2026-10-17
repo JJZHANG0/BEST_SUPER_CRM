@@ -29,7 +29,7 @@ export const recordSchemas = {
   projects: z.object({ id, code: s(40).min(1), name: s().min(1), startDate: date, endDate: date, status, note: s(1000) }),
   opsCourses: z.object({ id, code: s(60).min(1), project: id, name: s().min(1), status, classType: id, teacher: s(80), opsTeacher: s(120), startDate: date, endDate: date }),
   teachers: z.object({ id, name: s(80).min(1), note: s(200), active: z.boolean() }),
-  lessons: z.object({ id, course: id, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hours: z.number().positive().max(24), expectedCount: z.number().int().min(0).max(1000).nullable(), actualCount: z.number().int().min(0).max(1000).nullable(), opsTeacher: s(120).min(3), rate: z.number().min(0), unit, amount: z.number().min(0), note: s(1000), createdBy: s(120), teacher: s(80).optional() }),
+  lessons: z.object({ id, course: id, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hours: z.number().positive().max(24), expectedCount: z.number().int().min(0).max(1000).nullable(), actualCount: z.number().int().min(0).max(1000).nullable(), opsTeacher: s(120).min(3), rate: z.number().min(0), unit, amount: z.number().min(0), note: s(1000), createdBy: s(120), teacher: s(80).optional(), replayUrl: s(2000).optional() }),
   lessonFeedbacks: z.object({ id, course: id, lesson: s(80).nullable(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), attendance: s(200), content: s(4000), performance: s(4000), issues: s(4000), nextSteps: s(2000), opsTeacher: s(120).min(3), createdBy: s(120) }),
 } as const;
 export type CollectionName = keyof typeof recordSchemas;
