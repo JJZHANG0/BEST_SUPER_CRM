@@ -17,7 +17,7 @@ import { hashPassword, verifyPassword } from './password';
 import { shanghaiStamp } from './stamp';
 import { isCollection, recordSchemas, tables, toRecord, systemCollections, ownedCollections, scheduleCollections, folderCollections, deletableCollections, type CollectionName } from './collections';
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
-import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
+import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled } from '../lib/nexus/sales';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
@@ -417,11 +417,19 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     if (dueAt === undefined) return c.json({ error: 'invalid', issues: ['dueAt'] }, 400);
     let ownerId = user.id, assignedBy: number | null = null, assignedByName: string | null = null;
     const assignee = typeof body?.assignee === 'string' ? body.assignee.trim().toLowerCase() : '';
-    if (assignee && assignee !== user.email) {
-      if (!canAssignTodos(user)) return c.json({ error: 'forbidden', message: '只有部门负责人可以指派任务' }, 403);
+    if (assignee && assignee !== user.email.toLowerCase()) {
       const [target] = await db.select().from(schema.users).where(eq(schema.users.email, assignee)).limit(1);
       if (!target || !target.active || !isOpsLike(target.role)) return c.json({ error: 'invalid', message: '请选择在职的运营老师' }, 400);
-      ownerId = target.id; assignedBy = user.id; assignedByName = user.name;
+      // The leader assigns downward to any ops teacher. Everyone else may only assign upward, and only to the leader.
+      if (canAssignTodos(user)) {
+        ownerId = target.id; assignedBy = user.id; assignedByName = user.name;
+      } else if (canAssignToLeader(user) && target.leader === true) {
+        ownerId = target.id; assignedBy = user.id; assignedByName = user.name;
+      } else if (canAssignToLeader(user)) {
+        return c.json({ error: 'forbidden', message: '只能给张捷嘉老师布置工作' }, 403);
+      } else {
+        return c.json({ error: 'forbidden', message: '只有部门负责人可以指派任务' }, 403);
+      }
     }
     const id = 'TODO-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     const now = new Date();

@@ -1222,6 +1222,7 @@ html[data-workspace=public] body{background:#f4f2f7}
 }
 /* 【万恶的资本家】 tag on todos assigned by the 部门负责人 */
 .todo-capitalist-tag{display:inline-flex;align-items:center;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:.6875rem;font-weight:700;letter-spacing:.02em;color:#a3241f;background:linear-gradient(135deg,#fff1ef,#ffe3df);border:1px solid #f6c3bd;vertical-align:2px;cursor:help;white-space:nowrap}
+.todo-upward-tag{display:inline-flex;align-items:center;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:.6875rem;font-weight:700;letter-spacing:.02em;color:#6a3d12;background:linear-gradient(135deg,#fff6df,#ffe7b0);border:1px solid #f0d08a;vertical-align:2px;cursor:help;white-space:nowrap}
 .leader-tab-intro{display:flex;align-items:center;gap:10px;margin-bottom:6px;color:#6f6585;font-size:.8125rem}
 .leader-tab-intro b{color:#a3241f}
 

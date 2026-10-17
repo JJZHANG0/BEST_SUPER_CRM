@@ -16,7 +16,7 @@ import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction
 import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
-import { isOpsLike, canAssignTodos, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
+import { isOpsLike, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
 import { dedupeSessions, type CourseSession } from './schedule';
 import { salesOwns } from './sales';
 import type { Announcement, AnnouncementAudience, AnnouncementDirectoryUser, AnnouncementReadRow } from './announcements';
@@ -263,11 +263,13 @@ export function Provider({children}:{children:ReactNode}){
   const title=input.title.trim();if(!title)return false;
   const assignee=(input.assignee||'').trim().toLowerCase();
   const assigning=!!assignee&&assignee!==String(user?.email||'').toLowerCase();
-  if(assigning&&!canAssignTodos(viewer)){toast.error('只有部门负责人可以指派任务');return false}
+  const upward=assigning&&!canAssignTodos(viewer);
+  if(upward&&!canAssignToLeader(viewer)){toast.error('只有部门负责人可以指派任务');return false}
   if(API_ENABLED){try{const {todo}=await api.createTodo({title,note:input.note??null,dueAt:input.dueAt??null,...(assigning?{assignee}:{})});setTodos(l=>[asTodo(todo),...l]);setPersisted(true);return true}catch(e){setPersisted(false);toast.error(e instanceof ApiError?apiError(e,'保存待办失败'):'无法连接服务器');return false}}
   const now=new Date().toISOString();
   const target=assigning?directory(overrides).find(u=>u.email===assignee&&u.active&&isOpsLike(u.role)):null;
   if(assigning&&!target){toast.error('请选择在职的运营老师');return false}
+  if(upward&&!target?.leader){toast.error('只能给张捷嘉老师布置工作');return false}
   const item:Todo={id:newTodoId(),userId:assigning?assignee:demoUserKey(),title,note:input.note?.trim()||undefined,dueAt:input.dueAt??null,completedAt:null,...(assigning?{assignedBy:demoUserKey(),assignedByName:user?.name||'',ownerName:target!.name,ownerEmail:assignee}:{}),createdAt:now,updatedAt:now};
   let ok=true;setTodos(l=>{const next=[item,...l];ok=persistTodos(next);return next});return ok;
  };

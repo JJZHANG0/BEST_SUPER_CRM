@@ -28,7 +28,7 @@ const dash=readFileSync('components/nexus/dashboard.tsx','utf8');
 assert(dash.includes('TodoHomeCard'));
 assert(!dash.includes('需要关注的队伍')&&!dash.includes('最新项目公告'),'dashboard sections removed');
 assert(dash.includes('dg-todo')&&dash.includes('dg-quick')&&dash.includes('dg-schedule'));
-assert(/grid-template-areas:"todo quick" "schedule note"/.test(readFileSync('app/globals.css','utf8')),'快捷操作 beside 待办, 今日课程 below');
+assert(/grid-template-areas:"todo quick" "schedule schedule"/.test(readFileSync('app/globals.css','utf8')),'快捷操作 beside 待办, 今日课程 below');
 assert(!/14|18/.test((dash.match(/const stats = \[[\s\S]*?\];/)||[''])[0].replace(/\d+px/g,'')),'no hardcoded KPI numbers');
 // Date line: icon + date are one flex item aligned to the note's first line.
 const row=readFileSync('components/nexus/todos.tsx','utf8');
@@ -60,12 +60,14 @@ assert.deepEqual(T.assignmentStats(T.assignedByKey(asg,'zhangjiejia@nexus.local'
 assert(tsx.includes('一键导出')&&tsx.includes('一键复制')&&tsx.includes('>当月绩效<')&&tsx.includes('>我指派的<'));
 // Leader-assigned todos carry 【万恶的资本家】 (assigner in the tooltip); non-leaders get 「领导万岁」 instead of 「我指派的」.
 assert.equal(T.CAPITALIST_TAG,'【万恶的资本家】');
-assert(tsx.includes('{CAPITALIST_TAG}</span>')&&tsx.includes('title={`由 ${todo.assignedByName} 指派')&&!tsx.includes('由 {todo.assignedByName} 指派</span>'));
-assert(tsx.includes('<HuskyLabel text="领导万岁"')&&/\{!assigner && <button[^>]*leader-tab/.test(tsx)&&/\{assigner && <button[^>]*>我指派的|\{assigner && <button[^\n]*我指派的/.test(tsx));
+assert.equal(T.UPWARD_TAG,'【以下犯上】');
+assert(tsx.includes('todo-capitalist-tag')&&tsx.includes('todo-upward-tag')&&tsx.includes('title={`由 ${todo.assignedByName} ${verb}')&&!tsx.includes('由 {todo.assignedByName} 指派</span>'));
+assert(tsx.includes('<HuskyLabel text="领导万岁"')&&tsx.includes('<HuskyLabel text="以下犯上"')&&/\{!assigner && <button[^>]*leader-tab/.test(tsx)&&/\{assigner && <button[^>]*>我指派的|\{assigner && <button[^\n]*我指派的/.test(tsx));
 assert.deepEqual(T.assignedToKey(asg,'xujin@nexus.local').map(t=>t.id),['a1']);
 assert.deepEqual(T.assignedToKey(asg,'zhangjiejia@nexus.local'),[],'own todos are not 「领导万岁」');
 const clip=readFileSync('lib/nexus/clipboard.ts','utf8');
 assert(clip.includes('window.isSecureContext')&&clip.includes("execCommand('copy')"),'clipboard API with legacy fallback');
 const app=readFileSync('server/app.ts','utf8');
 assert(app.includes('指派的任务只能由指派人撤回')&&app.includes('指派的任务由负责老师标记完成'),'assignee / assigner rules on the API');
+assert(app.includes('只能给张捷嘉老师布置工作')&&app.includes('canAssignToLeader(user) && target.leader === true'),'ops may assign upward only to the leader');
 console.log('Todos: export text, assignment views, empty start, open/done sort, month grouping, storage parsing, date-line alignment and wiring passed.');

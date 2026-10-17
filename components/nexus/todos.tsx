@@ -1,13 +1,13 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2, Crown } from 'lucide-react';
+import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2, Crown, Sparkles } from 'lucide-react';
 import { HuskyLabel } from './brand';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
-import { openTodos, groupDoneByMonth, formatDue, ownedBy, assignedByKey, assignedToKey, assignmentStats, exportDoneText, monthKeyLabel, isDone, CAPITALIST_TAG, type Todo } from '@/lib/nexus/todos';
+import { openTodos, groupDoneByMonth, formatDue, ownedBy, assignedByKey, assignedToKey, assignmentStats, exportDoneText, monthKeyLabel, isDone, CAPITALIST_TAG, UPWARD_TAG, type Todo } from '@/lib/nexus/todos';
 import { SectionTitle, PageTitle, FormField, EmptyState, Picker } from './ui';
 import { today as todayIso, currentMonth } from '@/lib/nexus/ops';
-import { canAssignTodos, canFillKpi } from '@/lib/nexus/roles';
+import { canAssignTodos, canAssignToLeader, canFillKpi } from '@/lib/nexus/roles';
 import { copyText } from '@/lib/nexus/clipboard';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -81,13 +81,16 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
     toast.success('待办已删除');
   };
   const assignedToMe = !!todo.assignedByName && String(todo.assignedBy ?? '').toLowerCase() !== s.meKey.toLowerCase();
+  const upward = assignedToMe && s.leader;
+  const tag = upward ? UPWARD_TAG : CAPITALIST_TAG;
+  const verb = upward ? '布置' : '指派';
   return (
     <div className={'todo-row ' + mode + (assignedToMe ? ' assigned' : '')}>
       <button type="button" className="todo-check" aria-label={mode === 'open' ? '标记完成' : '恢复为待办'} disabled={busy} onClick={toggle}>
         {mode === 'open' ? <Circle size={18} /> : <Check size={18} />}
       </button>
       <div className="todo-main">
-        <strong>{todo.title}{assignedToMe && <span className="todo-capitalist-tag" title={`由 ${todo.assignedByName} 指派 · ${formatDue(todo.createdAt)}`} aria-label={`${CAPITALIST_TAG}（由 ${todo.assignedByName} 指派）`}>{CAPITALIST_TAG}</span>}</strong>
+        <strong>{todo.title}{assignedToMe && <span className={upward ? 'todo-upward-tag' : 'todo-capitalist-tag'} title={`由 ${todo.assignedByName} ${verb} · ${formatDue(todo.createdAt)}`} aria-label={`${tag}（由 ${todo.assignedByName} ${verb}）`}>{tag}</span>}</strong>
         {(todo.note || todo.dueAt) && (
           <p className="todo-meta">
             {todo.dueAt && <span className={'todo-due' + (mode === 'open' && todo.dueAt.slice(0, 10) < todayIso() ? ' overdue' : '')} title="期望DDL"><CalendarDays size={12} aria-hidden="true" /><span>DDL {formatDue(todo.dueAt)}</span></span>}
@@ -238,6 +241,91 @@ function AssignedPanel() {
   </section>;
 }
 
+/** 以下犯上: an ops teacher assigns one task to the 部门负责人 (张捷嘉), nobody else. */
+function BossDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const s = useNexus();
+  const boss = s.staff.find(u => u.active && u.leader);
+  const [title, setTitle] = useState(''), [note, setNote] = useState(''), [dueAt, setDueAt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!boss) { toast.error('还没有找到张捷嘉老师的账号'); return; }
+    if (!title.trim()) { toast.error('请填写要布置的工作'); return; }
+    setBusy(true);
+    const ok = await s.addTodo({ title: title.trim(), note: note.trim() || undefined, dueAt: dueAt || null, assignee: boss.email });
+    setBusy(false);
+    if (!ok) return;
+    s.log(`给${boss.name}老师布置工作：${title.trim()}`);
+    toast.success(`已布置给${boss.name}老师。做不做，看领导心情。`);
+    onClose();
+  };
+  return <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog">
+    <DialogTitle>给{boss?.name || '张捷嘉'}老师布置工作</DialogTitle>
+    <DialogDescription>仅此一位领导可以接收。任务会出现在 TA 的待办里，并盖上 {UPWARD_TAG}。做不做，看领导心情。</DialogDescription>
+    {!boss ? <EmptyState icon={Crown} title="还没有找到领导账号" description="张捷嘉老师的账号需要是在职的部门负责人。" /> : <form className="form-stack" onSubmit={submit}>
+      <div className="course-locked" aria-label="布置对象"><strong>{boss.name}老师</strong><small>部门负责人 · 唯一可布置对象</small></div>
+      <FormField label="工作内容"><input autoFocus required maxLength={200} value={title} onChange={e => setTitle(e.target.value)} placeholder="例如：请领导亲自核对这周的家长群反馈" /></FormField>
+      <FormField label="期望DDL（可选，领导未必认）"><input type="date" value={dueAt} onChange={e => setDueAt(e.target.value)} /></FormField>
+      <FormField label="补充说明（可选）"><textarea rows={3} maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="越具体，领导越难装没看见" /></FormField>
+      <div className="actions"><button type="button" className="secondary" onClick={onClose}>算了，不敢</button><button className="primary" type="submit" disabled={busy || !title.trim()}><Sparkles size={16} />大胆布置</button></div>
+    </form>}
+  </DialogContent></Dialog>;
+}
+
+/** 「以下犯上」: ops see what they assigned to the leader; the leader sees what staff assigned to them. */
+function UpwardPanel() {
+  const s = useNexus();
+  const bossing = canAssignToLeader(s.viewer);
+  const [open, setOpen] = useState(false);
+  const list = useMemo(() => bossing ? assignedByKey(s.todos, s.meKey) : assignedToKey(s.todos, s.meKey), [bossing, s.todos, s.meKey]);
+  const boss = s.staff.find(u => u.leader);
+  const rows = [...list].sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || (a.dueAt || '9999').localeCompare(b.dueAt || '9999') || b.createdAt.localeCompare(a.createdAt));
+  const stats = assignmentStats(list);
+  const withdraw = async (t: Todo) => {
+    if (!window.confirm(`撤回布置给${boss?.name || '领导'}老师的工作「${t.title}」？`)) return;
+    if (await s.deleteTodo(t.id)) { s.log('撤回给领导的工作：' + t.title); toast.success('已撤回，领导可以装没这回事了'); }
+  };
+  if (!bossing) return <section className="glass panel" role="tabpanel" aria-label="以下犯上">
+    <p className="leader-tab-intro">员工鼓起勇气布置给你的工作。做完就勾掉，<b>假装没看见也行</b>。</p>
+    <div className="results-meta">{stats.open} 项还没做 · {stats.done} 项已笑纳<span>未完成的排在前面</span></div>
+    <div className="todo-list">
+      {rows.filter(t => !isDone(t)).map(t => <TodoRow key={t.id} todo={t} mode="open" />)}
+      {rows.filter(isDone).map(t => <TodoRow key={t.id} todo={t} mode="done" />)}
+      {!list.length && <EmptyState icon={Sparkles} title="还没有员工敢给你派活" description="运营老师在「以下犯上」里布置的工作会出现在这里，也会进你的待办。" />}
+    </div>
+  </section>;
+  return <section className="glass panel" role="tabpanel" aria-label="以下犯上">
+    <div className="assign-head">
+      <div className="assign-stats">
+        <div><span>已布置</span><b>{stats.total}</b></div>
+        <div><span>领导还没做</span><b>{stats.open}</b></div>
+        <div><span>已笑纳</span><b>{stats.done}</b></div>
+      </div>
+      <button type="button" className="primary compact" onClick={() => setOpen(true)}><Sparkles size={15} />给{boss?.name || '张捷嘉'}老师布置</button>
+    </div>
+    <p className="leader-tab-intro">只能布置给<b>{boss?.name || '张捷嘉'}老师</b>。TA 的待办会盖上 {UPWARD_TAG}，做不做，看领导心情。</p>
+    <div className="todo-list">
+      {rows.map(t => {
+        const done = isDone(t);
+        return <div key={t.id} className={'todo-row ' + (done ? 'done' : 'open') + ' assigned'}>
+          <span className="todo-check static" aria-hidden="true">{done ? <Check size={18} /> : <Circle size={18} />}</span>
+          <div className="todo-main">
+            <strong>{t.title}<span className="todo-upward-tag">{UPWARD_TAG}</span></strong>
+            <p className="todo-meta">
+              <span>{done ? '领导已完成' : '等领导笑纳'}</span>
+              {t.dueAt && <><span className="todo-sep" aria-hidden="true">·</span><span className="todo-due"><CalendarDays size={12} />DDL {formatDue(t.dueAt)}</span></>}
+              {t.note && <><span className="todo-sep" aria-hidden="true">·</span><span className="todo-note">{t.note}</span></>}
+            </p>
+          </div>
+          <div className="todo-actions"><button type="button" className="icon-button" aria-label="撤回布置" title="撤回布置" onClick={() => withdraw(t)}><Undo2 size={15} /></button></div>
+        </div>;
+      })}
+      {!rows.length && <EmptyState icon={Sparkles} title="还没敢给领导派活" description="写一项正经的（或不正经的）工作。它会出现在张捷嘉老师的待办里。" action="给领导布置工作" onAction={() => setOpen(true)} />}
+    </div>
+    {open && <BossDialog open={open} onClose={() => setOpen(false)} />}
+  </section>;
+}
+
 /** 「领导万岁」: tasks the 部门负责人 assigned to me (they also sit in my normal todo list with the tag). */
 function LeaderPanel({ list }: { list: Todo[] }) {
   const open = openTodos(list), done = list.filter(isDone).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
@@ -279,16 +367,16 @@ export function TodoHomeCard() {
   );
 }
 
-type TodoTab = 'open' | 'done' | 'kpi' | 'assigned' | 'leader';
-const tabOf = (route: string): TodoTab => { const t = new URLSearchParams(route.split('?')[1] || '').get('tab'); return t === 'done' || t === 'kpi' || t === 'assigned' || t === 'leader' ? t : 'open'; };
+type TodoTab = 'open' | 'done' | 'kpi' | 'assigned' | 'leader' | 'upward';
+const tabOf = (route: string): TodoTab => { const t = new URLSearchParams(route.split('?')[1] || '').get('tab'); return t === 'done' || t === 'kpi' || t === 'assigned' || t === 'leader' || t === 'upward' ? t : 'open'; };
 
 /** 待办事项 with 「待办」/「已完成」/「当月绩效」(+「我指派的」 for superadmins) tabs (#/todos?tab=…). */
 export function TodosPage() {
   const s = useNexus();
-  const assigner = canAssignTodos(s.viewer), fillsKpi = canFillKpi(s.viewer);
+  const assigner = canAssignTodos(s.viewer), fillsKpi = canFillKpi(s.viewer), bossing = canAssignToLeader(s.viewer);
   const routeTab = tabOf(s.route);
-  // 部门负责人: 「我指派的」, no 当月绩效. Everyone else: 「领导万岁」 (tasks from the leader).
-  const tab: TodoTab = (routeTab === 'assigned' && !assigner) || (routeTab === 'leader' && assigner) || (routeTab === 'kpi' && !fillsKpi) ? 'open' : routeTab;
+  // 部门负责人: 「我指派的」+ incoming 「以下犯上」. Ops: 「领导万岁」+ outgoing 「以下犯上」.
+  const tab: TodoTab = (routeTab === 'assigned' && !assigner) || (routeTab === 'leader' && assigner) || (routeTab === 'kpi' && !fillsKpi) || (routeTab === 'upward' && !assigner && !bossing) ? 'open' : routeTab;
   const leaderRef = useRef<HTMLButtonElement>(null);
   const fromLeader = useMemo(() => assigner ? [] : assignedToKey(s.todos, s.meKey), [assigner, s.todos, s.meKey]);
   const own = useMemo(() => mine(s.todos, s.meKey), [s.todos, s.meKey]);
@@ -296,6 +384,8 @@ export function TodosPage() {
   const groups = useMemo(() => groupDoneByMonth(own), [own]);
   const done = groups.reduce((n, g) => n + g.items.length, 0);
   const assignedOpen = useMemo(() => assigner ? assignedByKey(s.todos, s.meKey).filter(t => !isDone(t)).length : 0, [assigner, s.todos, s.meKey]);
+  const upwardOpen = useMemo(() => (bossing ? assignedByKey(s.todos, s.meKey) : assigner ? assignedToKey(s.todos, s.meKey) : []).filter(t => !isDone(t)).length, [bossing, assigner, s.todos, s.meKey]);
+  const upwardRef = useRef<HTMLButtonElement>(null);
   const [exporting, setExporting] = useState(false);
   // 生成OKR: this month, or the newest month with completed todos when this month has none yet.
   const okrMonth = groups.some(g => g.key === currentMonth()) || !groups.length ? currentMonth() : groups[0].key;
@@ -309,6 +399,7 @@ export function TodosPage() {
         {fillsKpi && <button role="tab" aria-selected={tab === 'kpi'} className={tab === 'kpi' ? 'selected' : ''} onClick={() => setTab('kpi')}><Target size={16} />当月绩效</button>}
         {assigner && <button role="tab" aria-selected={tab === 'assigned'} className={tab === 'assigned' ? 'selected' : ''} onClick={() => setTab('assigned')}><Send size={16} />我指派的<em>{assignedOpen}</em></button>}
         {!assigner && <button ref={leaderRef} role="tab" aria-selected={tab === 'leader'} className={'leader-tab' + (tab === 'leader' ? ' selected' : '')} onClick={() => setTab('leader')}><Crown size={16} /><HuskyLabel text="领导万岁" hostRef={leaderRef} /><em>{fromLeader.filter(t => !isDone(t)).length}</em></button>}
+        {(assigner || bossing) && <button ref={upwardRef} role="tab" aria-selected={tab === 'upward'} className={'leader-tab' + (tab === 'upward' ? ' selected' : '')} onClick={() => setTab('upward')}><Sparkles size={16} /><HuskyLabel text="以下犯上" hostRef={upwardRef} /><em>{upwardOpen}</em></button>}
       </div>
       {tab === 'open' && (
         <section className="glass panel" role="tabpanel" aria-label="待办">
@@ -338,6 +429,7 @@ export function TodosPage() {
       {tab === 'kpi' && fillsKpi && <KpiSelfPanel />}
       {tab === 'assigned' && assigner && <AssignedPanel />}
       {tab === 'leader' && !assigner && <LeaderPanel list={fromLeader} />}
+      {tab === 'upward' && (assigner || bossing) && <UpwardPanel />}
     </>
   );
 }

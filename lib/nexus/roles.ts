@@ -38,6 +38,8 @@ export const canSeeAllLessons = (v: Viewer | unknown) => isLeader(v);
 export const canEditOwned = (v: Viewer | unknown, me: string, owner: string) => isLeader(v) || (isOpsLike(asViewer(v).role) && !!me && me.toLowerCase() === String(owner || '').toLowerCase());
 /** 任务指派: create a todo in another ops teacher's list (leader only). */
 export const canAssignTodos = (v: Viewer | unknown) => isLeader(v);
+/** 以下犯上: an ops-workspace teacher who is not the leader may assign a todo only to the 部门负责人. */
+export const canAssignToLeader = (v: Viewer | unknown) => { const w = asViewer(v); return isOpsLike(w.role) && !isLeader(w); };
 /** 绩效考核: view, score, finalize and reopen other teachers' monthly KPI sheets (leader only). */
 export const canReviewKpi = (v: Viewer | unknown) => isLeader(v);
 /** Fills their own 当月绩效 and receives assigned todos: every ops-workspace account except the leader. */

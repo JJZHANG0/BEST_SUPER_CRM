@@ -70,6 +70,7 @@ const leader={role:'superadmin',leader:true};
 assert(R.canAssignTodos(leader)&&R.canReviewKpi(leader)&&!R.canFillKpi(leader));
 for(const r of ['superadmin','ops','admin','sales',undefined,{role:'superadmin'},{role:'superadmin',leader:false},{role:'sales',leader:true}])assert(!R.canAssignTodos(r)&&!R.canReviewKpi(r),JSON.stringify(r));
 assert(R.canFillKpi('ops')&&R.canFillKpi('superadmin')&&R.canFillKpi({role:'superadmin',leader:false})&&!R.canFillKpi('sales'));
+assert(R.canAssignToLeader('ops')&&R.canAssignToLeader({role:'superadmin',leader:false})&&!R.canAssignToLeader(leader)&&!R.canAssignToLeader('sales')&&!R.canAssignToLeader('teacher'));
 const A=await load('lib/nexus/auth.ts');
 assert.equal(A.staffAccounts.find(a=>a.name==='张捷嘉').role,'superadmin');
 assert.equal(A.staffAccounts.find(a=>a.name==='张捷嘉').leader,true);
@@ -79,7 +80,7 @@ assert.deepEqual(A.staffAccounts.filter(a=>a.leader).map(a=>a.name),['张捷嘉'
 const app=readFileSync('server/app.ts','utf8');
 assert(/app\.put\('\/kpi-review\/:userId\/:month'[\s\S]{0,200}canReviewKpi/.test(app),'review endpoint gated');
 assert(/app\.get\('\/kpi-review\/:month'[\s\S]{0,200}canReviewKpi/.test(app));
-assert(/app\.post\('\/todos'[\s\S]{0,1200}canAssignTodos/.test(app),'assignment gated');
+assert(/app\.post\('\/todos'[\s\S]{0,2200}canAssignTodos/.test(app),'assignment gated');
 assert(app.indexOf("app.put('/kpi/:month'")<app.indexOf("app.put('/:collection/:id'"),'KPI routes registered before the generic collection route');
 assert(readFileSync('app/page.tsx','utf8').includes("canReviewKpi(s.viewer)?['kpi-review']:[]"));
 assert(readFileSync('components/nexus/kpi.tsx','utf8').includes('if (!canReviewKpi(s.viewer)) return'));
