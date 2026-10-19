@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CTB">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1F6FD9"/><stop offset="100%" stop-color="#0B3F8C"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <text x="32" y="30" text-anchor="middle" font-family="Inter,Helvetica,Arial,sans-serif" font-size="18" font-weight="800" fill="#fff" letter-spacing="0.5">CTB</text>
+  <text x="32" y="44" text-anchor="middle" font-family="PingFang SC,Hiragino Sans GB,Microsoft YaHei,sans-serif" font-size="7.5" font-weight="600" fill="#C9DEFF">全球青年创新</text>
+</svg>

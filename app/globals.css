@@ -2346,3 +2346,47 @@ button.sh-row:active{transform:scale(.985)}
 .sh-lightbox-hint{position:fixed;bottom:calc(env(safe-area-inset-bottom) + 10px);left:0;right:0;text-align:center;color:rgba(255,255,255,.6);font-size:.75rem;margin:0;pointer-events:none}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .recruit-flag-select{min-height:30px;border-radius:10px;padding:2px 6px;font-size:.75rem;border:1px solid color-mix(in srgb,currentColor 20%,transparent);background:transparent}
+
+/* ── 队伍管理 · expandable list (replaces card grid) ─────────── */
+.competition-logo{display:inline-block;border-radius:7px;object-fit:cover;flex-shrink:0;vertical-align:middle;box-shadow:0 1px 2px rgba(40,20,70,.08)}
+.competition-logo.mono{display:inline-grid;place-items:center;font-weight:700;letter-spacing:.02em;color:#fff;background:linear-gradient(135deg,#8b6bb8,#5a3d8c)}
+.competition-logo.mono.blue{background:linear-gradient(135deg,#4a8ad8,#1f4f9c)}
+.competition-logo.mono.pink{background:linear-gradient(135deg,#c07ad0,#7a3a9a)}
+.competition-logo.mono.violet{background:linear-gradient(135deg,#8b6bb8,#4a2688)}
+.competition-logo.mono.green{background:linear-gradient(135deg,#4aab7a,#0b5a3a)}
+.competition-logo.mono.orange{background:linear-gradient(135deg,#f08a24,#c45a0a)}
+.team-program-chips>button{display:inline-flex;align-items:center;gap:7px}
+.team-program-chips .competition-logo{border-radius:5px}
+.team-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.team-row{padding:0;overflow:hidden;transition:box-shadow .18s ease}
+.team-row.is-open{box-shadow:0 12px 32px -18px rgba(70,40,130,.28)}
+.team-row-main{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;text-align:left;border:0;background:transparent;cursor:pointer}
+.team-row-name{font-size:.9375rem;font-weight:600;color:#3f354c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(340px,42vw);flex-shrink:0}
+.team-row-spacer{flex:1;min-width:12px}
+.team-row-meta{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;min-width:0;color:#8a7a9c;font-size:.75rem}
+.team-row-prog{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.team-row-prog em{font-style:normal;font-weight:600;font-size:.75rem;color:#6a5a80;letter-spacing:.02em}
+.team-row-stat{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.team-row-stat.muted{opacity:.78}
+.team-row-chev{color:#b3a3c4;flex-shrink:0;transition:transform .18s ease}
+.team-row-chev.open{transform:rotate(180deg)}
+.team-row-detail{padding:0 16px 16px;border-top:1px solid #efe8f5;animation:team-row-in .18s ease}
+@keyframes team-row-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.team-row-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding-top:14px}
+.team-row-detail h4{margin:0 0 6px;font-size:.75rem;font-weight:600;color:#9a88b0;letter-spacing:.04em}
+.team-row-detail p{margin:0 0 6px;font-size:.8125rem;line-height:1.65;color:#5a4a6e}
+.team-row-members{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.team-row-members li{display:flex;align-items:center;gap:8px;font-size:.8125rem}
+.team-row-members small{color:#a890b8;margin-left:auto}
+.avatar.tiny{width:22px;height:22px;font-size:.625rem}
+.team-row-poster img{width:88px;max-height:120px;object-fit:cover;border-radius:10px;border:1px solid #eee6f4}
+.team-row-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+@media(max-width:900px){
+  .team-row-main{flex-wrap:wrap;gap:8px;padding:12px 12px}
+  .team-row-name{max-width:100%;flex:1 1 auto}
+  .team-row-spacer{display:none}
+  .team-row-meta{flex-wrap:wrap;gap:6px 8px;width:100%}
+  .team-row-chev{margin-left:auto}
+  .team-row-detail-grid{grid-template-columns:1fr;gap:12px}
+  .team-row-stat.muted:nth-of-type(n+3){display:none} /* keep seats + owner on mobile; hide extras if crowded — actually keep all */
+}

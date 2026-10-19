@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="iHOSA">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2A4A7A"/><stop offset="100%" stop-color="#8B2E3E"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <circle cx="32" cy="28" r="14" fill="none" stroke="#F3D9A6" stroke-width="2"/>
+  <path d="M32 18 L40 36 H24 Z" fill="none" stroke="#F3D9A6" stroke-width="2" stroke-linejoin="round"/>
+  <text x="32" y="54" text-anchor="middle" font-family="Inter,Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#F7E9C8" letter-spacing="0.6">iHOSA</text>
+</svg>
