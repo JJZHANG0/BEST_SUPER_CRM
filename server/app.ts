@@ -28,6 +28,7 @@ import { buildOkrMessages, parseOkr, rateLimiter } from '../lib/nexus/okr';
 import { monthKeyOf } from '../lib/nexus/todos';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
 import { isPetId, DEFAULT_PET } from '../lib/nexus/pets';
+import { todayNews } from './news';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
@@ -261,7 +262,12 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       console.error('weather', err);
       return c.json({ error: 'upstream', message: '天气服务请求失败' }, 502);
     }
-  });
+  })
+  /** 当日新闻 / 热点 titles only (RSS aggregate, ~45 min cache). No click-through URLs. */
+  app.get('/news/today', async c => {
+    const data = await todayNews();
+    return c.json({ items: data.items, updatedAt: data.updatedAt, stale: data.stale });
+  });;
 
   const shanghaiMonth = () => {
     const sh = new Date(Date.now() + 8 * 3600_000);

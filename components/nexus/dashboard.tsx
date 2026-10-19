@@ -4,6 +4,9 @@ import { WorkbenchWelcomeTools } from './workbench-chrome';
 import { WorkHoursCard, RedPacketCard, useMonthlyWorkHours } from './work-hours-card';
 import { Badge, SectionTitle } from './ui';
 import { TodoHomeCard } from './todos';
+import { NewsPanel } from './news-panel';
+import { useMemo } from 'react';
+import { openTodos, ownedBy } from '@/lib/nexus/todos';
 import { useMonthAllowance } from './ops-pages';
 import { greeting } from './recruitment';
 import { useNexus, useMe } from '@/lib/nexus/store';
@@ -33,6 +36,7 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
   // L→R: 学生总数 → 本周课程 → 本月使用时长 → 本月红包提现 → 当月教务津贴
   const studentStat = { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' };
   const weekStat = { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' };
+  const openTodoCount = useMemo(() => openTodos(ownedBy(s.todos, s.meKey)).length, [s.todos, s.meKey]);
   const allowanceStat = { label: allowance.team ? '当月教务津贴 · 团队' : '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)}${allowance.team ? ' · 全部老师' : ''} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' };
   return <>
     <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><WorkbenchWelcomeTools now={now} /></div>
@@ -44,9 +48,12 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
       <button className="stat-card glass" onClick={() => go(allowanceStat.path)}><div className="stat-top"><span>{allowanceStat.label}</span><span className={`stat-icon ${allowanceStat.tone}`}><Wallet size={19} /></span></div><div className="stat-value">{allowanceStat.value}{allowanceStat.unit && <span>{allowanceStat.unit}</span>}</div><div className="stat-foot"><span>{allowanceStat.sub}</span><ChevronRight size={14} /></div></button>
     </div>
     {/* Same 5-column grid as the KPI cards: 待办 / 今日课程 span cards 1–4, 快捷操作 / note sit under card 5. */}
+    {/* 快捷操作 keeps natural height; when incomplete todos > 2, swap in 当日新闻. */}
     <div className="dashboard-grid">
       <div className="dg-todo"><TodoHomeCard /></div>
-      <section className="glass panel quick-panel dg-quick"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>
+      {openTodoCount > 2
+        ? <NewsPanel />
+        : <section className="glass panel quick-panel dg-quick"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>}
       <section className="glass panel schedule-panel dg-schedule"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
         <div className="today-courses">{todays.map((o, i) => { const c = o.course; return <button key={o.key} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{o.start && o.end ? `${o.start}–${o.end}` : c.time}{c.code && <Badge tone="violet">{c.code}</Badge>}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name || '—'} <span>·</span> {c.teacher}{o.location && <><span>·</span> {o.location}</>}</p></button>; })}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
         <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>

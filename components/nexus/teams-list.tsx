@@ -5,7 +5,7 @@
  * Expand inline for progress / notes / poster / member preview; 「进入队伍」 opens the existing detail page.
  */
 import { useMemo, useState } from 'react';
-import { ChevronDown, Users, UserRound, ArrowRight } from 'lucide-react';
+import { ChevronDown, Users, ArrowRight } from 'lucide-react';
 import { useNexus, useVisible } from '@/lib/nexus/store';
 import { stages, type Team } from '@/lib/nexus/data';
 import { teamEnrolled, normalizeRecruitStatus, inactiveEnrollment } from '@/lib/nexus/sales';
@@ -29,16 +29,13 @@ function TeamRow({ team, open, onToggle }: { team: Team; open: boolean; onToggle
   return (
     <li className={'team-row glass' + (open ? ' is-open' : '')}>
       <button type="button" className="team-row-main" onClick={onToggle} aria-expanded={open}>
-        <span className="team-row-name">{team.name}</span>
-        <span className="team-row-spacer" aria-hidden="true" />
-        <span className="team-row-meta">
+        <span className="team-row-leading">
           {program && <span className="team-row-prog"><CompetitionLogo program={program} size={22} /><em>{program.short}</em></span>}
           {recruit && <Badge tone={/满|结束/.test(recruit) ? 'neutral' : recruit.includes('火热') ? 'pink' : 'green'}>{recruit}</Badge>}
-          <span className="team-row-stat" title="已招 / 名额">{seatLabel(team, live)}</span>
-          <span className="team-row-stat muted" title="负责人"><UserRound size={13} />{team.opsOwner || team.teacher || '—'}</span>
-          <span className="team-row-stat muted" title="成员数"><Users size={13} />{live}</span>
           <Badge tone={team.status === '正常进行' ? 'green' : 'orange'}>{team.status}</Badge>
         </span>
+        <span className="team-row-name">{team.name}</span>
+        <span className="team-row-spacer" aria-hidden="true" />
         <ChevronDown size={18} className={'team-row-chev' + (open ? ' open' : '')} aria-hidden="true" />
       </button>
       {open && (
