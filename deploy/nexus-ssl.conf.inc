@@ -5,6 +5,11 @@ server {
     server_name bestcrm.cc www.bestcrm.cc;
     root /opt/nexus/prod/current/web;
     client_max_body_size 20m;
+    # Keep idle client (HTTP/2) connections longer than browsers do, so the browser closes first.
+    # With nginx\'s default 65s, a POST/PUT sent on a connection nginx just closed fails as a
+    # network error (browsers do not auto-retry non-idempotent requests) — the 「first save fails」 bug.
+    keepalive_timeout 620s;
+    keepalive_requests 10000;
 
     ssl_certificate     /etc/letsencrypt/live/bestcrm.cc/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/bestcrm.cc/privkey.pem;

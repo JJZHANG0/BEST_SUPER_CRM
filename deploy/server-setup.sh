@@ -116,7 +116,7 @@ events { worker_connections 1024; }
 http {
     log_format main '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
     access_log /var/log/nginx/access.log main;
-    sendfile on; tcp_nopush on; keepalive_timeout 65; types_hash_max_size 4096; server_tokens off;
+    sendfile on; tcp_nopush on; keepalive_timeout 620s; types_hash_max_size 4096; server_tokens off;
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     gzip on; gzip_comp_level 5; gzip_min_length 1024;

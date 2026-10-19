@@ -51,6 +51,9 @@ server {
     server_name bestcrm.cc www.bestcrm.cc;
     root /opt/nexus/prod/current/web;
     client_max_body_size 20m;
+    # Idle HTTP/2 connections outlive the browser's (see deploy/nexus-ssl.conf.inc).
+    keepalive_timeout 620s;
+    keepalive_requests 10000;
 
     ssl_certificate     /etc/letsencrypt/live/bestcrm.cc/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/bestcrm.cc/privkey.pem;

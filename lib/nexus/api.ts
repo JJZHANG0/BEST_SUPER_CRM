@@ -29,12 +29,33 @@ export const token = {
   clear() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } },
 };
 
+/** Thrown when no HTTP response arrived at all (connection dropped / offline). */
+export class NetworkError extends Error {
+  constructor(cause?: unknown) { super('network_error'); this.name = 'NetworkError'; this.cause = cause; }
+}
+/** User-facing text for a request that failed without any server response. */
+export const NETWORK_ERROR_MESSAGE = '网络连接中断，请求未送达服务器。请检查网络后重试（数据未丢失）。';
+/** Requests that are safe to send twice: reads, upserts by id (PUT), deletes, and login (no side effect beyond issuing a token). */
+const retrySafe = (method: string, path: string) => method === 'GET' || method === 'HEAD' || method === 'PUT' || method === 'DELETE' || (method === 'POST' && /^\/auth\/(login|portal)$/.test(path));
+async function send(path: string, init: RequestInit, headers: Record<string, string>) {
+  const method = (init.method || 'GET').toUpperCase();
+  try {
+    return await fetch(API_BASE + path, { ...init, headers });
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e;
+    // fetch() rejects only when no HTTP response came back. The usual cause is the browser reusing a pooled
+    // HTTP/2 connection the server had just closed; one immediate retry opens a fresh connection.
+    if (!retrySafe(method, path)) throw new NetworkError(e);
+    await new Promise(r => setTimeout(r, 300));
+    try { return await fetch(API_BASE + path, { ...init, headers }); } catch (e2) { throw new NetworkError(e2); }
+  }
+}
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (init.body) headers['Content-Type'] = 'application/json';
   const t = token.get();
   if (t) headers.Authorization = `Bearer ${t}`;
-  const res = await fetch(API_BASE + path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  const res = await send(path, init, { ...headers, ...(init.headers as Record<string, string> | undefined) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || 'http_' + res.status, (data as { message?: string }).message);
   return data as T;

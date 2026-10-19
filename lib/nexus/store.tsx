@@ -10,7 +10,7 @@ import { isHealth, type Assignment } from './students';
 import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, migrateOverrides, type Overrides, type DirectoryUser } from './auth';
 import { applyTheme, writeStoredTheme, readStoredTheme, isThemeId, DEFAULT_THEME, type ThemeId } from './themes';
 import { isPetId, DEFAULT_PET, writeStoredPet, readStoredPet, type PetId } from './pets';
-import { api, publicApi, visitorId, API_ENABLED, ApiError, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
+import { api, publicApi, visitorId, API_ENABLED, ApiError, NETWORK_ERROR_MESSAGE, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
 import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
@@ -131,7 +131,7 @@ const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
 const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,assignedBy:t.assignedBy??null,assignedByName:t.assignedByName??null,ownerName:t.ownerName??null,ownerEmail:t.ownerEmail??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
 const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,theme:DEFAULT_THEME,weatherCity:'杭州',pixelPet:DEFAULT_PET,mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
 const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName,leader:u.leader,salesRegion:u.salesRegion??null,salesLead:u.salesLead===true});
-const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):'无法连接服务器，请检查网络后重试';
+const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):NETWORK_ERROR_MESSAGE;
 
 export function Provider({children}:{children:ReactNode}){
  const [authenticated,setAuthenticated]=useState(false);
@@ -240,7 +240,7 @@ export function Provider({children}:{children:ReactNode}){
    clearPwLater();const du=demoUser(match);const ov=overrides[match.email];const th=isThemeId(ov?.theme)?ov!.theme as ThemeId:(readStoredTheme()||DEFAULT_THEME);applyTheme(th);const pet=isPetId(ov?.pixelPet)?ov!.pixelPet as PetId:(readStoredPet()||DEFAULT_PET);writeStoredPet(pet);setUser({...du,theme:th,weatherCity:ov?.weatherCity||du.weatherCity||'杭州',pixelPet:pet,avatar:ov?.avatar??du.avatar});setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
   }
   try{const res=await api.login(email,password,role==='sales'?'sales':role==='teacher'?'teacher':'ops');clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
-  catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===403?(e.message&&!/^HTTP|forbidden|portal_denied/.test(e.message)?e.message:'该账号没有所选登录身份，请选择正确的身份后再登录。'):e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':'服务器暂时不可用，请稍后重试。'):'无法连接服务器，请检查网络后重试。'}}
+  catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===403?(e.message&&!/^HTTP|forbidden|portal_denied/.test(e.message)?e.message:'该账号没有所选登录身份，请选择正确的身份后再登录。'):e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':e.status>=500?'服务器暂时不可用，请稍后重试。':'登录失败，请稍后重试。'):NETWORK_ERROR_MESSAGE}}
  };
  const logout=()=>{token.clear();clearPwLater();setUser(null);setAuthenticated(false)};
  // 「稍后修改」 lasts for this browser session only (sessionStorage); every explicit sign-in asks again.
@@ -265,7 +265,7 @@ export function Provider({children}:{children:ReactNode}){
   const assigning=!!assignee&&assignee!==String(user?.email||'').toLowerCase();
   const upward=assigning&&!canAssignTodos(viewer);
   if(upward&&!canAssignToLeader(viewer)){toast.error('只有部门负责人可以指派任务');return false}
-  if(API_ENABLED){try{const {todo}=await api.createTodo({title,note:input.note??null,dueAt:input.dueAt??null,...(assigning?{assignee}:{})});setTodos(l=>[asTodo(todo),...l]);setPersisted(true);return true}catch(e){setPersisted(false);toast.error(e instanceof ApiError?apiError(e,'保存待办失败'):'无法连接服务器');return false}}
+  if(API_ENABLED){try{const {todo}=await api.createTodo({title,note:input.note??null,dueAt:input.dueAt??null,...(assigning?{assignee}:{})});setTodos(l=>[asTodo(todo),...l]);setPersisted(true);return true}catch(e){setPersisted(false);toast.error(e instanceof ApiError?apiError(e,'保存待办失败'):NETWORK_ERROR_MESSAGE);return false}}
   const now=new Date().toISOString();
   const target=assigning?directory(overrides).find(u=>u.email===assignee&&u.active&&isOpsLike(u.role)):null;
   if(assigning&&!target){toast.error('请选择在职的运营老师');return false}
