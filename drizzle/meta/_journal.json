@@ -176,6 +176,13 @@
       "when": 1791840000000,
       "tag": "0024_form_title_hk_permit",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791850000000,
+      "tag": "0025_remove_form_checklist",
+      "breakpoints": true
     }
   ]
 }

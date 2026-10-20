@@ -5,7 +5,7 @@
  * local draft autosave, honeypot + minimum fill time against spam, and a success screen.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, CircleAlert, Loader2, Lock, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, CircleAlert, Loader2, Lock, Send, ShieldCheck, Sparkles } from 'lucide-react';
 import { publicFormApi, ApiError, type PublicFormDef } from '@/lib/nexus/api';
 import { OTHER_SEP, optionPart, validateAnswers, type AnswerValue, type FormQuestion } from '@/lib/nexus/forms';
 import { BUNNY_PNG, BUNNY_WEBP } from '@/components/nexus/brand';
@@ -29,6 +29,8 @@ export function PublicForm({ slug }: { slug: string }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
+  const [preview, setPreview] = useState(false);
+  const [wait, setWait] = useState(0);
   const hp = useRef<HTMLInputElement>(null);
   const started = useRef(0);
 
@@ -72,23 +74,47 @@ export function PublicForm({ slug }: { slug: string }) {
   const set = (id: string, v: AnswerValue) => { setValues(x => ({ ...x, [id]: v })); if (errors[id]) setErrors(e => { const n = { ...e }; delete n[id]; return n; }); };
   const blur = (id: string) => { setTouched(t => ({ ...t, [id]: true })); const e = check()[id]; setErrors(x => { const n = { ...x }; if (e) n[id] = e; else delete n[id]; return n; }); };
 
-  async function submit(ev: React.FormEvent) {
+  /** Submit button: validate, then open the confirm preview (only 确认提交 sends). */
+  function submit(ev: React.FormEvent) {
     ev.preventDefault(); setFailure('');
     const errs = check();
     setErrors(errs); setTouched(Object.fromEntries(answerable.map(q => [q.id, true])));
     const first = answerable.find(q => errs[q.id]);
     if (first) { document.getElementById('sfq-' + first.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setFailure(`还有 ${Object.keys(errs).length} 题需要完善 · ${Object.keys(errs).length} FIELD(S) NEED ATTENTION`); return; }
+    setWait(3); setPreview(true);
+  }
+  // 3-second read-through countdown, restarted on every open; lock page scroll behind the sheet.
+  useEffect(() => {
+    if (!preview) return;
+    const body = document.body, prev = body.style.overflow;
+    body.style.overflow = 'hidden';
+    const timer = window.setInterval(() => setWait(w => { if (w <= 1) { window.clearInterval(timer); return 0; } return w - 1; }), 1000);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) setPreview(false); };
+    window.addEventListener('keydown', esc);
+    return () => { window.clearInterval(timer); body.style.overflow = prev; window.removeEventListener('keydown', esc); };
+  }, [preview]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function confirmSubmit() {
+    if (wait > 0 || busy) return;
     setBusy(true);
     try {
       const r = await publicFormApi.submit(slug, { answers: compose(), website: hp.current?.value || '', elapsed: nowMs() - started.current });
       try { localStorage.removeItem(draftKey(slug)); } catch { /* ignore */ }
-      setDone(r.id); window.scrollTo({ top: 0 });
+      setPreview(false); setDone(r.id); window.scrollTo({ top: 0 });
     } catch (e) {
-      const err = e as ApiError & { errors?: Record<string, string> };
+      const err = e as ApiError;
+      setPreview(false);
       if (err instanceof ApiError && err.code === 'too_fast') setFailure('提交过快，请再核对一遍后提交。');
       else setFailure(err instanceof ApiError && err.message ? err.message : '网络异常，请稍后重试（已填写内容已保存在本机）。');
     } finally { setBusy(false); }
   }
+  /** Display text for the preview: option labels (zh) + any 其他 text. */
+  const display = (q: Q): string => {
+    const v = values[q.id];
+    if (v == null || (Array.isArray(v) ? !v.length : !String(v).trim())) return '';
+    const one = (x: string) => { const o = q.options.find(op => op.value === x); if (!o) return x; return o.other ? `${o.zh}：${(others[q.id] || '').trim()}` : o.zh; };
+    return Array.isArray(v) ? v.map(one).join('、') : q.options.length ? one(v) : String(v);
+  };
+  const sensitive = (q: Q) => q.type === 'phone' || q.type === 'email' || /姓名|证件号码|拼音/.test(q.labelZh);
 
   if (form === null) return <div className="sf-page"><div className="sf-center"><Loader2 className="sf-spin" size={26} /><p>正在打开表单… <small>LOADING</small></p></div></div>;
   if (form === 'missing') return <div className="sf-page"><div className="sf-center sf-card"><Bunny className="sf-bunny-sm" /><h2>表单不存在或链接已失效</h2><p className="sf-en">THIS FORM IS UNAVAILABLE</p><p>请联系老师获取最新链接。</p></div></div>;
@@ -133,6 +159,25 @@ export function PublicForm({ slug }: { slug: string }) {
         <button type="submit" className="sf-submit" disabled={busy}>{busy ? <Loader2 className="sf-spin" size={18} /> : <Send size={18} />}<span>提交报名信息<small>SUBMIT</small></span></button>
         <p className="sf-small sf-privacy">所收集信息仅用于竞赛报名、注册、赛事通知及证书核对。<br />Your information is used only for competition registration, notices and certificates.</p>
       </form>}
+      {preview && <div className="sf-sheet-wrap" role="dialog" aria-modal="true" aria-labelledby="sf-preview-title" onClick={e => { if (e.target === e.currentTarget && !busy) setPreview(false); }}>
+        <div className="sf-sheet">
+          <div className="sf-sheet-grip" aria-hidden="true" />
+          <header className="sf-sheet-head">
+            <h2 id="sf-preview-title">确认报名信息</h2><p className="sf-en">REVIEW YOUR INFORMATION</p>
+            <p className="sf-sheet-tip"><ShieldCheck size={15} /><span>请仔细核对，尤其是姓名拼音、证件号码、手机号和邮箱。<small>PLEASE CHECK CAREFULLY, ESPECIALLY NAME / PINYIN, ID NUMBER, PHONE AND EMAIL.</small></span></p>
+          </header>
+          <div className="sf-sheet-body">
+            {sections.map((sec, si) => { const rows = sec.items.map(q => [q, display(q)] as const).filter(([, v]) => v); if (!rows.length) return null; return <section key={sec.head?.id || si} className="sf-pv-sec">
+              {sec.head && <h3>{sec.head.labelZh}<small>{sec.head.labelEn}</small></h3>}
+              <dl>{rows.map(([q, v]) => <div key={q.id} className={sensitive(q) ? 'is-key' : undefined}><dt>{q.labelZh.replace(/（选填）$/, '')}</dt><dd>{v}</dd></div>)}</dl>
+            </section>; })}
+          </div>
+          <footer className="sf-sheet-foot">
+            <button type="button" className="sf-back" onClick={() => setPreview(false)} disabled={busy}><ArrowLeft size={16} /><span>返回修改<small>BACK TO EDIT</small></span></button>
+            <button type="button" className="sf-confirm" onClick={confirmSubmit} disabled={wait > 0 || busy} aria-live="polite">{busy ? <Loader2 className="sf-spin" size={17} /> : wait > 0 ? <span className="sf-count">{wait}s</span> : <Check size={17} strokeWidth={3} />}<span>{wait > 0 ? '请核对信息' : '确认提交'}<small>{wait > 0 ? `PLEASE REVIEW · ${wait}S` : 'CONFIRM & SUBMIT'}</small></span></button>
+          </footer>
+        </div>
+      </div>}
       <Footer />
     </div>
   </div>;

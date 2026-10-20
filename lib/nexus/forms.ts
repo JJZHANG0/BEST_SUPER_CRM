@@ -67,7 +67,7 @@ const o = (value: string, zh: string, en: string, other = false): FormOption => 
 const q = (id: string, type: QuestionType, labelZh: string, labelEn: string, extra: Partial<FormQuestion> = {}): FormQuestion =>
   ({ id, type, labelZh, labelEn, helpZh: '', helpEn: '', placeholder: '', required: false, options: [], requireAll: false, mapTo: '', ...extra });
 
-/** 「报名学员竞赛信息收集表」 (originally 「各项竞赛报名学员信息收集表」 (/workspace/uploads/student_form.docx), questions 01–22 + 填写前请核对. */
+/** 「报名学员竞赛信息收集表」 (originally 「各项竞赛报名学员信息收集表」 (/workspace/uploads/student_form.docx), questions 01–22 (the 填写前请核对 checklist was replaced by a confirm-preview step on submit). */
 export const DEFAULT_FORM: Omit<FormDef, 'id' | 'slug' | 'version' | 'open'> = {
   title: '报名学员竞赛信息收集表',
   titleEn: 'STUDENT COMPETITION INFORMATION FORM',
@@ -108,12 +108,6 @@ export const DEFAULT_FORM: Omit<FormDef, 'id' | 'slug' | 'version' | 'open'> = {
     q('q20', 'textarea', '过往竞赛经历（选填）', 'PAST COMPETITIONS (OPTIONAL)', { mapTo: 'pastCompetitions', helpZh: '请写竞赛名称、年份/赛季、参赛项目或组别。', helpEn: 'Competition name, year/season, event or division.' }),
     q('q21', 'textarea', '获奖情况（选填）', 'AWARDS (OPTIONAL)', { mapTo: 'awardsA', helpZh: '请写奖项名称、等级、获奖年份及颁发机构；如无可留空。', helpEn: 'Award name, level, year and issuing organisation; leave blank if none.' }),
     q('q22', 'textarea', '其他报名补充说明', 'OTHER NOTES', { mapTo: 'formNote', helpZh: '如英文姓名曾变更、证件更新中、学校英文名需确认等。', helpEn: 'E.g. a changed English name, ID being renewed, school English name to confirm.' }),
-    q('s7', 'section', '填写前请核对', 'PLEASE CHECK BEFORE SUBMITTING'),
-    q('q23', 'multi', '提交前确认', 'CONFIRMATION', { required: true, requireAll: true, options: [
-      o('证件一致', '姓名拼音、证件号码、出生日期与报名证件一致；邮箱和手机号可正常联系。', 'Name pinyin, ID number and date of birth match the ID; email and phone are reachable.'),
-      o('英文地址', '居住地址及学校地址使用英文填写，并包含邮政编码；学校名称使用官方全称。', 'Home and school addresses are in English with postal codes; the school name is the official full name.'),
-      o('如实填写', '语言成绩应与成绩单一致；竞赛经历和奖项按真实情况填写，选填项可留空。', 'Language scores match the transcript; competitions and awards are truthful. Optional fields may be left blank.'),
-      o('共同核对', '请由学生与监护人共同核对后提交。', 'Checked together by the student and guardian.')] }),
   ],
 };
 

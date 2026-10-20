@@ -18,13 +18,16 @@ assert.equal(F.DEFAULT_FORM.title, '报名学员竞赛信息收集表'); assert.
 const q05 = F.DEFAULT_FORM.questions.find(q => q.id === 'q05');
 assert.deepEqual(q05.options[2], { value: '港澳居民来往内地通行证', zh: '港澳居民来往内地通行证', en: 'MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS' });
 assert(!q05.options.some(o => o.value === '港澳通行证'));
+const mig25 = readFileSync('drizzle/0025_remove_form_checklist.sql', 'utf8');
+assert(mig25.includes(':q23') && mig25.includes(':s7') && /version/.test(mig25));
 const mig = readFileSync('drizzle/0024_form_title_hk_permit.sql', 'utf8');
 assert(mig.includes("'报名学员竞赛信息收集表'") && mig.includes("'港澳通行证'") && mig.includes('MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS'));
-assert.equal(qs.length, 25);
+assert.equal(qs.length, 24);
+assert(!F.DEFAULT_FORM.questions.some(q => q.id === 'q23' || q.id === 's7' || /核对|CHECK BEFORE/.test(q.labelZh + q.labelEn)), 'checklist section removed');
 assert.deepEqual(qs.find(q => q.id === 'q01').options.map(o => o.value), ['康莱德挑战赛', 'CBPA', 'CTB', 'iHOSA', '钻石挑战赛', '蓝海', 'MVP定制', '其他']);
 assert(qs.every(q => q.labelZh && q.labelEn && q.labelEn === q.labelEn.toUpperCase()), 'every question is bilingual with an ALL-CAPS English line');
 const req = qs.filter(q => q.required).map(q => q.id);
-assert.deepEqual(req, ['q01', 'q02', 'q03', 'q04', 'q05', 'q06', 'q07', 'q08', 'q09', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q23']);
+assert.deepEqual(req, ['q01', 'q02', 'q03', 'q04', 'q05', 'q06', 'q07', 'q08', 'q09', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17']);
 assert.equal(qs.find(q => q.id === 'q19').options.length, 17, '16 MBTI types + 不确定');
 const docx = readFileSync('lib/nexus/forms.ts', 'utf8');
 for (const t of ['中文姓名及证件上英文拼音', '身份证明文件类型', '学校英文全称', '监护人邮箱', '过往竞赛经历', '其他报名补充说明']) assert(docx.includes(t), t);
@@ -32,11 +35,11 @@ for (const t of ['中文姓名及证件上英文拼音', '身份证明文件类�
 // ---- validation -------------------------------------------------------------------------------------------
 const good = { q01: ['CTB', '其他：WSC'], q02: '程雪晴 CHENG XUEQING', q03: '女', q04: '2009-05-12', q05: '护照', q06: 'E12345678', q07: '138 0013 8000', q08: 'xq@example.com', q09: '1 Road, Hangzhou, Zhejiang, China, 310000',
   q10: '杭州二中', q11: 'Hangzhou No.2 High School', q12: '1 Road, Binjiang, Hangzhou, China, 310052', q13: '公立', q14: 'G10', q15: '程父 CHENG FU', q16: '+86 13900139000', q17: 'p@example.com',
-  q18: 'TOEFL', q18b: '105', q18c: '24', q19: 'INTJ', q21: '2025 AMC 10 Distinction', q23: F.DEFAULT_FORM.questions.find(q => q.id === 'q23').options.map(o => o.value), extra: 'dropped' };
+  q18: 'TOEFL', q18b: '105', q18c: '24', q19: 'INTJ', q21: '2025 AMC 10 Distinction', extra: 'dropped' };
 let v = F.validateAnswers(F.DEFAULT_FORM.questions, good);
 assert.deepEqual(v.errors, {}); assert(!('extra' in v.values));
-v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q01: ['其他：'], q07: '12345', q08: 'nope', q04: '2009-13-40', q23: ['证件一致'], q03: '未知' });
-assert.deepEqual(Object.keys(v.errors).sort(), ['q01', 'q03', 'q04', 'q07', 'q08', 'q23']);
+v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q01: ['其他：'], q07: '12345', q08: 'nope', q04: '2009-13-40', q03: '未知' });
+assert.deepEqual(Object.keys(v.errors).sort(), ['q01', 'q03', 'q04', 'q07', 'q08']);
 assert.equal(F.validateAnswers(F.DEFAULT_FORM.questions, {}).errors.q02, '此项为必填');
 assert.equal(F.phoneIssue('+852 9123 4567'), null); assert.equal(F.phoneIssue('13800138000'), null); assert(F.phoneIssue('0571-1234'));
 assert.deepEqual(F.splitName('程雪晴 CHENG XUEQING'), { zh: '程雪晴', en: 'CHENG XUEQING' });
@@ -162,4 +165,9 @@ const b1 = await mk('甲同学 JIA', '13700000001', '5.5.5.1'), b2 = await mk('�
 r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [b1, b2], team: 'T-CTB', salesUserId: 2 } });
 assert.equal(r.status, 200); assert.equal(r.json.results.length, 2);
 for (const x of r.json.results) { const stx = repo.studentMap.get(x.student); assert.equal(stx.sales, 'Alex'); assert.equal(stx.team, 'T-CTB'); assert.equal(stx.profile.idType, '港澳居民来往内地通行证'); }
+// Public page: submit opens a preview; only 确认提交 calls the API, after a 3 s countdown restarted on each open.
+const pf = readFileSync('components/nexus/public-form.tsx', 'utf8');
+assert(/setWait\(3\); setPreview\(true\)/.test(pf), 'submit opens the preview with a 3 s countdown');
+assert.equal((pf.match(/publicFormApi\.submit\(/g) || []).length, 1); assert(/async function confirmSubmit\(\) \{\s*if \(wait > 0 \|\| busy\) return;/.test(pf));
+for (const s of ['确认提交', 'CONFIRM & SUBMIT', '返回修改', 'BACK TO EDIT', '请核对信息', 'website: hp.current', 'elapsed: nowMs()']) assert(pf.includes(s), s);
 console.log('forms: ok');
