@@ -18,6 +18,7 @@ import { seedPosts } from '../lib/nexus/post-seed';
 import { salesDemo } from '../lib/nexus/auth';
 import { defaultClassTypes } from '../lib/nexus/ops';
 import { staffSeed } from './staff-seed';
+import { seedDefaultForm } from './forms';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from '../lib/nexus/real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from '../lib/nexus/roster-seed';
 
@@ -58,6 +59,7 @@ export async function seed(db: Db, log: (s: string) => void = console.log) {
     if (rows.length) log(`seed: ${name} +${rows.length}`);
   }
   await seedRealData(db, log);
+  await seedDefaultForm(db, log);
   const res = await db.execute(sql`select count(*)::int as n from users`);
   log(`seed: done (${(res.rows[0] as { n: number }).n} users)`);
 }

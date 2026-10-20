@@ -158,3 +158,30 @@ export function stableJson(value: unknown, omit: readonly string[] = []): string
 export function changedRecords<T>(list: readonly T[], synced: ReadonlyMap<string, string>, key: (x: T) => string, omit: readonly string[] = []): T[] {
   return list.filter(x => synced.get(key(x)) !== stableJson(x, omit));
 }
+
+// ---- 收集表单 -----------------------------------------------------------------
+export type PublicFormDef = Omit<import('./forms').FormDef, 'id' | 'questions'> & { questions: Omit<import('./forms').FormQuestion, 'mapTo'>[] };
+export const publicFormApi = {
+  form: (slug: string) => publicRequest<{ form: PublicFormDef }>(`/public/forms/${encodeURIComponent(slug)}`),
+  submit: (slug: string, body: { answers: Record<string, import('./forms').AnswerValue>; website: string; elapsed: number }) =>
+    publicRequest<{ ok: true; id: string }>(`/public/forms/${encodeURIComponent(slug)}`, { method: 'POST', body: JSON.stringify(body) }),
+};
+export type AdminForm = import('./forms').FormDef & { counts: { total: number; pending: number } };
+export type DuplicateMap = Record<string, import('./forms').DuplicateMatch[]>;
+export const formsApi = {
+  list: () => request<{ forms: AdminForm[] }>('/admin/forms'),
+  create: (template: 'default' | 'blank') => request<{ form: import('./forms').FormDef }>('/admin/forms', { method: 'POST', body: JSON.stringify({ template }) }),
+  save: (form: Partial<import('./forms').FormDef> & { id: string }) => request<{ form: import('./forms').FormDef }>(`/admin/forms/${encodeURIComponent(form.id)}`, { method: 'PUT', body: JSON.stringify(form) }),
+  remove: (id: string) => request<{ ok: true }>(`/admin/forms/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  submissions: (id: string) => request<{ submissions: import('./forms').Submission[] }>(`/admin/forms/${encodeURIComponent(id)}/submissions`),
+  duplicates: (id: string) => request<{ duplicates: import('./forms').DuplicateMatch[] }>(`/admin/form-submissions/${encodeURIComponent(id)}/duplicates`),
+  patch: (id: string, body: { status?: string; note?: string }) => request<{ submission: import('./forms').Submission }>(`/admin/form-submissions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  removeSubmission: (id: string) => request<{ ok: true }>(`/admin/form-submissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  assign: (body: { ids: string[]; team: string; sales?: string; links?: Record<string, string> }) => request<{ ok: true; results: { submission: string; student: string; created: boolean }[] }>('/admin/form-submissions/assign', { method: 'POST', body: JSON.stringify(body) }),
+};
+/** Public URL of a form (hash route works in WeChat's in-app browser). */
+export function formUrl(slug: string) {
+  const origin = process.env.NEXT_PUBLIC_SITE_ORIGIN || (typeof location !== 'undefined' ? location.origin : '');
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || '';
+  return `${origin}${base}/#/f/${slug}`;
+}

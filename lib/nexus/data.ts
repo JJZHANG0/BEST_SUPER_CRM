@@ -14,6 +14,8 @@ export type StudentProfile = {
   schedulePref?:string; knowsContest?:string; goal?:string; resume?:string;
   wantCaptain?:string; commit?:string; offlineOk?:string; interview?:string;
   bpaPassword?:string; paymentScreenshot?:string;
+  nameEn?:string; birthDate?:string; address?:string; schoolEn?:string; schoolAddress?:string; schoolType?:string; guardianEmail?:string;
+  signupPrograms?:string; languageTest?:string; languageTotal?:string; languageSpeaking?:string; pastCompetitions?:string; formNote?:string; formExtras?:string; formSubmission?:string;
 };
 export type Student = {id:string;name:string;program:string;team:string;status:string;sales:string;updated:string;grade:string;
   /** 学生状态 — set by ops, drives the sales list order (worst first). */

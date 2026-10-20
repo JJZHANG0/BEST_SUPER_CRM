@@ -466,3 +466,66 @@ export const lessonMonthLocks = pgTable('lesson_month_locks', {
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull().defaultNow(),
   ...stamps,
 });
+
+/**
+ * 收集表单 (student self-registration). Superadmin-managed; the public page is /#/f/<slug>.
+ * Submissions keep each answer with a label snapshot keyed by question id, so editing or deleting
+ * questions later never rewrites what a student already submitted.
+ */
+export const forms = pgTable('forms', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull(),
+  title: text('title').notNull(),
+  titleEn: text('title_en').notNull().default(''),
+  intro: text('intro').notNull().default(''),
+  introEn: text('intro_en').notNull().default(''),
+  /** Accepting submissions (分享 · 开放/关闭). */
+  open: boolean('open').notNull().default(true),
+  /** Bumped on every question edit; stored on each submission. */
+  version: integer('version').notNull().default(1),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...stamps,
+}, t => [uniqueIndex('forms_slug_idx').on(t.slug)]);
+
+export const formQuestions = pgTable('form_questions', {
+  id: text('id').primaryKey(),
+  formId: text('form_id').notNull().references(() => forms.id, { onDelete: 'cascade' }),
+  sortOrder: integer('sort_order').notNull().default(0),
+  /** section | text | textarea | single | multi | select | date | phone | email | number */
+  type: text('type').notNull(),
+  labelZh: text('label_zh').notNull(),
+  labelEn: text('label_en').notNull().default(''),
+  helpZh: text('help_zh').notNull().default(''),
+  helpEn: text('help_en').notNull().default(''),
+  placeholder: text('placeholder').notNull().default(''),
+  required: boolean('required').notNull().default(false),
+  /** [{ value, zh, en, other? }] for single / multi / select. */
+  options: jsonb('options').$type<{ value: string; zh: string; en: string; other?: boolean }[]>().notNull().default(sql`'[]'::jsonb`),
+  /** multi: every option must be ticked (提交前核对). */
+  requireAll: boolean('require_all').notNull().default(false),
+  /** Student profile target used by 队伍绑定分发 (lib/nexus/forms.ts PROFILE_TARGETS). */
+  mapTo: text('map_to').notNull().default(''),
+  ...stamps,
+}, t => [index('form_questions_form_idx').on(t.formId)]);
+
+export const formSubmissions = pgTable('form_submissions', {
+  id: text('id').primaryKey(),
+  formId: text('form_id').notNull().references(() => forms.id, { onDelete: 'cascade' }),
+  formVersion: integer('form_version').notNull().default(1),
+  /** [{ id, type, labelZh, labelEn, mapTo, value }] — value is string | string[]. */
+  answers: jsonb('answers').$type<{ id: string; type: string; labelZh: string; labelEn: string; mapTo: string; value: string | string[] }[]>().notNull(),
+  /** Denormalised for search / duplicate checks. */
+  name: text('name').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  /** 待分配 | 已分配 | 已忽略 */
+  status: text('status').notNull().default('待分配'),
+  program: text('program'),
+  team: text('team'),
+  studentId: text('student_id'),
+  assignedBy: text('assigned_by'),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }),
+  note: text('note').notNull().default(''),
+  ip: text('ip').notNull().default(''),
+  userAgent: text('user_agent').notNull().default(''),
+  ...stamps,
+}, t => [index('form_submissions_form_idx').on(t.formId), index('form_submissions_status_idx').on(t.status)]);

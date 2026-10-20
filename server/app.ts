@@ -29,6 +29,7 @@ import { monthKeyOf } from '../lib/nexus/todos';
 import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
 import { isPetId, DEFAULT_PET } from '../lib/nexus/pets';
 import { todayNews } from './news';
+import { drizzleFormRepo, registerFormRoutes, registerPublicFormRoutes, type FormRepo } from './forms';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
@@ -74,7 +75,7 @@ const issuesOf = (e: { issues: { path: PropertyKey[]; message: string }[] }) => 
  * `posts` lets tests inject an in-memory 推文 store; production uses PostgreSQL.
  * Returns the root app: /api/* (JSON API) plus /a/:slug (Open Graph share shell, proxied by nginx).
  */
-export function createApp(db: Db, config: Config, startedAt = new Date(), posts: PostRepo = drizzleRepo(db)) {
+export function createApp(db: Db, config: Config, startedAt = new Date(), posts: PostRepo = drizzleRepo(db), forms: FormRepo = drizzleFormRepo(db)) {
   const app = new Hono<Env>().basePath('/api');
   if (config.corsOrigins.length) app.use('*', cors({ origin: config.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] }));
   app.onError((err, c) => { console.error(err); return c.json({ error: 'internal_error' }, 500); });
@@ -150,6 +151,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
 
   // 推文 public reader + metrics: no login (registered before the auth middleware).
   registerPublicPostRoutes(app, posts);
+  // 收集表单 public page API (no login; honeypot + throttle inside).
+  registerPublicFormRoutes(app, forms);
 
   // Everything below requires a valid bearer token.
   app.use('*', async (c, next) => {
@@ -302,6 +305,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
 
   // 推文 authoring (ops / superadmin write; sales read published snapshots). Before the generic /:collection/:id.
   registerPostRoutes(app, posts);
+  // 收集表单 admin (superadmin only, enforced per route).
+  registerFormRoutes(app, forms);
 
   app.post('/auth/change-password', async c => {
     const user = c.get('user');

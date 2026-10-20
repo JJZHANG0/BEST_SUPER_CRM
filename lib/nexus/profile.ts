@@ -42,6 +42,21 @@ export const PROFILE_FIELDS: { key: keyof StudentProfile; label: string }[] = [
   { key: 'bpaPassword', label: 'BPA 密码' },
   { key: 'paymentScreenshot', label: '缴费截图' },
   { key: 'source', label: '花名册来源' },
+  { key: 'nameEn', label: '证件英文拼音' },
+  { key: 'birthDate', label: '出生日期' },
+  { key: 'address', label: '居住地址（英文）' },
+  { key: 'schoolEn', label: '学校英文全称' },
+  { key: 'schoolAddress', label: '学校地址及邮编' },
+  { key: 'schoolType', label: '学校性质' },
+  { key: 'guardianEmail', label: '监护人邮箱' },
+  { key: 'signupPrograms', label: '报名项目（表单）' },
+  { key: 'languageTest', label: '语言考试类型' },
+  { key: 'languageTotal', label: '语言总分' },
+  { key: 'languageSpeaking', label: '口语分数' },
+  { key: 'pastCompetitions', label: '过往竞赛经历' },
+  { key: 'formNote', label: '报名补充说明' },
+  { key: 'formExtras', label: '表单补充信息' },
+  { key: 'formSubmission', label: '收集表单记录号' },
 ];
 
 const LABEL_BY_KEY = Object.fromEntries(PROFILE_FIELDS.map(f => [f.key, f.label])) as Record<string, string>;

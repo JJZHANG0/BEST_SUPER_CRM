@@ -93,7 +93,7 @@ assert(readFileSync('components/nexus/login.tsx','utf8').includes('用户名（�
 const app=readFileSync('server/app.ts','utf8');
 for(const s of ["app.get('/admin/users'","app.post('/admin/users'","app.patch('/admin/users/:id'","reset-password","app.post('/auth/change-password'","app.delete('/:collection/:id'","canManageSystem(user.role)","canEditOwned(user, user.email","computeAllowance(rate, unit"])assert(app.includes(s),s);
 const page=readFileSync('app/page.tsx','utf8');
-assert(page.includes("['lessons','课时记录'")&&page.includes("['lesson-feedback','课情反馈'")&&page.includes("['admin','系统管理'")&&page.includes("canManageSystem(s.role)?['admin']"));
+assert(page.includes("['lessons','课时记录'")&&page.includes("['lesson-feedback','课情反馈'")&&page.includes("['admin','系统管理'")&&page.includes("canManageSystem(s.role)?['forms','admin']"));
 assert(readFileSync('components/nexus/admin.tsx','utf8').includes("if (!canManageSystem(s.role)) return"));
 assert(readFileSync('components/nexus/dashboard.tsx','utf8').includes("'当月教务津贴'")&&readFileSync('components/nexus/dashboard.tsx','utf8').includes('stats-grid five'));
 
