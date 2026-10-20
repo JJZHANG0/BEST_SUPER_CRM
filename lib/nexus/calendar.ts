@@ -54,9 +54,9 @@ export function coursesForCalendarOwner<
   const active = input.courses.filter(c => !isCancelledCourseStatus(c.status));
   if (isTeacher(me.role)) {
     const scope = teacherRosterScope(me.name || '', {
-      opsCourses: input.opsCourses as { id: string; code: string; name: string; teacher: string }[],
-      courses: active as { id: string; teacher: string; team: string; code?: string }[],
-      teams: (input.teams || []) as { id: string; name: string; program: string; teacher?: string }[],
+      opsCourses: input.opsCourses as unknown as { id: string; code: string; name: string; teacher: string }[],
+      courses: active as unknown as { id: string; teacher: string; team: string; code?: string }[],
+      teams: (input.teams || []) as unknown as { id: string; name: string; program: string; teacher?: string }[],
       enrollments: input.enrollments || [],
       students: input.students || [],
     });

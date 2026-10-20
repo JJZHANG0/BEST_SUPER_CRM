@@ -20,8 +20,8 @@ import type { Role } from '../lib/nexus/roles';
 import type { CourseSession } from '../lib/nexus/schedule';
 
 type SessionUser = { id: number; email: string; name: string; role: Role };
-type Env = { Variables: { user: SessionUser } };
-type AnyApp = Hono<Env>;
+/** Loose app type so register* can accept the main Hono<Env> from app.ts (same pattern as posts/forms). */
+type AnyApp = Hono<any, any, any>;
 
 const clean = <T extends Record<string, unknown>>(row: T) => {
   const out = { ...row } as Record<string, unknown>;
