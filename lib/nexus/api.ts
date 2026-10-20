@@ -120,6 +120,9 @@ export const api = {
   lessonMonthLocks: () => request<{ locks: { month: string; opsTeacher: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }[] }>('/lesson-month-locks'),
   confirmLessonMonth: (month: string) => request<{ lock: { month: string; opsTeacher: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }; announcement: import('./announcements').Announcement | null; already: boolean }>('/lesson-month-locks', { method: 'POST', body: JSON.stringify({ month }) }),
   unlockLessonMonth: (month: string, opsTeacher: string) => request<{ month: string; opsTeacher: string; already: boolean; announcement: import('./announcements').Announcement | null }>(`/lesson-month-locks/${encodeURIComponent(month)}?opsTeacher=${encodeURIComponent(opsTeacher)}`, { method: 'DELETE' }),
+  /** Personal Apple Calendar / webcal course feed (ops + teacher). */
+  calendarSubscription: () => request<{ token: string; httpsUrl: string; webcalUrl: string; path: string }>('/calendar/subscription'),
+  regenerateCalendarSubscription: () => request<{ token: string; httpsUrl: string; webcalUrl: string; path: string; regenerated: true }>('/calendar/subscription/regenerate', { method: 'POST' }),
 };
 
 

@@ -35,12 +35,14 @@ export const users = pgTable('users', {
   weatherCity: text('weather_city').notNull().default('杭州'),
   /** Floating desktop pet id (see lib/nexus/pets.ts). */
   pixelPet: text('pixel_pet').notNull().default('rabbit'),
+  /** Unguessable secret for personal Apple Calendar / webcal course feed (nullable until first subscribe). */
+  calendarFeedToken: text('calendar_feed_token'),
   /** 销售区域 (sales users): 销售大部 | 商务拓展一区 | 商务拓展二区 | 商务拓展三区 (lib/nexus/roles.ts SALES_REGIONS). */
   salesRegion: text('sales_region'),
   /** 销售负责人 (区/部 manager, e.g. 杨巍, 胡晓贇) — informational for stats; grants no extra rights. */
   salesLead: boolean('sales_lead').notNull().default(false),
   ...stamps,
-}, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`)]);
+}, t => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`), uniqueIndex('users_calendar_feed_token_idx').on(t.calendarFeedToken)]);
 
 export const programs = pgTable('programs', {
   id: text('id').primaryKey(),

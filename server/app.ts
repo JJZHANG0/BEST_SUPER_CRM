@@ -30,6 +30,7 @@ import { isThemeId, DEFAULT_THEME } from '../lib/nexus/themes';
 import { isPetId, DEFAULT_PET } from '../lib/nexus/pets';
 import { todayNews } from './news';
 import { drizzleFormRepo, registerFormRoutes, registerPublicFormRoutes, type FormRepo } from './forms';
+import { registerPublicCalendarRoutes, registerCalendarRoutes } from './calendar';
 import { courseCodeIssue, knownCourseCodeIssue, normalizeCourseCode, scheduleConflicts, conflictSummary, type CourseLike, type CourseSession } from '../lib/nexus/schedule';
 
 /** `leader` = 部门负责人 flag (users.leader); permission helpers in lib/nexus/roles.ts take the whole user. */
@@ -153,6 +154,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   registerPublicPostRoutes(app, posts);
   // 收集表单 public page API (no login; honeypot + throttle inside).
   registerPublicFormRoutes(app, forms);
+  // 课表日历 ICS feed (Apple Calendar fetches by secret URL; no cookies).
+  registerPublicCalendarRoutes(app, db, config.publicOrigin);
 
   // Everything below requires a valid bearer token.
   app.use('*', async (c, next) => {
@@ -177,6 +180,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   const onlySuperadmin = (c: Context) => c.json({ error: 'forbidden', message: '此操作仅超级管理员可用' }, 403);
 
   app.get('/auth/me', c => c.json({ user: publicUser(c.get('user')) }));
+
+  registerCalendarRoutes(app, db, config.publicOrigin);
 
   app.post('/auth/avatar', async c => {
     const user = c.get('user');

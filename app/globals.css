@@ -2570,3 +2570,13 @@ input[type=date].sf-input{min-height:48px;line-height:22px}
 @keyframes sf-up{from{transform:translateY(100%)}to{transform:none}}@keyframes sf-fade{from{opacity:0}to{opacity:1}}
 @media(min-width:720px){.sf-sheet-wrap{align-items:center;padding:24px}.sf-sheet{border-radius:24px;max-height:86vh}.sf-sheet-grip{display:none}}
 @media(prefers-reduced-motion:reduce){.sf-sheet,.sf-sheet-wrap{animation:none}}
+
+/* 课表日历订阅 (个人设置) */
+.calendar-subscribe .cal-sub-link{margin:4px 0 12px}
+.cal-sub-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.cal-sub-actions .text-button{display:inline-flex;align-items:center;gap:6px;font-size:.8125rem;color:#9a8aae}
+.cal-sub-actions .text-button:hover:not(:disabled){color:var(--nx-accent-ink,#6e4fb8)}
+a.cal-sub-webcal{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.cal-sub-steps{margin:0 0 12px;padding:0 0 0 1.1rem;color:#8a7e98;font-size:.78rem;line-height:1.7}
+.cal-sub-steps li{margin:0 0 6px}
+.cal-sub-steps li svg{display:inline;vertical-align:-2px;margin-right:4px;color:var(--nx-accent-ink,#6e4fb8)}
