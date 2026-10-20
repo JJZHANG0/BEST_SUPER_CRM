@@ -2529,3 +2529,4 @@ input[type=date].sf-input{min-height:48px;line-height:22px}
 .fa-editor .input,.fa-share .input,.fa-assign .input{width:100%;font:inherit;font-size:.8125rem;color:#2b2236;background:#fff;border:1px solid #e3dcec;border-radius:9px;padding:8px 10px;min-height:38px;outline:none}
 .fa-editor .input:focus,.fa-share .input:focus,.fa-assign .input:focus{border-color:#ae8dcf;box-shadow:0 0 0 3px #d6c5ed44}
 .fa-editor textarea.input{resize:vertical;line-height:1.6}
+.fa-sales{display:flex;flex-direction:column;gap:6px;margin-top:6px}.fa-sales-list{max-height:180px}

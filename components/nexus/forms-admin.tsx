@@ -97,7 +97,7 @@ function SubmissionsTab({ form, onChanged }: { form: AdminForm; onChanged: () =>
       </div>
     </div>
     {sel.size > 0 && <div className="fa-bulk"><span>已选 {sel.size} 条</span>
-      <button className="primary compact" onClick={() => setAssigning(chosen.filter(x => x.status !== '已分配'))} disabled={!chosen.some(x => x.status !== '已分配')}><UsersRound size={15} />分配到队伍</button>
+      <button className="primary compact" onClick={() => setAssigning(chosen.filter(x => x.status !== '已忽略'))} disabled={!chosen.some(x => x.status !== '已忽略')}><UsersRound size={15} />分配队伍 / 销售</button>
       <button className="secondary compact" onClick={() => setStatusOf(chosen.filter(x => x.status === '待分配'), '已忽略')} disabled={!chosen.some(x => x.status === '待分配')}><Ban size={15} />忽略</button>
       <button className="text-button" onClick={() => setSel(new Set())}>取消选择</button></div>}
     {subs === null ? <p className="fa-empty">正在加载…</p> : !list.length ? <p className="fa-empty">{subs.length ? '没有符合筛选条件的记录' : '还没有人填写。到「分享与收集」复制链接或下载二维码发给学生。'}</p> :
@@ -130,14 +130,14 @@ function DetailDialog({ sub, onClose, onAssign, onStatus, onDelete, teamName, pr
     {sub && <>
       <DialogTitle>{sub.name || '未命名'} <span className={'badge ' + tone[sub.status]}>{sub.status}</span></DialogTitle>
       <DialogDescription>提交于 {when(sub.createdAt)}（北京时间）· 表单版本 v{sub.formVersion} · 记录号 {sub.id}</DialogDescription>
-      {sub.status === '已分配' && sub.team && <div className="fa-assigned"><Check size={16} />已分配到 <b>{programName(sub.program || '')} · {teamName(sub.team)}</b>{sub.assignedBy && <> · {sub.assignedBy}</>}{sub.studentId && <button className="text-button" onClick={() => { onClose(); s.go('students/' + sub.studentId); }}>查看学生档案 <ExternalLink size={13} /></button>}</div>}
+      {sub.status === '已分配' && sub.team && <div className="fa-assigned"><Check size={16} />已分配到 <b>{programName(sub.program || '')} · {teamName(sub.team)}</b>{(() => { const st = s.students.find(x => x.id === sub.studentId); return st ? <> · 负责销售：{st.sales || '未绑定'}</> : null; })()}{sub.assignedBy && <> · {sub.assignedBy}</>}{sub.studentId && <button className="text-button" onClick={() => { onClose(); s.go('students/' + sub.studentId); }}>查看学生档案 <ExternalLink size={13} /></button>}</div>}
       {dups.length > 0 && <div className="fa-dup"><strong>可能重复的学生</strong>{dups.map(d => <span key={d.studentId}>{d.name} · {d.phone || '无手机'} · {d.strength === 'name+phone' ? '姓名+手机一致' : d.strength === 'phone' ? '手机一致' : '同名'} <button className="text-button" onClick={() => { onClose(); s.go('students/' + d.studentId); }}>查看 <ExternalLink size={12} /></button></span>)}</div>}
       <dl className="fa-answers">{sub.answers.map(a => <div key={a.id}><dt>{a.labelZh}<small>{a.labelEn}</small></dt><dd>{answerText(a.value) || '—'}</dd></div>)}</dl>
       <div className="actions">
         <button className="text-button fa-danger" onClick={() => onDelete(sub)}><Trash2 size={14} />删除记录</button>
         {sub.status === '待分配' && <button className="secondary" onClick={() => onStatus(sub, '已忽略')}><Ban size={16} />忽略</button>}
         {sub.status === '已忽略' && <button className="secondary" onClick={() => onStatus(sub, '待分配')}><RotateCcw size={16} />恢复待分配</button>}
-        {sub.status !== '已分配' && <button className="primary" onClick={() => onAssign(sub)}><UsersRound size={16} />分配到队伍</button>}
+        {sub.status !== '已分配' ? <button className="primary" onClick={() => onAssign(sub)}><UsersRound size={16} />分配到队伍</button> : <button className="secondary" onClick={() => onAssign(sub)}><UsersRound size={16} />修改队伍 / 负责销售</button>}
       </div>
     </>}
   </DialogContent></Dialog>;
@@ -148,18 +148,21 @@ function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; 
   const [program, setProgram] = useState('');
   const [team, setTeam] = useState('');
   const [q, setQ] = useState('');
-  const [sales, setSales] = useState('');
+  const [salesId, setSalesId] = useState<number | null>(null);
+  const [salesQ, setSalesQ] = useState('');
+  const [accounts, setAccounts] = useState<{ id: number; name: string; salesName: string | null; region: string | null }[]>([]);
   const [busy, setBusy] = useState(false);
+  useEffect(() => { if (items && !accounts.length) formsApi.salesAccounts().then(r => setAccounts(r.accounts)).catch(() => toast.error('加载销售账号失败')); }, [items, accounts.length]);
   const [dups, setDups] = useState<DuplicateMap | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
   // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when reopened
-  useEffect(() => { if (items) { setTeam(''); setQ(''); setDups(null); setLinks({}); setSales(''); } }, [items]);
+  useEffect(() => { if (items) { setTeam(''); setQ(''); setDups(null); setLinks({}); setSalesQ(''); const st = items.length === 1 && items[0].studentId ? s.students.find(x => x.id === items[0].studentId) : null; setSalesId(st ? accounts.find(a => a.name === st.sales)?.id ?? null : null); if (items.length === 1 && items[0].team) { setTeam(items[0].team); setProgram(items[0].program || ''); } } }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
   const teams = s.teams.filter(t => !t.archived && (!program || t.program === program) && (!q.trim() || (t.name + ' ' + (s.programs.find(p => p.id === t.program)?.name || '') + ' ' + t.teacher).toLowerCase().includes(q.trim().toLowerCase())));
   const run = async () => {
     if (!items?.length || !team) return;
     setBusy(true);
     try {
-      const r = await formsApi.assign({ ids: items.map(x => x.id), team, sales: sales.trim() || undefined, links: dups ? links : undefined });
+      const r = await formsApi.assign({ ids: items.map(x => x.id), team, salesUserId: salesId, links: dups ? links : undefined });
       const created = r.results.filter(x => x.created).length;
       toast.success(`已分配 ${r.results.length} 名学生（新建档案 ${created}，关联已有 ${r.results.length - created}）`);
       onDone();
@@ -176,7 +179,7 @@ function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; 
   };
   const chosenTeam = s.teams.find(t => t.id === team);
   return <Dialog open={!!items} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog fa-assign">
-    <DialogTitle>分配到队伍</DialogTitle>
+    <DialogTitle>分配队伍与负责销售</DialogTitle>
     <DialogDescription>为 {items?.length || 0} 名学生建档（或关联已有档案）并加入所选队伍。分配后，运营与负责销售按现有权限可见。</DialogDescription>
     <div className="fa-assign-grid">
       <Picker label="项目" value={program} onChange={v => { setProgram(v); setTeam(''); }} options={[{ value: '', label: '全部项目' }, ...s.programs.map(p => ({ value: p.id, label: p.name }))]} />
@@ -185,13 +188,21 @@ function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; 
     <div className="fa-team-list" role="listbox" aria-label="队伍">{teams.length ? teams.slice(0, 80).map(t => <button key={t.id} role="option" aria-selected={team === t.id} className={team === t.id ? 'on' : ''} onClick={() => setTeam(t.id)}>
       <span><b>{t.name}</b><small>{s.programs.find(p => p.id === t.program)?.name} · {t.teacher || '未定老师'}</small></span>{team === t.id && <Check size={16} />}
     </button>) : <p className="fa-empty">没有匹配的队伍</p>}</div>
-    <label className="form-field"><span>负责销售（选填，决定哪位销售能看到该学生）</span><input className="input" value={sales} onChange={e => setSales(e.target.value)} placeholder="例：顾问 王老师（留空则仅运营可见）" maxLength={80} /></label>
+    <div className="form-field"><span>负责销售（选填 · 被选中的销售账号即可在「我的学生」看到该学生）</span>
+      <div className="fa-sales">
+        <label className="search-box"><Search size={16} /><input placeholder="搜索销售姓名 / 区域…" value={salesQ} onChange={e => setSalesQ(e.target.value)} aria-label="搜索销售" /></label>
+        <div className="fa-team-list fa-sales-list" role="listbox" aria-label="负责销售">
+          <button role="option" aria-selected={salesId === null} className={salesId === null ? 'on' : ''} onClick={() => setSalesId(null)}><span><b>暂不绑定销售</b><small>仅运营可见；稍后可在此修改</small></span>{salesId === null && <Check size={16} />}</button>
+          {accounts.filter(a => !salesQ.trim() || (a.name + ' ' + (a.salesName || '') + ' ' + (a.region || '')).toLowerCase().includes(salesQ.trim().toLowerCase())).map(a => <button key={a.id} role="option" aria-selected={salesId === a.id} className={salesId === a.id ? 'on' : ''} onClick={() => setSalesId(a.id)}><span><b>{a.name}</b><small>{a.region || '未分区'}{a.salesName && a.salesName !== a.name ? ' · ' + a.salesName : ''}</small></span>{salesId === a.id && <Check size={16} />}</button>)}
+        </div>
+      </div>
+    </div>
     {dups && Object.keys(dups).length > 0 && <div className="fa-dup-resolve"><strong>疑似重复 · 请选择</strong>{items?.filter(x => dups[x.id]).map(x => <div key={x.id} className="fa-dup-row">
       <span className="fa-dup-who">{x.name} <small className="mono">{x.phone}</small></span>
       <div className="fa-dup-opts">{dups[x.id].map(m => <label key={m.studentId}><input type="radio" name={'dup-' + x.id} checked={links[x.id] === m.studentId} onChange={() => setLinks(l => ({ ...l, [x.id]: m.studentId }))} />关联已有：{m.name}（{m.strength === 'name+phone' ? '姓名+手机一致' : '手机一致'}）<a href={'#/students/' + m.studentId} target="_blank" rel="noreferrer"><ExternalLink size={12} /></a></label>)}
         <label><input type="radio" name={'dup-' + x.id} checked={links[x.id] === 'new'} onChange={() => setLinks(l => ({ ...l, [x.id]: 'new' }))} />仍然新建学生</label></div>
     </div>)}</div>}
-    <div className="actions"><button className="secondary" onClick={onClose}>取消</button><button className="primary" disabled={!team || busy} onClick={run}><UserPlus size={16} />{busy ? '分配中…' : chosenTeam ? `分配到「${chosenTeam.name}」` : '请选择队伍'}</button></div>
+    <div className="actions"><button className="secondary" onClick={onClose}>取消</button><button className="primary" disabled={!team || busy} onClick={run}><UserPlus size={16} />{busy ? '分配中…' : chosenTeam ? `分配到「${chosenTeam.name}」${salesId != null ? ' · ' + (accounts.find(a => a.id === salesId)?.name || '') : ''}` : '请选择队伍'}</button></div>
   </DialogContent></Dialog>;
 }
 

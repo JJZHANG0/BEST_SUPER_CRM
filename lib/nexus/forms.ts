@@ -67,10 +67,10 @@ const o = (value: string, zh: string, en: string, other = false): FormOption => 
 const q = (id: string, type: QuestionType, labelZh: string, labelEn: string, extra: Partial<FormQuestion> = {}): FormQuestion =>
   ({ id, type, labelZh, labelEn, helpZh: '', helpEn: '', placeholder: '', required: false, options: [], requireAll: false, mapTo: '', ...extra });
 
-/** 「各项竞赛报名学员信息收集表」 (/workspace/uploads/student_form.docx), questions 01–22 + 填写前请核对. */
+/** 「报名学员竞赛信息收集表」 (originally 「各项竞赛报名学员信息收集表」 (/workspace/uploads/student_form.docx), questions 01–22 + 填写前请核对. */
 export const DEFAULT_FORM: Omit<FormDef, 'id' | 'slug' | 'version' | 'open'> = {
-  title: '各项竞赛报名学员信息收集表',
-  titleEn: 'COMPETITION REGISTRATION · STUDENT INFORMATION FORM',
+  title: '报名学员竞赛信息收集表',
+  titleEn: 'STUDENT COMPETITION INFORMATION FORM',
   intro: '用于学生报名资料整理与竞赛注册信息填写。请按证件及学校官方信息准确填写。带 * 为必填；“其他个人信息”为选填。所收集信息仅用于学生所选竞赛的中国站/全球站报名、注册、赛事通知及证书信息核对。请勿填写与报名无关的隐私信息。',
   introEn: 'Please fill in exactly as shown on your ID documents and official school records. Fields marked * are required. Information is used only for registration, notices and certificate checks for the competitions you select.',
   questions: [
@@ -83,7 +83,7 @@ export const DEFAULT_FORM: Omit<FormDef, 'id' | 'slug' | 'version' | 'open'> = {
     q('q03', 'single', '性别', 'GENDER', { required: true, mapTo: 'gender', options: [o('女', '女', 'Female'), o('男', '男', 'Male')] }),
     q('q04', 'date', '出生日期', 'DATE OF BIRTH', { required: true, mapTo: 'birthDate', helpZh: '年 / 月 / 日', helpEn: 'YYYY / MM / DD' }),
     q('q05', 'single', '身份证明文件类型', 'ID DOCUMENT TYPE', { required: true, mapTo: 'idType', options: [
-      o('居民身份证', '居民身份证', 'Resident ID Card'), o('护照', '护照', 'Passport'), o('港澳通行证', '港澳通行证', 'HK & Macao Travel Permit'),
+      o('居民身份证', '居民身份证', 'Resident ID Card'), o('护照', '护照', 'Passport'), o('港澳居民来往内地通行证', '港澳居民来往内地通行证', 'MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS'),
       o('台湾居民来往大陆通行证', '台湾居民来往大陆通行证', 'Taiwan Compatriot Permit'), o('其他', '其他', 'Other', true)] }),
     q('q06', 'text', '证件号码', 'ID NUMBER', { required: true, mapTo: 'idNumber', helpZh: '请仔细核对号码及有效期；按报名要求提供。', helpEn: 'Double-check the number and expiry date.' }),
     q('q07', 'phone', '学生手机号', 'STUDENT MOBILE', { required: true, mapTo: 'phone', helpZh: '大陆手机号可直接填写；如非大陆号码请注明国家/地区代码。', helpEn: 'Mainland numbers as is; otherwise include the country/region code, e.g. +852.' }),
@@ -230,6 +230,7 @@ export function profileFromAnswers(answers: AnswerSnapshot[]) {
   return { name, grade, profile };
 }
 
+/** `sales` = the sales account's name (students.sales is matched by salesOwns against users.name / salesName). */
 export type AssignTarget = { program: string; team: string; sales?: string; enrollStatus?: string };
 export type AssignPlan = { student: StudentLike; created: boolean; enrollment: EnrollmentLike; enrollmentCreated: boolean };
 /**
@@ -248,7 +249,9 @@ export function planAssignment(sub: Pick<Submission, 'id' | 'answers' | 'created
   if (existing) {
     const profile: Record<string, string> = { ...(existing.profile || {}) };
     for (const [k, v] of Object.entries({ ...mapped.profile, ...source })) if (!profile[k] || !String(profile[k]).trim()) profile[k] = v;
-    student = { ...existing, profile, grade: existing.grade || mapped.grade, team: existing.team || target.team, program: existing.program || target.program, sales: existing.sales || target.sales || '', updated: '刚刚' };
+    // A chosen salesperson always wins (re-binding); the primary team moves when it is empty or in the same project.
+    const moveTeam = !existing.team || existing.program === target.program;
+    student = { ...existing, profile, grade: existing.grade || mapped.grade, team: moveTeam ? target.team : existing.team, program: existing.program || target.program, sales: target.sales || existing.sales || '', updated: '刚刚' };
     created = false;
   } else {
     student = { id: ctx.newId, name: mapped.name || sub.answers.find(a => a.mapTo === 'name')?.value as string || '未命名学生', program: target.program, team: target.team, status, sales: target.sales || '', updated: '刚刚', grade: mapped.grade, health: '状态良好', healthNote: '报名收集表导入，待首次学习评估。', healthUpdated: ctx.stamp, healthBy: ctx.by, profile: { ...mapped.profile, ...source } };

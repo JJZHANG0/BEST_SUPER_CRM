@@ -177,7 +177,8 @@ export const formsApi = {
   duplicates: (id: string) => request<{ duplicates: import('./forms').DuplicateMatch[] }>(`/admin/form-submissions/${encodeURIComponent(id)}/duplicates`),
   patch: (id: string, body: { status?: string; note?: string }) => request<{ submission: import('./forms').Submission }>(`/admin/form-submissions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   removeSubmission: (id: string) => request<{ ok: true }>(`/admin/form-submissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  assign: (body: { ids: string[]; team: string; sales?: string; links?: Record<string, string> }) => request<{ ok: true; results: { submission: string; student: string; created: boolean }[] }>('/admin/form-submissions/assign', { method: 'POST', body: JSON.stringify(body) }),
+  salesAccounts: () => request<{ accounts: { id: number; name: string; salesName: string | null; region: string | null }[] }>('/admin/forms/sales-accounts'),
+  assign: (body: { ids: string[]; team: string; salesUserId?: number | null; links?: Record<string, string> }) => request<{ ok: true; results: { submission: string; student: string; created: boolean }[] }>('/admin/form-submissions/assign', { method: 'POST', body: JSON.stringify(body) }),
 };
 /** Public URL of a form (hash route works in WeChat's in-app browser). */
 export function formUrl(slug: string) {

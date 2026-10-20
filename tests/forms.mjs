@@ -8,13 +8,18 @@ import { sign } from 'hono/jwt';
 
 const outdir = 'node_modules/.cache/nexus-tests';
 mkdirSync(outdir, { recursive: true });
-await build({ entryPoints: { formsLib: 'lib/nexus/forms.ts', formsApp: 'server/app.ts', formsApi: 'server/forms.ts', postsApi2: 'server/posts.ts', xlsx: 'lib/nexus/xlsx.ts' }, outdir, bundle: true, platform: 'node', format: 'esm', packages: 'external', outExtension: { '.js': '.mjs' }, logLevel: 'error' });
+await build({ entryPoints: { salesLib: 'lib/nexus/sales.ts', formsLib: 'lib/nexus/forms.ts', formsApp: 'server/app.ts', formsApi: 'server/forms.ts', postsApi2: 'server/posts.ts', xlsx: 'lib/nexus/xlsx.ts' }, outdir, bundle: true, platform: 'node', format: 'esm', packages: 'external', outExtension: { '.js': '.mjs' }, logLevel: 'error' });
 const load = n => import(pathToFileURL(`${outdir}/${n}.mjs`).href + '?t=' + Date.now());
 const F = await load('formsLib'), { createApp } = await load('formsApp'), A = await load('formsApi'), S = await load('postsApi2'), X = await load('xlsx');
 
 // ---- seed matches the docx: 23 questions (01–22 with 18 split into type/total/speaking + confirmation) ---------
 const qs = F.DEFAULT_FORM.questions.filter(q => q.type !== 'section');
-assert.equal(F.DEFAULT_FORM.title, '各项竞赛报名学员信息收集表');
+assert.equal(F.DEFAULT_FORM.title, '报名学员竞赛信息收集表'); assert.equal(F.DEFAULT_FORM.titleEn, 'STUDENT COMPETITION INFORMATION FORM');
+const q05 = F.DEFAULT_FORM.questions.find(q => q.id === 'q05');
+assert.deepEqual(q05.options[2], { value: '港澳居民来往内地通行证', zh: '港澳居民来往内地通行证', en: 'MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS' });
+assert(!q05.options.some(o => o.value === '港澳通行证'));
+const mig = readFileSync('drizzle/0024_form_title_hk_permit.sql', 'utf8');
+assert(mig.includes("'报名学员竞赛信息收集表'") && mig.includes("'港澳通行证'") && mig.includes('MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS'));
 assert.equal(qs.length, 25);
 assert.deepEqual(qs.find(q => q.id === 'q01').options.map(o => o.value), ['康莱德挑战赛', 'CBPA', 'CTB', 'iHOSA', '钻石挑战赛', '蓝海', 'MVP定制', '其他']);
 assert(qs.every(q => q.labelZh && q.labelEn && q.labelEn === q.labelEn.toUpperCase()), 'every question is bilingual with an ALL-CAPS English line');
@@ -62,7 +67,7 @@ const xl = X.buildXlsx(table); assert.equal(xl[0], 0x50); assert.equal(xl[1], 0x
 
 // ---- API: public + permissions + assign ------------------------------------------------------------------
 const form = { id: 'F-1', slug: 'signup-test1', ...structuredClone(F.DEFAULT_FORM), open: true, version: 1 };
-const repo = A.memoryFormRepo({ forms: [form], students: [existing], teams: [{ id: 'T-CTB', program: 'ctb', name: 'CTB 一队' }] });
+const repo = A.memoryFormRepo({ forms: [form], students: [existing], teams: [{ id: 'T-CTB', program: 'ctb', name: 'CTB 一队' }, { id: 'T-CTB2', program: 'ctb', name: 'CTB 二队' }], sales: [{ id: 2, name: 'Alex', salesName: '顾问 Alex', region: '华东' }, { id: 7, name: '王销售', salesName: '顾问 王销售', region: '华南' }] });
 const users = { 1: { id: 1, email: 'xujin@nexus.local', username: '许瑾', name: '许瑾', role: 'ops', salesName: null, active: true, mustChangePassword: false },
   2: { id: 2, email: 'sales@nexus.demo', username: 'Alex', name: 'Alex', role: 'sales', salesName: '顾问 Alex', active: true, mustChangePassword: false },
   3: { id: 3, email: 'zhangjiejia@nexus.local', username: '张捷嘉', name: '张捷嘉', role: 'superadmin', salesName: null, active: true, mustChangePassword: false },
@@ -120,10 +125,13 @@ assert.equal((await call('DELETE', '/api/admin/forms/F-1', { as: 3 })).status, 4
 r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-CTB' } });
 assert.equal(r.status, 409); assert.equal(r.json.error, 'duplicates'); assert.equal(r.json.duplicates[subId][0].studentId, 'S-OLD');
 assert.equal((await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-NONE' } })).status, 400);
-r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-CTB', links: { [subId]: 'new' }, sales: '顾问 Alex' } });
+r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-CTB', links: { [subId]: 'new' }, salesUserId: 2 } });
 assert.equal(r.status, 200); assert.equal(r.json.results[0].created, true);
 const newId = r.json.results[0].student, st = repo.studentMap.get(newId);
-assert.equal(st.name, '程雪晴'); assert.equal(st.team, 'T-CTB'); assert.equal(st.program, 'ctb'); assert.equal(st.sales, '顾问 Alex'); assert.equal(st.grade, 'G10');
+assert.equal(st.name, '程雪晴'); assert.equal(st.team, 'T-CTB'); assert.equal(st.program, 'ctb'); assert.equal(st.sales, 'Alex', '负责销售 = sales account name');
+const Sales = await import(pathToFileURL(`${outdir}/salesLib.mjs`).href);
+assert(Sales.salesOwns(st.sales, users[2]), 'the bound salesperson sees the student'); assert(!Sales.salesOwns(st.sales, { name: '王销售', salesName: '顾问 王销售' }));
+assert.equal(st.profile.idType, '护照'); assert.equal(st.grade, 'G10');
 assert.equal(st.profile.idNumber, 'E12345678'); assert.equal(st.profile.source, '报名收集表'); assert.equal(st.profile.formSubmission, subId);
 assert([...repo.enrollmentMap.values()].some(e => e.student === newId && e.team === 'T-CTB' && e.program === 'ctb'), 'added as a team member');
 const after = repo.subs.get(subId);
@@ -139,4 +147,19 @@ assert.equal(r.status, 200); assert.equal(r.json.results[0].created, false); ass
 assert.equal((await call('PUT', '/api/admin/forms/F-1', { as: 3, body: { open: false } })).status, 200);
 assert.equal((await call('POST', '/api/public/forms/signup-test1', { body: { answers: good, elapsed: 60000 }, ip: '3.3.3.3' })).status, 403);
 assert.equal((await call('GET', '/api/public/forms/signup-test1')).json.form.open, false);
+// Sales accounts list + bad id; re-bind an assigned row (team + sales) later; bulk assign with one salesperson.
+r = await call('GET', '/api/admin/forms/sales-accounts', { as: 3 }); assert.deepEqual(r.json.accounts.map(a => [a.name, a.region]), [['Alex', '华东'], ['王销售', '华南']]);
+assert.equal((await call('GET', '/api/admin/forms/sales-accounts', { as: 2 })).status, 403);
+assert.equal((await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-CTB', salesUserId: 999 } })).status, 400);
+r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [subId], team: 'T-CTB2', salesUserId: 7 } });
+assert.equal(r.status, 200); assert.equal(r.json.results[0].student, newId, 're-bind keeps the same student');
+assert.equal(repo.studentMap.get(newId).sales, '王销售'); assert.equal(repo.studentMap.get(newId).team, 'T-CTB2'); assert.equal(repo.subs.get(subId).team, 'T-CTB2');
+assert([...repo.enrollmentMap.values()].some(e => e.student === newId && e.team === 'T-CTB2'));
+// Bulk: two fresh submissions (different people) to one team + one salesperson.
+await call('PUT', '/api/admin/forms/F-1', { as: 3, body: { open: true } });
+const mk = async (name, phone, ip) => (await call('POST', '/api/public/forms/signup-test1', { body: { answers: { ...good, q02: name, q07: phone, q05: '港澳居民来往内地通行证' }, elapsed: 60000 }, ip })).json.id;
+const b1 = await mk('甲同学 JIA', '13700000001', '5.5.5.1'), b2 = await mk('乙同学 YI', '13700000002', '5.5.5.2');
+r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [b1, b2], team: 'T-CTB', salesUserId: 2 } });
+assert.equal(r.status, 200); assert.equal(r.json.results.length, 2);
+for (const x of r.json.results) { const stx = repo.studentMap.get(x.student); assert.equal(stx.sales, 'Alex'); assert.equal(stx.team, 'T-CTB'); assert.equal(stx.profile.idType, '港澳居民来往内地通行证'); }
 console.log('forms: ok');

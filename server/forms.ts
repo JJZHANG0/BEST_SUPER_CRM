@@ -16,6 +16,7 @@ import {
   type AssignPlan, type EnrollmentLike, type FormDef, type FormOption, type FormQuestion, type StudentLike, type Submission, type SubmissionStatus,
 } from '../lib/nexus/forms';
 
+export type SalesAccount = { id: number; name: string; salesName: string | null; region: string | null };
 export type FormRepo = {
   forms(): Promise<FormDef[]>;
   form(id: string): Promise<FormDef | null>;
@@ -30,6 +31,8 @@ export type FormRepo = {
   students(): Promise<StudentLike[]>;
   enrollments(): Promise<EnrollmentLike[]>;
   team(id: string): Promise<{ id: string; program: string; name: string } | null>;
+  /** Active role=sales accounts (负责销售 options). */
+  salesAccounts(): Promise<SalesAccount[]>;
   /** Persist one assignment atomically: student upsert, enrollment upsert, submission → 已分配. */
   applyAssignment(plan: AssignPlan, submissionId: string, patch: Partial<Submission>, by: { id: number; name: string }): Promise<void>;
 };
@@ -147,6 +150,10 @@ export function registerFormRoutes(app: AnyApp, repo: FormRepo) {
     await repo.deleteForm(id);
     return c.json({ ok: true });
   });
+  app.get('/admin/forms/sales-accounts', async c => {
+    if (!guard(c)) return deny(c);
+    return c.json({ accounts: await repo.salesAccounts() });
+  });
   app.get('/admin/forms/:id/submissions', async c => {
     if (!guard(c)) return deny(c);
     return c.json({ submissions: await repo.submissions(c.req.param('id')) });
@@ -179,25 +186,32 @@ export function registerFormRoutes(app: AnyApp, repo: FormRepo) {
     return c.json({ ok: true });
   });
   /**
-   * 队伍绑定分发. Body: { ids, team, sales?, links?: { [submissionId]: studentId | 'new' } }.
+   * 队伍绑定分发. Body: { ids, team, salesUserId?, links?: { [submissionId]: studentId | 'new' } }.
+   * Already-assigned rows may be sent again to re-bind team / 负责销售 (they stay linked to their student).
    * A submission whose name/phone matches an existing student needs an explicit link decision → 409 { duplicates }.
    */
   app.post('/admin/form-submissions/assign', async c => {
     const user = guard(c);
     if (!user) return deny(c);
-    const body = await c.req.json().catch(() => null) as { ids?: unknown; team?: unknown; sales?: unknown; links?: unknown } | null;
+    const body = await c.req.json().catch(() => null) as { ids?: unknown; team?: unknown; salesUserId?: unknown; links?: unknown } | null;
     const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.filter((x): x is string => typeof x === 'string'))].slice(0, 200) : [];
     if (!ids.length) return c.json({ error: 'invalid', message: '请选择要分配的记录' }, 400);
     const team = typeof body?.team === 'string' ? await repo.team(body.team) : null;
     if (!team) return c.json({ error: 'invalid', message: '请选择项目与队伍' }, 400);
     const links = (body?.links && typeof body.links === 'object' ? body.links : {}) as Record<string, unknown>;
-    const sales = s(body?.sales, 80);
+    // 负责销售 = the sales account's name (exactly what salesOwns matches on the sales side).
+    let sales = '';
+    if (body?.salesUserId != null && body.salesUserId !== '') {
+      const acct = (await repo.salesAccounts()).find(a => a.id === Number(body.salesUserId));
+      if (!acct) return c.json({ error: 'invalid', message: '所选销售账号不存在或已停用' }, 400);
+      sales = acct.name;
+    }
     const subs: Submission[] = [];
     for (const id of ids) { const x = await repo.submission(id); if (!x) return c.json({ error: 'not_found', message: '记录不存在：' + id }, 404); subs.push(x); }
     let students = await repo.students();
     const duplicates: Record<string, ReturnType<typeof findDuplicates>> = {};
     for (const sub of subs) {
-      if (links[sub.id] !== undefined) continue;
+      if (links[sub.id] !== undefined || (sub.status === '已分配' && sub.studentId)) continue;
       const m = findDuplicates(sub, students).filter(d => d.strength !== 'name');
       if (m.length) duplicates[sub.id] = m;
     }
@@ -272,6 +286,10 @@ export function drizzleFormRepo(db: Db): FormRepo {
       return rows.map(r => ({ id: r.id, name: r.name, program: r.program, team: r.team, status: r.status, sales: r.sales, updated: r.updated, grade: r.grade, health: r.health, healthNote: r.healthNote, healthUpdated: r.healthUpdated, healthBy: r.healthBy, profile: r.profile ?? {} }));
     },
     async enrollments() { return (await db.select().from(schema.enrollments)).map(r => ({ id: r.id, student: r.student, program: r.program, team: r.team, status: r.status })); },
+    async salesAccounts() {
+      const rows = await db.select({ id: schema.users.id, name: schema.users.name, salesName: schema.users.salesName, region: schema.users.salesRegion, role: schema.users.role, active: schema.users.active }).from(schema.users).orderBy(asc(schema.users.id));
+      return rows.filter(r => r.role === 'sales' && r.active).map(r => ({ id: r.id, name: r.name, salesName: r.salesName, region: r.region ?? null }));
+    },
     async team(id) { const [t] = await db.select({ id: schema.teams.id, program: schema.teams.program, name: schema.teams.name }).from(schema.teams).where(eq(schema.teams.id, id)).limit(1); return t ?? null; },
     async applyAssignment(plan, submissionId, p, by) {
       await db.transaction(async tx => {
@@ -294,7 +312,7 @@ export function drizzleFormRepo(db: Db): FormRepo {
   return repo;
 }
 
-/** Seed the 「各项竞赛报名学员信息收集表」 once (closed until a superadmin opens it). */
+/** Seed the 「报名学员竞赛信息收集表」 once (closed until a superadmin opens it). */
 export async function seedDefaultForm(db: Db, log: (s: string) => void = console.log) {
   const existing = await db.select({ id: schema.forms.id }).from(schema.forms).limit(1);
   if (existing.length) return;
@@ -305,7 +323,7 @@ export async function seedDefaultForm(db: Db, log: (s: string) => void = console
 }
 
 /** In-memory FormRepo for tests (same semantics as the PostgreSQL repo). */
-export function memoryFormRepo(seed: { forms?: FormDef[]; students?: StudentLike[]; enrollments?: EnrollmentLike[]; teams?: { id: string; program: string; name: string }[] } = {}) {
+export function memoryFormRepo(seed: { forms?: FormDef[]; students?: StudentLike[]; enrollments?: EnrollmentLike[]; teams?: { id: string; program: string; name: string }[]; sales?: SalesAccount[] } = {}) {
   const forms = new Map((seed.forms || []).map(f => [f.id, structuredClone(f)]));
   const subs = new Map<string, Submission>();
   const students = new Map((seed.students || []).map(s => [s.id, structuredClone(s)]));
@@ -326,6 +344,7 @@ export function memoryFormRepo(seed: { forms?: FormDef[]; students?: StudentLike
     async students() { return [...students.values()].map(x => structuredClone(x)); },
     async enrollments() { return [...enrollments.values()].map(x => structuredClone(x)); },
     async team(id) { return teams.find(t => t.id === id) ?? null; },
+    async salesAccounts() { return structuredClone(seed.sales || []); },
     async applyAssignment(plan, submissionId, p) {
       students.set(plan.student.id, structuredClone(plan.student));
       enrollments.set(plan.enrollment.id, structuredClone(plan.enrollment));
