@@ -5,9 +5,8 @@
  * The server enforces superadmin on every /admin/forms* call; this page only hides itself for others.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import QRCode from 'qrcode';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Ban, Check, ClipboardList, Copy, Download, ExternalLink, FileSpreadsheet, Link2, Lock, PencilRuler, Plus, QrCode, RotateCcw, Save, Search, Share2, ShieldCheck, Trash2, UserPlus, UsersRound } from 'lucide-react';
+import { ArrowDown, ArrowUp, Ban, Check, ClipboardList, Copy, Download, ExternalLink, FileSpreadsheet, Image as ImageIcon, Link2, Lock, PencilRuler, Plus, QrCode, RotateCcw, Save, Search, Share2, ShieldCheck, Trash2, UserPlus, UsersRound } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { useNexus } from '@/lib/nexus/store';
@@ -18,6 +17,7 @@ import {
   type FormDef, type FormQuestion, type Submission, type SubmissionStatus,
 } from '@/lib/nexus/forms';
 import { buildXlsx } from '@/lib/nexus/xlsx';
+import { buildFormPoster, buildPlainQrPng } from '@/lib/nexus/form-poster';
 import { PageTitle, EmptyState, Picker } from './ui';
 
 const tabs = [{ id: 'subs', label: '填写记录', icon: ClipboardList }, { id: 'edit', label: '表单编辑', icon: PencilRuler }, { id: 'share', label: '分享与收集', icon: Share2 }] as const;
@@ -273,33 +273,48 @@ function ShareTab({ form, onSaved }: { form: AdminForm; onSaved: () => void }) {
   const url = formUrl(form.slug);
   const [qr, setQr] = useState('');
   const [busy, setBusy] = useState(false);
-  const canvas = useRef<HTMLCanvasElement | null>(null);
-  useEffect(() => { QRCode.toDataURL(url, { width: 640, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#2b2236', light: '#ffffff' } }).then(setQr).catch(() => setQr('')); }, [url]);
+  const [making, setMaking] = useState<'qr' | 'poster' | null>(null);
+  useEffect(() => { buildPlainQrPng(url, 512).then(b => setQr(URL.createObjectURL(b))).catch(() => setQr('')); }, [url]);
+  useEffect(() => () => { if (qr.startsWith('blob:')) URL.revokeObjectURL(qr); }, [qr]);
   const copy = async () => { try { await navigator.clipboard.writeText(url); toast.success('链接已复制'); } catch { toast.error('浏览器限制了复制，请手动选择链接'); } };
   const toggleOpen = async (open: boolean) => { setBusy(true); try { await formsApi.save({ id: form.id, open }); toast.success(open ? '已开放收集' : '已关闭收集，学生将看到「已停止收集」'); onSaved(); } catch (e) { toast.error(e instanceof ApiError && e.message ? e.message : '操作失败'); } finally { setBusy(false); } };
-  /** Poster-style PNG: title + QR + hint, for WeChat groups. */
-  const downloadPng = async () => {
-    if (!qr) return;
-    const img = new Image(); img.src = qr; await img.decode();
-    const c = canvas.current || document.createElement('canvas'); canvas.current = c;
-    const W = 900, H = 1180; c.width = W; c.height = H; const g = c.getContext('2d')!;
-    const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#f4effd'); bg.addColorStop(1, '#eef6fb'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
-    g.fillStyle = '#fff'; g.beginPath(); g.roundRect(60, 60, W - 120, H - 120, 40); g.fill();
-    g.fillStyle = '#7c4fd6'; g.font = '800 34px Inter, "PingFang SC", sans-serif'; g.textAlign = 'center'; g.fillText('B.E.S.T', W / 2, 150);
-    g.fillStyle = '#2b2236'; g.font = '700 40px "PingFang SC", "Microsoft YaHei", sans-serif';
-    const words = form.title; const lines = words.length > 14 ? [words.slice(0, Math.ceil(words.length / 2)), words.slice(Math.ceil(words.length / 2))] : [words];
-    lines.forEach((l, i) => g.fillText(l, W / 2, 225 + i * 54));
-    g.drawImage(img, (W - 600) / 2, 330, 600, 600);
-    g.fillStyle = '#6f6480'; g.font = '500 28px "PingFang SC", sans-serif'; g.fillText('微信扫码填写报名信息', W / 2, 995);
-    g.fillStyle = '#a094b0'; g.font = '600 20px Inter, sans-serif'; g.fillText('SCAN TO REGISTER', W / 2, 1035);
-    c.toBlob(b => { if (b) save(`${form.title}-二维码.png`, b, 'image/png'); }, 'image/png');
+  /** Plain QR PNG — embeds the LIVE form URL. */
+  const downloadQr = async () => {
+    setMaking('qr');
+    try { save(`${form.title}-二维码.png`, await buildPlainQrPng(url), 'image/png'); toast.success('二维码已下载'); }
+    catch { toast.error('生成二维码失败，请重试'); }
+    finally { setMaking(null); }
+  };
+  /** Poster PNG (1080×1920) — embeds the LIVE form URL; prefers /form-poster/* assets when present. */
+  const downloadPoster = async () => {
+    setMaking('poster');
+    try {
+      const blob = await buildFormPoster({
+        url,
+        title: form.title,
+        titleEn: form.titleEn || 'STUDENT COMPETITION INFORMATION FORM',
+        tipZh: '填写后由老师统一分配队伍',
+        tipEn: 'TEACHERS WILL ASSIGN YOUR TEAM',
+        site: 'bestcrm.cc',
+      });
+      save(`${form.title}-海报.png`, blob, 'image/png');
+      toast.success('海报已下载');
+    } catch { toast.error('生成海报失败，请重试'); }
+    finally { setMaking(null); }
   };
   return <section className="glass panel fa-share">
     <div className="fa-share-main">
       <div className={'fa-open' + (form.open ? ' is-open' : '')}><div>{form.open ? <Check size={18} /> : <Lock size={18} />}<span><b>{form.open ? '正在收集' : '已关闭收集'}</b><small>{form.open ? '学生可通过链接或二维码提交' : '打开后学生才能提交'}</small></span></div><Switch checked={form.open} disabled={busy} onCheckedChange={toggleOpen} aria-label="开放收集" /></div>
       <label className="form-field"><span><Link2 size={14} /> 公开链接（无需登录）</span><div className="fa-link"><input className="input mono" readOnly value={url} onFocus={e => e.currentTarget.select()} /><button className="secondary compact" onClick={copy}><Copy size={15} />复制</button><a className="secondary compact" href={url} target="_blank" rel="noreferrer"><ExternalLink size={15} />预览</a></div></label>
-      <p className="fa-hint">链接与二维码在微信内可直接打开。共收到 <b>{form.counts.total}</b> 份，待分配 <b>{form.counts.pending}</b> 份。未分配的填写记录只有超级管理员可见。</p>
+      <p className="fa-hint">链接与二维码在微信内可直接打开。共收到 <b>{form.counts.total}</b> 份，待分配 <b>{form.counts.pending}</b> 份。未分配的填写记录只有超级管理员可见。下载的二维码 / 海报始终使用上方当前链接。</p>
     </div>
-    <div className="fa-qr">{qr ? <img src={qr} alt={'二维码：' + form.title} width={220} height={220} /> : <QrCode size={64} />}<button className="primary compact" onClick={downloadPng} disabled={!qr}><Download size={15} />下载二维码 PNG</button></div>
+    <div className="fa-qr">
+      {qr ? <img src={qr} alt={'二维码：' + form.title} width={220} height={220} /> : <QrCode size={64} />}
+      <div className="fa-qr-actions">
+        <button className="secondary compact" onClick={downloadQr} disabled={!!making}><Download size={15} />{making === 'qr' ? '生成中…' : '下载二维码 PNG'}</button>
+        <button className="primary compact" onClick={downloadPoster} disabled={!!making}><ImageIcon size={15} />{making === 'poster' ? '生成中…' : '下载海报 PNG'}</button>
+      </div>
+      <p className="fa-qr-tip">海报为竖版 1080×1920，适合微信群 / 朋友圈分享</p>
+    </div>
   </section>;
 }
