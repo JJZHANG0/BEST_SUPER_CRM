@@ -1,14 +1,16 @@
 'use client';
-import { useState } from 'react';
-import { Users, CalendarDays, GraduationCap, ClipboardList, FolderOpen, Search, ChevronRight, Download, Eye, Copy, CircleDollarSign, UserRoundCheck } from 'lucide-react';
+import { useRef, useState, type CSSProperties } from 'react';
+import { Users, CalendarDays, GraduationCap, ClipboardList, ChevronRight, Download, Eye, Copy, Maximize2, X, Image as ImageIcon, UserPlus } from 'lucide-react';
+import { Dialog as DialogPrimitive } from 'radix-ui';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { useNexus, useVisible } from '@/lib/nexus/store';
-import { cohortOffers, offerFor, cohortAvailability, money, priceText, planText } from '@/lib/nexus/recruitment';
+import { useNexus } from '@/lib/nexus/store';
+import { cohortOffers, offerFor, cohortAvailability, priceText, planText } from '@/lib/nexus/recruitment';
 import { assetUrl } from '@/lib/nexus/assets';
-import { Badge, ProgramMark, SearchBox, Choice, Meter, NoResults, SectionTitle } from './ui';
-import type { Team } from '@/lib/nexus/data';
+import { Badge, ProgramMark, SearchBox, Choice, Meter, NoResults, SectionTitle, EmptyState } from './ui';
+import type { Team, Course } from '@/lib/nexus/data';
 import { salesOwns } from '@/lib/nexus/sales';
+import { occurrences } from '@/lib/nexus/schedule';
 export const greeting=()=>{const h=Number(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Shanghai',hour:'numeric',hourCycle:'h23'}).format(new Date()));return h<11?'早上好':h<14?'中午好':h<18?'下午好':'晚上好'};
 
 export function Poster({program,src:custom,label}:{program:string;src?:string|null;label?:string}) {
@@ -78,23 +80,158 @@ export function ProgramOfferSummary({program}:{program:string}) {
     <div className="actions"><Poster program={program}/><button className="secondary" onClick={()=>s.go('teams?program='+program)}><Users size={17}/>查看开班队伍</button></div>
   </section>;
 }
-export function TeamOfferSummary({team, courses}:{team:Team; /** Bound 课程管理 courses for this team */ courses?: {id:string;name:string;date:string;time:string;teacher:string;status:string;code?:string}[]}) {
-  const s=useNexus(),p=s.programs.find(p=>p.id===team.program)!,offer=offerFor(p.id),cohort=cohortOffers[team.id],a=cohortAvailability(team,s.enrollments);
-  const bound=courses??s.courses.filter(c=>c.team===team.id);
-  const copy=async()=>{const text=`${p.name}｜${team.name}\n项目编号：${offer.code} / ${team.id}\n招生：${a.status}，已报 ${a.confirmed}/${a.capacity} 人${a.status==='招生中'?`，剩余 ${a.remaining} 席`:''}\n参考价：${priceText(offer.fee)}\n计划开课：${cohort?.opens||'待安排'}\n课程：${planText(offer)}\n授课老师：${team.teacher}\n运营对接：${offer.operations||'待指定'}\n以正式报价为准。`;try{await navigator.clipboard.writeText(text);toast.success('招生摘要已复制')}catch{toast.error('浏览器限制了复制，可直接选择页面文字复制。')}};
-  return <><section className="glass panel offer-summary"><SectionTitle title="招生与开班信息" sub="只读 · 招生进度 / 招生状态 / 项目参考价不可在此编辑"/>
-    <div className="offer-metrics" aria-label="招生指标（只读）"><div><span>招生进度</span><b>{a.confirmed}<small> / {a.capacity} 人</small></b></div><div><span>{a.status==='招生中'?'剩余名额':'招生状态'}</span><b>{a.status==='招生中'?a.remaining:a.status}</b></div><div><span>项目参考价</span><b>{priceText(offer.fee)}{offer.fee>0&&<small> / 人</small>}</b></div></div><Meter value={a.progress}/>
-    <dl className="info-grid"><div><dt>项目编号 / 队伍编号</dt><dd>{offer.code} / {team.id}</dd></div><div><dt>运营对接人</dt><dd>{offer.operations||'待指定'}</dd></div><div><dt>授课老师</dt><dd>{team.teacher}</dd></div><div><dt>老师介绍</dt><dd>{offer.teacherBio||'待补充'}</dd></div><div><dt>计划开课 / 报名截止</dt><dd>{cohort?.opens||'待安排'} / {cohort?.deadline||'待发布'}</dd></div><div><dt>上课时间</dt><dd>{cohort?.schedule||'待安排'}</dd></div><div><dt>课程总量</dt><dd>{planText(offer)}</dd></div><div><dt>费用与包含内容</dt><dd>{offer.feeNote}</dd></div></dl>
-    <div className="actions"><Poster program={team.program}/><button className="secondary" onClick={copy}><Copy size={16}/>复制招生摘要</button><button className="secondary" onClick={()=>s.go('programs/'+team.program)}>查看完整项目与资料</button></div>
-  </section><section className="glass panel course-plan"><SectionTitle title="课程计划" sub="绑定自「课程管理」· 本队伍关联课程" action={s.role!=='sales'?'去课程管理':undefined} onClick={()=>s.go('courses')}/>
-    {bound.length? <div className="stack-list">{bound.map(c=><button key={c.id} type="button" className="record-link" onClick={()=>s.go('courses/'+c.id)}><span className="course-time">{c.time.split('–')[0]}<small>{c.date.slice(5)}</small></span><div><h3>{c.name}{c.code&&<em className="course-code"> {c.code}</em>}</h3><p>{c.teacher} · {c.status}</p></div></button>)}</div>
-    : <p className="muted">尚未关联课程。请在「课程管理」中新建或编辑课程并选择本队伍。</p>}
-  </section></>;
+/** Thumbnail → fullscreen lightbox (real <img>: iOS long-press → 存储图像). Reuses sales lightbox CSS. */
+function TeamImageCard({ src, alt, label, className, onError }: { src: string; alt: string; label: string; className?: string; onError?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const startY = useRef<number | null>(null);
+  const [dy, setDy] = useState(0);
+  const zoomed = () => typeof window !== 'undefined' && (window.visualViewport?.scale ?? 1) > 1.05;
+  return <>
+    <button type="button" className={'sh-poster team-media-card ' + (className || '')} onClick={() => setOpen(true)}>
+      <img src={src} alt={alt} loading="lazy" onError={onError} />
+      <span><Maximize2 size={14} />{label}</span>
+    </button>
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="sh-lightbox-backdrop" />
+        <DialogPrimitive.Content className="sh-lightbox" aria-describedby={undefined} style={{ '--dy': dy + 'px', opacity: dy ? Math.max(0.35, 1 - dy / 400) : undefined } as CSSProperties}
+          onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
+          onTouchStart={e => { startY.current = e.touches.length === 1 && !zoomed() ? e.touches[0].clientY : null; }}
+          onTouchMove={e => { if (startY.current == null || e.touches.length !== 1) return; setDy(Math.max(0, e.touches[0].clientY - startY.current)); }}
+          onTouchEnd={() => { if (dy > 90) setOpen(false); setDy(0); startY.current = null; }}>
+          <DialogPrimitive.Title className="sr-only">{alt}</DialogPrimitive.Title>
+          <DialogPrimitive.Close className="sh-lightbox-close" aria-label="关闭"><X size={22} /></DialogPrimitive.Close>
+          <img src={src} alt={alt} className="sh-lightbox-img" />
+          <p className="sh-lightbox-hint">双指缩放 · 长按图片可保存 · 下滑或点空白处关闭</p>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  </>;
 }
-export function TeamRoster({team}:{team:Team}) {
-  const s=useNexus();const entries=s.enrollments.filter(e=>e.team===team.id&&e.status!=='已退出');
-  return <section className="glass panel"><SectionTitle title={`队员信息 · ${entries.length} 人`} sub="可查看队员年级与参与状态；非本人负责的学生隐藏姓名与档案入口"/>
-    {entries.map(e=>{const x=s.students.find(x=>x.id===e.student);if(!x)return null;const mine=s.role!=='sales'||salesOwns(x.sales,{name:s.user?.name,salesName:s.user?.salesName});return <div key={e.id} className="record-link"><span className="avatar">{mine?x.name.slice(0,1):'•'}</span><div><h3>{mine?x.name:'已报名队员（姓名隐藏）'}</h3><p>{x.grade} · {mine?x.sales:'其他顾问负责'}</p></div><Badge>{e.status}</Badge>{mine&&<button className="text-button" onClick={()=>s.go('students/'+x.id)}>查看档案</button>}</div>})}
-    {!entries.length&&<p className="muted">本队伍尚未有报名成员。</p>}
+
+type TeamCourse = Pick<Course, 'id' | 'name' | 'date' | 'time' | 'teacher' | 'status' | 'code'>;
+
+/** 招生指标 + 开班事实 + 摘要操作 — for the secondary「更多」tab (not the default first screen). */
+export function TeamAdmissionPanel({ team }: { team: Team }) {
+  const s = useNexus(), p = s.programs.find(p => p.id === team.program)!, offer = offerFor(p.id), cohort = cohortOffers[team.id], a = cohortAvailability(team, s.enrollments);
+  const copy = async () => {
+    const text = `${p.name}｜${team.name}\n项目编号：${offer.code} / ${team.id}\n招生：${a.status}，已报 ${a.confirmed}/${a.capacity} 人${a.status === '招生中' ? `，剩余 ${a.remaining} 席` : ''}\n参考价：${priceText(offer.fee)}\n计划开课：${cohort?.opens || '待安排'}\n课程：${planText(offer)}\n授课老师：${team.teacher}\n运营对接：${offer.operations || '待指定'}\n以正式报价为准。`;
+    try { await navigator.clipboard.writeText(text); toast.success('招生摘要已复制'); } catch { toast.error('浏览器限制了复制，可直接选择页面文字复制。'); }
+  };
+  return <section className="glass panel offer-summary team-tab-panel">
+    <SectionTitle title="招生与开班" sub="只读 · 招生进度 / 状态 / 参考价也可在「编辑队伍」中管理" />
+    <div className="offer-metrics offer-metrics-compact" aria-label="招生指标（只读）">
+      <div><span>招生进度</span><b>{a.confirmed}<small> / {a.capacity} 人</small></b></div>
+      <div><span>{a.status === '招生中' ? '剩余名额' : '招生状态'}</span><b>{a.status === '招生中' ? a.remaining : a.status}</b></div>
+      <div><span>项目参考价</span><b>{priceText(offer.fee)}{offer.fee > 0 && <small> / 人</small>}</b></div>
+    </div>
+    <Meter value={a.progress} />
+    <dl className="info-grid">
+      <div><dt>项目编号 / 队伍编号</dt><dd>{offer.code} / {team.id}</dd></div>
+      <div><dt>运营对接人</dt><dd>{offer.operations || team.opsOwner || '待指定'}</dd></div>
+      <div><dt>授课老师</dt><dd>{team.teacher || '待定'}</dd></div>
+      <div><dt>老师介绍</dt><dd>{offer.teacherBio || '待补充'}</dd></div>
+      <div><dt>计划开课 / 报名截止</dt><dd>{cohort?.opens || '待安排'} / {cohort?.deadline || '待发布'}</dd></div>
+      <div><dt>上课时间</dt><dd>{cohort?.schedule || '待安排'}</dd></div>
+      <div><dt>课程总量</dt><dd>{planText(offer)}</dd></div>
+      <div><dt>费用与包含内容</dt><dd>{offer.feeNote}</dd></div>
+    </dl>
+    <div className="actions">
+      <Poster program={team.program} src={team.posterUrl} label={team.posterUrl ? '查看课题海报' : undefined} />
+      <button type="button" className="secondary" onClick={copy}><Copy size={16} />复制招生摘要</button>
+      <button type="button" className="secondary" onClick={() => s.go('programs/' + team.program)}>查看完整项目与资料</button>
+    </div>
+  </section>;
+}
+
+/** Bound 课程管理 courses — light panel for the「课程」tab. */
+export function TeamCoursesPanel({ team, courses }: { team: Team; courses?: TeamCourse[] }) {
+  const s = useNexus();
+  const bound = courses ?? s.courses.filter(c => c.team === team.id);
+  const occ = occurrences(bound as Course[], s.courseSessions);
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = occ.filter(o => o.date >= today);
+  const next = upcoming[0] || occ[0];
+  return <section className="glass panel course-plan team-tab-panel">
+    <SectionTitle title="课程" sub="绑定自「课程管理」" action={s.role !== 'sales' ? '去课程管理' : undefined} onClick={() => s.go('courses')} />
+    {next && <p className="team-next-session muted">下一节：{next.date.slice(5)} {next.start || next.course.time.split('–')[0]} · {next.course.name}</p>}
+    {bound.length ? <div className="stack-list">{bound.map(c =>
+      <button key={c.id} type="button" className="record-link" onClick={() => s.go('courses/' + c.id)}>
+        <span className="course-time">{c.time.split('–')[0]}<small>{c.date.slice(5)}</small></span>
+        <div><h3>{c.name}{c.code && <em className="course-code"> {c.code}</em>}</h3><p>{c.teacher} · {c.status}</p></div>
+        <ChevronRight size={16} />
+      </button>
+    )}</div> : <EmptyState icon={CalendarDays} title="尚未关联课程" description="在「课程管理」中新建或编辑课程并选择本队伍。" action={s.role !== 'sales' ? '去课程管理' : undefined} onAction={() => s.go('courses')} />}
+  </section>;
+}
+
+/** 海报与简介 — 课程计划图优先于招生/课题海报（与销售端产品约定一致）. */
+export function TeamMediaIntro({ team, onEdit }: { team: Team; onEdit?: () => void }) {
+  const s = useNexus();
+  const p = s.programs.find(x => x.id === team.program);
+  const offer = offerFor(team.program);
+  const article = s.articles.find(a => a.program === team.program)?.published;
+  const poster = team.posterUrl || article?.cover || (p ? assetUrl(`materials/poster-${p.id}.svg`) : '');
+  const [posterBroken, setPosterBroken] = useState(false);
+  const introBits = [p?.description, offer.audience && `适合：${offer.audience}`, offer.outcome && `预期成果：${offer.outcome}`, team.note].filter(Boolean) as string[];
+  return <section className="glass panel team-tab-panel team-media-intro">
+    <SectionTitle title="海报与简介" sub="课程计划图优先展示；点图可放大，长按保存" />
+    <div className="team-media-stack">
+      {team.scheduleUrl ? (
+        <div className="team-media-block">
+          <h3><CalendarDays size={15} />课程计划</h3>
+          <TeamImageCard src={team.scheduleUrl} alt={`${team.name} 课程计划`} label="查看课程计划大图" className="sh-schedule-img" />
+        </div>
+      ) : null}
+      <div className="team-media-block">
+        <h3><ImageIcon size={15} />{team.posterUrl ? '课题海报' : '项目海报'}</h3>
+        {poster && !posterBroken
+          ? <TeamImageCard src={poster} alt={`${team.name} 海报`} label="查看大图" onError={() => setPosterBroken(true)} />
+          : <p className="muted">尚未上传海报。{onEdit && s.role !== 'sales' ? '可在「编辑队伍」中上传课题海报。' : ''}</p>}
+        {onEdit && s.role !== 'sales' && <button type="button" className="secondary compact" onClick={onEdit}><ImageIcon size={14} />编辑队伍 · 上传海报</button>}
+      </div>
+      <div className="team-media-block prose">
+        <h3>项目简介</h3>
+        {introBits.length ? introBits.map((t, i) => <p key={i}>{t}</p>) : <p className="muted">暂无简介。项目书与资料见「更多」中的完整项目入口。</p>}
+        <button type="button" className="text-button" onClick={() => s.go('programs/' + team.program)}>查看完整项目与资料<ChevronRight size={14} /></button>
+      </div>
+    </div>
+  </section>;
+}
+
+/** @deprecated Prefer TeamAdmissionPanel + TeamCoursesPanel in tabbed TeamDetail. Kept for any external import. */
+export function TeamOfferSummary({ team, courses }: { team: Team; courses?: TeamCourse[] }) {
+  return <><TeamAdmissionPanel team={team} /><TeamCoursesPanel team={team} courses={courses} /></>;
+}
+
+export function TeamRoster({ team, onEditMembers }: { team: Team; onEditMembers?: () => void }) {
+  const s = useNexus();
+  const entries = s.enrollments.filter(e => e.team === team.id && e.status !== '已退出');
+  return <section className="glass panel team-tab-panel">
+    <SectionTitle title={`队员 · ${entries.length} 人`} sub="可查看年级与参与状态；非本人负责的学生隐藏姓名与档案入口" />
+    {entries.map(e => {
+      const x = s.students.find(x => x.id === e.student); if (!x) return null;
+      const mine = s.role !== 'sales' || salesOwns(x.sales, { name: s.user?.name, salesName: s.user?.salesName });
+      return <div key={e.id} className="record-link">
+        <span className="avatar">{mine ? x.name.slice(0, 1) : '•'}</span>
+        <div><h3>{mine ? x.name : '已报名队员（姓名隐藏）'}</h3><p>{x.grade} · {mine ? x.sales : '其他顾问负责'}</p></div>
+        <Badge>{e.status}</Badge>
+        {mine && <button type="button" className="text-button" onClick={() => s.go('students/' + x.id)}>查看档案</button>}
+      </div>;
+    })}
+    {!entries.length && (
+      <EmptyState
+        icon={Users}
+        title="本队伍尚无队员"
+        description="从编辑队伍中添加报名成员，或等销售端确认报名后自动出现。"
+        action={onEditMembers && s.role !== 'sales' ? '添加队员' : undefined}
+        onAction={onEditMembers}
+      />
+    )}
+    {!!entries.length && onEditMembers && s.role !== 'sales' && (
+      <div className="actions" style={{ marginTop: 12 }}>
+        <button type="button" className="secondary compact" onClick={onEditMembers}><UserPlus size={15} />管理队员</button>
+      </div>
+    )}
   </section>;
 }

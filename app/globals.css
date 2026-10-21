@@ -2336,6 +2336,45 @@ button.sh-row:active{transform:scale(.985)}
 @media(prefers-reduced-motion:reduce){.sh-tile,.sh-list>li,.sh-group,.sh-stage,.sh-panel,.sh-overlay,.sh-spark i,.sh-avatars i{animation:none!important}.sh-ring-bar,.sh-bar i{transition:none}}
 .sh-schedule-img{margin-bottom:10px}.sh-schedule-img img{max-height:520px}
 .sh-row-side .badge{margin-top:3px;font-size:.625rem}
+/* ── 队伍详情 · 单屏 Tab 布局 ── */
+.team-detail-page{display:flex;flex-direction:column;gap:0;min-height:0}
+.team-detail-hero{padding:16px 20px;margin-bottom:12px;gap:14px;align-items:center}
+.team-detail-hero .program-mark{height:48px;width:48px;font-size:1rem}
+.team-detail-hero h1{font-size:1.25rem;line-height:1.4}
+.team-detail-meta{font-size:.75rem;color:#a08dab;margin-top:4px;line-height:1.6;overflow-wrap:anywhere}
+.team-detail-actions{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto}
+.team-detail-page .detail-tabs{display:flex;flex-direction:column;min-height:0;flex:1}
+.team-detail-page .tab-scroller{margin-bottom:10px;flex-shrink:0}
+.team-detail-page .detail-tabs [data-slot=tabs-content]{min-height:0}
+.team-detail-page .team-tab-panel{margin-bottom:0;padding:18px 20px;max-height:min(62vh,640px);overflow-y:auto}
+.team-more-stack{display:flex;flex-direction:column;gap:14px;max-height:min(62vh,640px);overflow-y:auto;padding-bottom:4px}
+.team-more-stack .team-tab-panel,.team-more-stack .offer-summary,.team-more-stack .team-progress{max-height:none;overflow:visible;margin-bottom:0}
+.offer-metrics-compact{margin:14px 0}.offer-metrics-compact>div{padding:12px 14px}.offer-metrics-compact b{font-size:1.35rem;margin-top:4px}
+.team-media-intro .team-media-stack{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;align-items:start}
+.team-media-block{min-width:0;display:flex;flex-direction:column;gap:10px}
+.team-media-block h3{display:inline-flex;align-items:center;gap:7px;font-size:.875rem;font-weight:600;color:#6e5a82;margin:0}
+.team-media-block.prose{grid-column:1/-1}
+.team-media-card{border-radius:14px;border:1px solid #e8dff3;background:#f7f2fc}
+.team-media-card span{color:#8b58c7}
+.team-next-session{margin:0 0 8px;font-size:.8125rem}
+@media(min-width:1100px){
+  .team-detail-page{max-height:calc(100dvh - 110px)}
+  .team-detail-page .team-tab-panel{max-height:calc(100dvh - 250px)}
+  .team-more-stack{max-height:calc(100dvh - 250px)}
+}
+@media(max-width:900px){
+  .team-media-intro .team-media-stack{grid-template-columns:1fr}
+  .team-detail-hero{flex-wrap:wrap}
+  .team-detail-actions{margin-left:0;width:100%;justify-content:flex-start}
+  .team-detail-page .team-tab-panel,.team-more-stack{max-height:none}
+}
+@media(max-width:767px){
+  .team-detail-hero{padding:14px 15px}
+  .team-detail-hero h1{font-size:1.125rem}
+  .team-detail-hero .program-mark{width:42px;height:42px}
+  .offer-metrics-compact{grid-template-columns:1fr 1fr;gap:8px}
+}
+
 /* ── 队伍管理 · 编辑队伍 drawer ── */
 .team-editor{width:min(560px,100vw)!important;max-width:100vw!important;overflow-y:auto}
 .team-editor-body{padding:0 20px 28px}
