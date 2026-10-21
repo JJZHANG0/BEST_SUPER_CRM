@@ -293,9 +293,6 @@ function ShareTab({ form, onSaved }: { form: AdminForm; onSaved: () => void }) {
         url,
         title: form.title,
         titleEn: form.titleEn || 'STUDENT COMPETITION INFORMATION FORM',
-        tipZh: '填写后由老师统一分配队伍',
-        tipEn: 'TEACHERS WILL ASSIGN YOUR TEAM',
-        site: 'bestcrm.cc',
       });
       save(`${form.title}-海报.png`, blob, 'image/png');
       toast.success('海报已下载');

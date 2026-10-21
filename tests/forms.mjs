@@ -173,7 +173,9 @@ for (const s of ['确认提交', 'CONFIRM & SUBMIT', '返回修改', 'BACK TO ED
 // Share tab: plain QR + poster downloads embed the LIVE url; poster prefers /form-poster/* when present.
 const poster = readFileSync('lib/nexus/form-poster.ts', 'utf8');
 assert(poster.includes("assetUrl('form-poster/bg.png')") && poster.includes('1080') && poster.includes('1920'));
-assert(poster.includes('微信扫码填写') && poster.includes('SCAN TO REGISTER') && poster.includes('填写后由老师统一分配队伍') && poster.includes('bestcrm.cc'));
+assert(poster.includes('微信扫码填写') && poster.includes('SCAN TO REGISTER'));
+assert(!poster.includes('填写后由老师统一分配队伍') && !poster.includes('B.E.S.T · 报名信息收集'), 'removed tip + footer');
+assert(!poster.includes("const mark = 'B.E.S.T'") && !poster.includes("'报名信息收集'"), 'removed top brand block');
 const share = readFileSync('components/nexus/forms-admin.tsx', 'utf8');
 assert(share.includes('下载海报 PNG') && share.includes('下载二维码 PNG') && share.includes('buildFormPoster') && share.includes('buildPlainQrPng'));
 assert(!share.includes("from 'qrcode'"), 'QR generation lives in form-poster.ts');
