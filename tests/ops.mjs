@@ -242,4 +242,14 @@ assert(opsUiPicker.includes('canSeeAllLessons(viewer)') && opsUiPicker.includes(
 assert(readFileSync('server/app.ts', 'utf8').includes('bootstrapVisibleOpsCourses'), 'bootstrap keeps unassigned 课程编号');
 assert(readFileSync('components/nexus/admin.tsx', 'utf8').includes("course?.opsTeacher || (course ? '' : (s.user?.email || ''))"), '新建课程 defaults 教务老师 to self');
 
+// 记录课时 (new): do not preselect first course / its 授课老师 / its 教务老师.
+const lessonDialogSrc = readFileSync('components/nexus/ops-pages.tsx', 'utf8');
+const lessonDialogFn = lessonDialogSrc.slice(lessonDialogSrc.indexOf('function LessonDialog'), lessonDialogSrc.indexOf('function PersonTabs'));
+assert(lessonDialogFn.includes("useState(record?.course || '')"), 'new 记录课时 starts with blank course');
+assert(!/useState\(record\?\.course \|\| options\[0\]/.test(lessonDialogFn), 'new 记录课时 must not auto-pick options[0] course');
+assert(lessonDialogFn.includes("useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : '')"), 'new 记录课时 starts with blank 授课老师');
+assert(!/options\[0\]\?\.teacher/.test(lessonDialogFn), 'new 记录课时 must not default 授课老师 from options[0]');
+assert(lessonDialogFn.includes('useState(record?.opsTeacher || me)'), '教务老师 defaults to current user only');
+assert(!/options\[0\]\?\.opsTeacher/.test(lessonDialogFn), 'new 记录课时 must not invent 教务老师 from options[0]');
+
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

@@ -85,12 +85,14 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
   const all = canSeeAllLessons(s.viewer);
   const options = loggableCourses(s.opsCourses, s.viewer, me, s.user?.name || '', record?.course || '');
   const linked = record ? s.lessonFeedbacks.find(f => f.lesson === record.id) ?? null : null;
-  const [courseId, setCourseId] = useState(record?.course || options[0]?.id || '');
+  // New 记录课时: leave 课程 / 授课老师 blank (do not auto-pick options[0]). After the user
+  // picks a course, onChange fills 授课老师 from that course. 教务老师 defaults to current user only.
+  const [courseId, setCourseId] = useState(record?.course || '');
   const [date, setDate] = useState(record?.date || today());
   const [hours, setHours] = useState(String(record?.hours ?? 2));
   const [actual, setActual] = useState(record?.actualCount != null ? String(record.actualCount) : '');
-  const [ops, setOps] = useState(record?.opsTeacher || options[0]?.opsTeacher || me);
-  const [teacher, setTeacher] = useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : options[0]?.teacher || '');
+  const [ops, setOps] = useState(record?.opsTeacher || me);
+  const [teacher, setTeacher] = useState(record ? lessonTeacher(record, s.opsCourses).replace(/^未填写$/, '') : '');
   const [note, setNote] = useState(record?.note || '');
   const [replay, setReplay] = useState(record?.replayUrl || '');
   const formRef = useRef<HTMLFormElement>(null);
