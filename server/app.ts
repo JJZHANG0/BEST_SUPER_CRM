@@ -20,7 +20,7 @@ import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } f
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
 import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled } from '../lib/nexus/sales';
-import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
+import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, bootstrapVisibleOpsCourses, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
 import { drizzleRepo, registerPostRoutes, registerPublicPostRoutes, registerShareShell, type PostRepo } from './posts';
@@ -899,10 +899,14 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       // (their ops views filter client-side). Courses referenced by visible 课时 / 反馈 stay so names resolve.
       // 课程安排 / 排课 stay complete: the client needs every slot for 排课冲突 checks and scopes the views itself.
       let visibleOpsCourses = opsCourses;
-      if (!canManageSystem(user.role)) {
-        const scope = opsOwnScope(user, opsCourses as { id: string; code: string; teacher: string; opsTeacher: string }[], []);
-        const referenced = new Set([...myLessons, ...myLessonFeedbacks].map(r => r.course as string));
-        visibleOpsCourses = opsCourses.filter(oc => scope.opsCourseIds.has(oc.id as string) || referenced.has(oc.id as string));
+      // Superadmin + 部门负责人 keep the full library; others get own + 教务老师未指定 + referenced.
+      if (!canManageSystem(user.role) && !canSeeAllLessons(user)) {
+        const referenced = [...myLessons, ...myLessonFeedbacks].map(r => r.course as string);
+        visibleOpsCourses = bootstrapVisibleOpsCourses(
+          user,
+          opsCourses as { id: string; code: string; teacher: string; opsTeacher: string }[],
+          referenced,
+        );
       }
       return c.json({ user: publicUser(user), programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, articles, posts: postList, todos, classTypes, projects, teachers, opsCourses: visibleOpsCourses, lessons: myLessons, lessonFeedbacks: myLessonFeedbacks, staff, courseSessions, announcements: announcementList, lessonMonthLocks });
     }

@@ -17,7 +17,7 @@ import {
   isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours, sameTeacherName,
   lessonFeedbackRequested, parentFeedbackText,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
-  opsOwnScope,
+  loggableOpsCourses,
 } from '@/lib/nexus/ops';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge, PageTitle, SearchBox, FormField, Picker, EmptyState } from './ui';
@@ -59,15 +59,14 @@ function useOpsFilters() {
   return { s, all, month, matches, toolbar, course, teacher, setTeacher };
 }
 
-/** Courses the signed-in user may log against: own + unassigned (superadmin: all). */
+/** Courses the signed-in user may log against: own + unassigned; 部门负责人 sees all. */
 function loggableCourses(courses: OpsCourse[], viewer: Viewer, email: string, teacherName = '', keep = '') {
+  if (canSeeAllLessons(viewer)) return courses.slice();
   if (isTeacher(viewer.role)) {
     const n = teacherName.trim();
     return n ? courses.filter(c => c.teacher === n || c.teacher.includes(n)) : courses;
   }
-  // 运营端（含部门负责人）: only courses where I am the 授课老师 or the 运营老师; keep the edited record's course.
-  const own = opsOwnScope({ name: teacherName, email }, courses, []).opsCourseIds;
-  return courses.filter(c => own.has(c.id) || c.id === keep);
+  return loggableOpsCourses({ name: teacherName, email }, courses, keep);
 }
 const courseLabel = (c: OpsCourse) => `${c.code} · ${c.name}`;
 /** 「5/6」 (实到/应到), 「5」 or 「—」 for the table. */

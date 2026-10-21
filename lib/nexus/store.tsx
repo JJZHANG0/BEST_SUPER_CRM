@@ -13,7 +13,7 @@ import { isPetId, DEFAULT_PET, writeStoredPet, readStoredPet, type PetId } from 
 import { api, publicApi, visitorId, API_ENABLED, ApiError, NETWORK_ERROR_MESSAGE, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, type LessonMonthLock, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, type LessonMonthLock, normalizeLesson, teacherRosterScope, opsOwnScope, loggableOpsCourses } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
@@ -541,7 +541,8 @@ export function useVisible(){
     if(s.role==='teacher')return teacherScope!.courseIds.has(c.id)||teacherScope!.teamIds.has(c.team);
     return true;
   });
-  const opsCourses=ownScope?ownScope.opsCourses:teacherScope?teacherScope.opsCourses:s.opsCourses;
+  // Include 教务老师未指定 so newly added 课程编号 appear in 排课 / 课时 pickers before assignment.
+  const opsCourses=ownScope?loggableOpsCourses({name:myName,email:s.user?.email||''},s.opsCourses):teacherScope?teacherScope.opsCourses:s.opsCourses;
   const courseIds=new Set(courses.map(c=>c.id));
   const courseSessions=dedupeSessions(s.courseSessions.filter(x=>courseIds.has(x.course)));
   return {

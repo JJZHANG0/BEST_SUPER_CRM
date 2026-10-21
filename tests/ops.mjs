@@ -223,4 +223,23 @@ const gcss = readFileSync('app/globals.css','utf8');
 assert(gcss.includes('.welcome-weather{') && gcss.includes('background:transparent'), 'weather transparent');
 assert(gcss.includes('red-packet-tip'));
 
+
+// 课时记录 course picker: newly added 课程编号 with 教务老师未指定 must be selectable.
+const pickCourses = [
+  { id: 'OC-mine', code: 'WS2026-MINE', name: '我的课', teacher: '张三', opsTeacher: 'ops@nexus.local', project: 'P1', status: '进行中', classType: 'CT01', startDate: '', endDate: '' },
+  { id: 'OC-open', code: 'WS2026-OPEN', name: '未指定教务', teacher: '李四', opsTeacher: '', project: 'P1', status: '未开始', classType: 'CT01', startDate: '', endDate: '' },
+  { id: 'OC-other', code: 'WS2026-OTHER', name: '别人的课', teacher: '王五', opsTeacher: 'other@nexus.local', project: 'P1', status: '进行中', classType: 'CT01', startDate: '', endDate: '' },
+];
+assert.deepEqual(O.loggableOpsCourses({ name: '路人', email: 'ops@nexus.local' }, pickCourses).map(c => c.id).sort(), ['OC-mine', 'OC-open'], 'own + unassigned');
+assert.deepEqual(O.loggableOpsCourses({ name: '李四', email: 'nobody@nexus.local' }, pickCourses).map(c => c.id).sort(), ['OC-open'], '授课老师 match + unassigned');
+assert.deepEqual(O.loggableOpsCourses({ name: 'x', email: 'ops@nexus.local' }, pickCourses, 'OC-other').map(c => c.id).sort(), ['OC-mine', 'OC-open', 'OC-other'], 'keep edited course');
+assert.deepEqual(O.bootstrapVisibleOpsCourses({ name: 'x', email: 'ops@nexus.local' }, pickCourses, ['OC-other']).map(c => c.id).sort(), ['OC-mine', 'OC-open', 'OC-other'], 'bootstrap own+unassigned+referenced');
+assert.equal(O.isUnassignedOpsTeacher(''), true);
+assert.equal(O.isUnassignedOpsTeacher('  '), true);
+assert.equal(O.isUnassignedOpsTeacher('ops@nexus.local'), false);
+const opsUiPicker = readFileSync('components/nexus/ops-pages.tsx', 'utf8');
+assert(opsUiPicker.includes('canSeeAllLessons(viewer)') && opsUiPicker.includes('loggableOpsCourses'), '课时记录 picker restores leader-all + unassigned helper');
+assert(readFileSync('server/app.ts', 'utf8').includes('bootstrapVisibleOpsCourses'), 'bootstrap keeps unassigned 课程编号');
+assert(readFileSync('components/nexus/admin.tsx', 'utf8').includes("course?.opsTeacher || (course ? '' : (s.user?.email || ''))"), '新建课程 defaults 教务老师 to self');
+
 console.log('Ops: allowance standards and calculation, monthly summary, visibility, CSV import, empty seeds, schema/migration and role gating passed.');

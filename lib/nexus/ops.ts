@@ -608,3 +608,34 @@ export function opsOwnScope<
   const mineCourses = courses.filter(c => isMine(c.teacher) || (!!c.code && codes.has(String(c.code).replace(/\s+/g, '').toUpperCase())));
   return { opsCourses: mineOps, courses: mineCourses, opsCourseIds: new Set(mineOps.map(c => c.id)), courseIds: new Set(mineCourses.map(c => c.id)) };
 }
+
+/** True when 教务老师 is blank (系统管理 · 课程管理 default 「未指定」). */
+export function isUnassignedOpsTeacher(opsTeacher: unknown): boolean {
+  return !String(opsTeacher || '').trim();
+}
+/**
+ * Courses an ops user may pick when recording 课时 / 课情反馈:
+ * own (授课老师 name or 运营老师 email) + 教务老师未指定 + optional `keep` (edited record).
+ * Callers that may see every course (部门负责人) should return the full list instead.
+ */
+export function loggableOpsCourses<OC extends { id: string; code: string; teacher: string; opsTeacher: string }>(
+  me: { name?: string | null; email?: string | null },
+  courses: readonly OC[],
+  keep = '',
+): OC[] {
+  const own = opsOwnScope(me, courses, []).opsCourseIds;
+  return courses.filter(c => own.has(c.id) || isUnassignedOpsTeacher(c.opsTeacher) || c.id === keep);
+}
+/**
+ * Bootstrap list for non-superadmin ops: own + unassigned + courses referenced by visible 课时/反馈.
+ * Unassigned rows must stay so a newly created 课程编号 is selectable before 教务老师 is set.
+ */
+export function bootstrapVisibleOpsCourses<OC extends { id: string; code: string; teacher: string; opsTeacher: string }>(
+  me: { name?: string | null; email?: string | null },
+  courses: readonly OC[],
+  referencedIds: Iterable<string>,
+): OC[] {
+  const own = opsOwnScope(me, courses, []).opsCourseIds;
+  const referenced = new Set(referencedIds);
+  return courses.filter(c => own.has(c.id) || referenced.has(c.id) || isUnassignedOpsTeacher(c.opsTeacher));
+}
