@@ -125,7 +125,7 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
     g.shadowColor = 'rgba(90,60,140,0.18)';
     g.shadowBlur = 24;
     g.shadowOffsetY = 8;
-    g.drawImage(mascot, W - 56 - 40 - mw, 130, mw, mh);
+    g.drawImage(mascot, W - 56 - 40 - mw, 110, mw, mh);
     g.restore();
   }
 
@@ -140,15 +140,16 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
     titleSize -= 2;
     g.font = `700 ${titleSize}px "PingFang SC", "Microsoft YaHei", sans-serif`;
   }
-  const titleTop = 300;
+  // Lift title block + pack gaps so the poster feels denser after logo/tip/footer removal
+  const titleTop = 240;
   g.fillText(title, W / 2, titleTop);
 
   g.fillStyle = '#9a8db0';
   g.font = '600 22px Inter, "Helvetica Neue", sans-serif';
-  const enY = titleTop + 48;
+  const enY = titleTop + 42;
   drawSpacedCaps(g, titleEn, enY, 4);
 
-  // QR card — vertically rebalanced after removing tip + footer
+  // QR card — fixed tight stack under title (no floating center in leftover whitespace)
   const qrData = await QRCode.toDataURL(input.url, {
     width: 720,
     margin: 2,
@@ -159,13 +160,9 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
   if (!qrImg) throw new Error('qr_failed');
   const cardSize = 700;
   const cardX = (W - cardSize) / 2;
-  // Center the QR + scan block in the remaining space below the title
-  const scanBlockH = 90;
-  const gapAboveScan = 64;
-  const blockH = cardSize + gapAboveScan + scanBlockH;
-  const availTop = enY + 56;
-  const availBottom = H - 120;
-  const cardY = Math.round(availTop + (availBottom - availTop - blockH) / 2);
+  const gapTitleToQr = 48;
+  const gapAboveScan = 36;
+  const cardY = Math.round(enY + gapTitleToQr);
 
   g.save();
   g.shadowColor = 'rgba(76,52,128,0.18)';
@@ -191,7 +188,7 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
   g.fillText('微信扫码填写', W / 2, belowY);
   g.fillStyle = '#8a7f99';
   g.font = '700 20px Inter, "Helvetica Neue", sans-serif';
-  drawSpacedCaps(g, 'SCAN TO REGISTER', belowY + 40, 5);
+  drawSpacedCaps(g, 'SCAN TO REGISTER', belowY + 36, 5);
 
   return await new Promise<Blob>((resolve, reject) => {
     c.toBlob(b => (b ? resolve(b) : reject(new Error('poster_blob_failed'))), 'image/png');
