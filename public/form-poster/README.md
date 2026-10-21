@@ -2,7 +2,7 @@
 
 Drop PNGs here to customise the 「下载海报 PNG」 output without a code change:
 
-- `bg.png` — full-bleed 1080×1920 background (replaces the programmatic gradient)
+- `bg.png` — full-bleed background (matches poster canvas; currently ~1080×content height) (replaces the programmatic gradient)
 - `mascot.png` — top-right character (otherwise uses `/brand/bunny.png`)
 - `frame.png` — optional overlay drawn after the card
 

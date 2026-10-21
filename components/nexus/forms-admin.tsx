@@ -285,7 +285,7 @@ function ShareTab({ form, onSaved }: { form: AdminForm; onSaved: () => void }) {
     catch { toast.error('生成二维码失败，请重试'); }
     finally { setMaking(null); }
   };
-  /** Poster PNG (1080×1920) — embeds the LIVE form URL; prefers /form-poster/* assets when present. */
+  /** Poster PNG (1080×compact height) — embeds the LIVE form URL; prefers /form-poster/* assets when present. */
   const downloadPoster = async () => {
     setMaking('poster');
     try {
@@ -311,7 +311,7 @@ function ShareTab({ form, onSaved }: { form: AdminForm; onSaved: () => void }) {
         <button className="secondary compact" onClick={downloadQr} disabled={!!making}><Download size={15} />{making === 'qr' ? '生成中…' : '下载二维码 PNG'}</button>
         <button className="primary compact" onClick={downloadPoster} disabled={!!making}><ImageIcon size={15} />{making === 'poster' ? '生成中…' : '下载海报 PNG'}</button>
       </div>
-      <p className="fa-qr-tip">海报为竖版 1080×1920，适合微信群 / 朋友圈分享</p>
+      <p className="fa-qr-tip">海报为紧凑竖版（宽 1080），适合微信群 / 朋友圈分享</p>
     </div>
   </section>;
 }

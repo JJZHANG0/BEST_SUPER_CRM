@@ -172,11 +172,12 @@ assert.equal((pf.match(/publicFormApi\.submit\(/g) || []).length, 1); assert(/as
 for (const s of ['确认提交', 'CONFIRM & SUBMIT', '返回修改', 'BACK TO EDIT', '请核对信息', 'website: hp.current', 'elapsed: nowMs()']) assert(pf.includes(s), s);
 // Share tab: plain QR + poster downloads embed the LIVE url; poster prefers /form-poster/* when present.
 const poster = readFileSync('lib/nexus/form-poster.ts', 'utf8');
-assert(poster.includes("assetUrl('form-poster/bg.png')") && poster.includes('1080') && poster.includes('1920'));
+assert(poster.includes("assetUrl('form-poster/bg.png')") && poster.includes('1080') && poster.includes('const H = Math.ceil'));
 assert(poster.includes('微信扫码填写') && poster.includes('SCAN TO REGISTER'));
 assert(!poster.includes('填写后由老师统一分配队伍') && !poster.includes('B.E.S.T · 报名信息收集'), 'removed tip + footer');
 assert(!poster.includes("const mark = 'B.E.S.T'") && !poster.includes("'报名信息收集'"), 'removed top brand block');
-assert(poster.includes('const titleTop = 240') && poster.includes('gapAboveScan = 36') && poster.includes('gapTitleToQr = 48'), 'denser vertical spacing');
+assert(poster.includes('const titleTop = 240') && poster.includes('gapAboveScan = 88') && poster.includes('gapTitleToQr = 48'), 'compact canvas + lower scan labels');
+assert(poster.includes('bottomPad = 72') && !poster.includes('H = 1920') && !poster.includes(', H = 1920'), 'height from content, not fixed 1920');
 assert(!poster.includes('availBottom - availTop - blockH'), 'no leftover-space vertical centering');
 const share = readFileSync('components/nexus/forms-admin.tsx', 'utf8');
 assert(share.includes('下载海报 PNG') && share.includes('下载二维码 PNG') && share.includes('buildFormPoster') && share.includes('buildPlainQrPng'));

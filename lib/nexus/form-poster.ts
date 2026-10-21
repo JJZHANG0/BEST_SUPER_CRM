@@ -52,16 +52,30 @@ function drawSpacedCaps(
 }
 
 /**
- * Build a 1080×1920 vertical poster PNG blob.
+ * Build a compact vertical poster PNG blob (width 1080; height from content + padding).
  * Always regenerates the QR from `url` so the download never embeds a stale link.
  */
 export async function buildFormPoster(input: PosterInput): Promise<Blob> {
-  const W = 1080, H = 1920;
+  const W = 1080;
+  const title = (input.title || '报名学员竞赛信息收集表').trim();
+  const titleEn = (input.titleEn || 'STUDENT COMPETITION INFORMATION FORM').toUpperCase();
+
+  // Layout constants — stack tightly, then size canvas to content (no tall empty phone canvas).
+  const titleTop = 240;
+  const enY = titleTop + 42;
+  const gapTitleToQr = 48;
+  const cardSize = 700;
+  const cardY = Math.round(enY + gapTitleToQr);
+  // More air under the QR card than the previous tight 36px gap
+  const gapAboveScan = 88;
+  const belowY = cardY + cardSize + gapAboveScan;
+  const scanEnY = belowY + 36;
+  const bottomPad = 72; // modest padding below SCAN TO REGISTER → canvas edge
+  const H = Math.ceil(scanEnY + bottomPad);
+
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const g = c.getContext('2d')!;
-  const title = (input.title || '报名学员竞赛信息收集表').trim();
-  const titleEn = (input.titleEn || 'STUDENT COMPETITION INFORMATION FORM').toUpperCase();
 
   // Optional assets: /form-poster/{bg,frame,mascot}.png — fall back gracefully.
   // logo.png is intentionally unused (top brand block removed per design).
@@ -140,16 +154,13 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
     titleSize -= 2;
     g.font = `700 ${titleSize}px "PingFang SC", "Microsoft YaHei", sans-serif`;
   }
-  // Lift title block + pack gaps so the poster feels denser after logo/tip/footer removal
-  const titleTop = 240;
   g.fillText(title, W / 2, titleTop);
 
   g.fillStyle = '#9a8db0';
   g.font = '600 22px Inter, "Helvetica Neue", sans-serif';
-  const enY = titleTop + 42;
   drawSpacedCaps(g, titleEn, enY, 4);
 
-  // QR card — fixed tight stack under title (no floating center in leftover whitespace)
+  // QR card — fixed tight stack under title
   const qrData = await QRCode.toDataURL(input.url, {
     width: 720,
     margin: 2,
@@ -158,11 +169,7 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
   });
   const qrImg = await loadImg(qrData);
   if (!qrImg) throw new Error('qr_failed');
-  const cardSize = 700;
   const cardX = (W - cardSize) / 2;
-  const gapTitleToQr = 48;
-  const gapAboveScan = 36;
-  const cardY = Math.round(enY + gapTitleToQr);
 
   g.save();
   g.shadowColor = 'rgba(76,52,128,0.18)';
@@ -180,15 +187,14 @@ export async function buildFormPoster(input: PosterInput): Promise<Blob> {
   const pad = 48;
   g.drawImage(qrImg, cardX + pad, cardY + pad, cardSize - pad * 2, cardSize - pad * 2);
 
-  // Below QR — keep scan instructions only
-  const belowY = cardY + cardSize + gapAboveScan;
+  // Below QR — keep scan instructions only (extra gap vs prior layout)
   g.fillStyle = '#2b2236';
   g.font = '600 36px "PingFang SC", "Microsoft YaHei", sans-serif';
   g.textAlign = 'center';
   g.fillText('微信扫码填写', W / 2, belowY);
   g.fillStyle = '#8a7f99';
   g.font = '700 20px Inter, "Helvetica Neue", sans-serif';
-  drawSpacedCaps(g, 'SCAN TO REGISTER', belowY + 36, 5);
+  drawSpacedCaps(g, 'SCAN TO REGISTER', scanEnY, 5);
 
   return await new Promise<Blob>((resolve, reject) => {
     c.toBlob(b => (b ? resolve(b) : reject(new Error('poster_blob_failed'))), 'image/png');
