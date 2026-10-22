@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { useNexus } from '@/lib/nexus/store';
 import { api } from '@/lib/nexus/api';
 import type { Team } from '@/lib/nexus/data';
-import { TEAM_RECRUIT_STATUSES, normalizeRecruitStatus, teamEnrolled, teamRemaining, canEditTeam, inactiveEnrollment } from '@/lib/nexus/sales';
+import { TEAM_RECRUIT_STATUSES, normalizeRecruitStatus, teamEnrolled, teamRemaining, canEditTeam, inactiveEnrollment, findSimilarTeam, teamNameConflictMessage } from '@/lib/nexus/sales';
 import { Badge, Choice, FormField, Notice } from './ui';
 
 const TEAM_STATUSES = ['正常进行', '需要关注', '已暂停', '已结项'];
@@ -47,6 +47,8 @@ export function TeamEditor({ team, open, onOpenChange }: { team: Team; open: boo
   const save = () => {
     if (!editable) return;
     if (!f.name.trim()) return toast.error('请填写队伍名称');
+    const hit = findSimilarTeam(f.name.trim(), s.teams, team.id);
+    if (hit) return toast.error(teamNameConflictMessage(hit.name));
     const next: Team = { ...team, name: f.name.trim(), program: f.program, teacher: f.teacher.trim(), opsOwner: f.opsOwner.trim() || undefined, status: f.status, note: f.note,
       recruitStatus: f.recruitStatus, recruitCapacity: num(f.capacity), recruitEnrolled: num(f.recorded), posterUrl: poster || null };
     s.setTeams(a => a.map(x => x.id === team.id ? next : x));

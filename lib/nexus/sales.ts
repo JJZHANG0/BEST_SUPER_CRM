@@ -117,3 +117,84 @@ export function canEditTeam(user: { role?: string | null; name?: string | null; 
   if (!owner) return true;
   return owner === norm(user.name) || owner === norm(user.email) || (/[\u4e00-\u9fff]{2,}/.test(norm(user.name)) && owner.includes(norm(user.name)));
 }
+
+/** Strip TEAM wrappers, quotes and spaces so 「TEAM 深海」/「Team深海」/「TEAM「深海」」 share one core. */
+export function normalizeTeamNameCore(name: unknown): string {
+  let s = String(name ?? '').normalize('NFKC').trim().toLowerCase();
+  s = s.replace(/[「」『』“”‘’"'″′]/g, '').replace(/\s+/g, '');
+  // Peel leading TEAM / 队伍 / 队 labels only (do not strip trailing 队 — 一队/二队 must stay distinct).
+  for (let i = 0; i < 4; i++) {
+    const next = s.replace(/^team/, '').replace(/^队伍/, '').replace(/^队(?=\S)/, '');
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+/** Classic Levenshtein distance (small strings only — team names). */
+export function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+/**
+ * True when two team labels collide after normalisation, or are near-duplicates
+ * (same core, or very high similarity / small Levenshtein on short Chinese names).
+ */
+/** Cores to compare: raw normalised form, plus without a trailing 队 (「深海」≈「深海队」). */
+function teamNameCores(name: unknown): string[] {
+  const x = normalizeTeamNameCore(name);
+  if (!x) return [];
+  const out = [x];
+  if (x.endsWith('队') && x.length > 2) out.push(x.slice(0, -1));
+  else out.push(x + '队');
+  return [...new Set(out)];
+}
+
+export function teamNamesTooSimilar(a: unknown, b: unknown): boolean {
+  const as = teamNameCores(a), bs = teamNameCores(b);
+  if (!as.length || !bs.length) return false;
+  for (const x of as) for (const y of bs) if (x === y) return true;
+  // Levenshtein on the primary cores: strict on short names, high bar on longer ones
+  // so 「康莱德一队」≠「康莱德二队」 while 「深海」≈「深嗨」 (len 2 exact-only; len 3–4 allow 1 edit).
+  const x = as[0], y = bs[0];
+  const dist = levenshtein(x, y);
+  const maxLen = Math.max(x.length, y.length);
+  if (maxLen <= 2) return dist === 0;
+  if (maxLen <= 4) return dist <= 1;
+  return (1 - dist / maxLen) >= 0.85;
+}
+
+/** First existing team that conflicts with `name` (skips `excludeId` and 退费/退班 buckets). */
+export function findSimilarTeam<T extends { id: string; name: string }>(
+  name: unknown,
+  existing: readonly T[],
+  excludeId?: string | null,
+): T | null {
+  const core = normalizeTeamNameCore(name);
+  if (!core) return null;
+  for (const t of existing) {
+    if (excludeId && t.id === excludeId) continue;
+    if (isPseudoTeam(t.name)) continue;
+    if (teamNamesTooSimilar(name, t.name)) return t;
+  }
+  return null;
+}
+
+/** Chinese API/UI copy for a duplicate / near-duplicate team name. */
+export function teamNameConflictMessage(existingName: string): string {
+  return `已存在同名或高度相似的队伍：${existingName}`;
+}

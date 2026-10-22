@@ -19,7 +19,7 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled } from '../lib/nexus/sales';
+import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled, findSimilarTeam, teamNameConflictMessage } from '../lib/nexus/sales';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, bootstrapVisibleOpsCourses, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
@@ -1141,6 +1141,10 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       if (cur && !canManageSystem(user.role) && (cur.opsOwner || '')) d.opsOwner = cur.opsOwner;
       if (cur) d.archived = cur.archived ?? false; else d.archived = false;
       if (!cur && !canManageSystem(user.role) && !d.opsOwner) d.opsOwner = user.name;
+      // Exact + near-duplicate name check (normalize TEAM/队 wrappers, quotes, case, spaces).
+      const others = await db.select({ id: schema.teams.id, name: schema.teams.name }).from(schema.teams);
+      const hit = findSimilarTeam(String(d.name || ''), others, id);
+      if (hit) return c.json({ error: 'conflict', message: teamNameConflictMessage(hit.name) }, 409);
     }
     const t = tables[name] as typeof schema.teams; // every table has id, sortOrder, updatedAt
     const data = { ...parsed.data } as Record<string, unknown>;
@@ -1202,6 +1206,21 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
         // New feedback is listed first; everything else is appended.
         const [{ m }] = await db.select({ m: name === 'feedbacks' ? min(t.sortOrder) : max(t.sortOrder) }).from(t);
         [row] = await db.insert(t).values({ ...data, sortOrder: name === 'feedbacks' ? (m ?? 0) - 1 : (m ?? 0) + 1 } as never).returning();
+        // Create-team: write the 运营记录 here so the client does not race a teamLogs PUT
+        // against teams.id (FK 23503 → 「引用的记录不存在」) while the team insert is still in flight.
+        if (name === 'teams') {
+          const d = data as { status?: string; teacher?: string };
+          await db.insert(schema.teamLogs).values({
+            id: 'TL-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            team: id,
+            at: shanghaiStamp(now),
+            by: user.email || '',
+            byName: user.name || '系统',
+            action: '创建队伍',
+            detail: `状态 ${d.status || ''} · 指导老师 ${String(d.teacher || '').trim() || '未指定'}`,
+            sortOrder: 0,
+          });
+        }
       }
       return c.json({ record: toRecord(name, row as unknown as Record<string, unknown>) });
     } catch (err) {

@@ -44,6 +44,27 @@ assert.equal(F.validateAnswers(F.DEFAULT_FORM.questions, {}).errors.q02, '此项
 assert.equal(F.phoneIssue('+852 9123 4567'), null); assert.equal(F.phoneIssue('13800138000'), null); assert(F.phoneIssue('0571-1234'));
 assert.deepEqual(F.splitName('程雪晴 CHENG XUEQING'), { zh: '程雪晴', en: 'CHENG XUEQING' });
 
+
+// ---- ID document formats (居民身份证 / 港澳通行证; passport unconstrained) ----------------
+assert.equal(F.idDocumentIssue('居民身份证', '110105199003078510'), null);
+assert(F.idDocumentIssue('居民身份证', '11010519900307851X'), 'bad checksum rejected');
+assert(F.idDocumentIssue('居民身份证', '12345'), 'short ID rejected');
+assert(F.idDocumentIssue('居民身份证', '11010519900307851a'), 'bad last char rejected');
+assert.equal(F.idDocumentIssue('港澳居民来往内地通行证', 'H12345678'), null);
+assert.equal(F.idDocumentIssue('港澳居民来往内地通行证', 'M12345678A'), null);
+assert(F.idDocumentIssue('港澳居民来往内地通行证', '12345678'), 'missing H/M rejected');
+assert.equal(F.idDocumentIssue('护照', 'E12345678'), null, 'passport unconstrained');
+assert.equal(F.idDocumentIssue('护照', 'anything-goes-99'), null);
+v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q05: '居民身份证', q06: '110105199003078510' });
+assert.deepEqual(v.errors, {});
+v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q05: '居民身份证', q06: '12345678901234567X' });
+assert(v.errors.q06, 'validateAnswers surfaces ID errors on q06');
+v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q05: '港澳居民来往内地通行证', q06: 'H87654321' });
+assert.deepEqual(v.errors, {});
+v = F.validateAnswers(F.DEFAULT_FORM.questions, { ...good, q05: '港澳居民来往内地通行证', q06: '87654321' });
+assert(v.errors.q06);
+
+
 // ---- profile mapping + dedupe + plan ---------------------------------------------------------------------
 const snap = F.snapshotAnswers(F.DEFAULT_FORM.questions, F.validateAnswers(F.DEFAULT_FORM.questions, good).values);
 const mapped = F.profileFromAnswers(snap);
@@ -160,7 +181,7 @@ assert.equal(repo.studentMap.get(newId).sales, '王销售'); assert.equal(repo.s
 assert([...repo.enrollmentMap.values()].some(e => e.student === newId && e.team === 'T-CTB2'));
 // Bulk: two fresh submissions (different people) to one team + one salesperson.
 await call('PUT', '/api/admin/forms/F-1', { as: 3, body: { open: true } });
-const mk = async (name, phone, ip) => (await call('POST', '/api/public/forms/signup-test1', { body: { answers: { ...good, q02: name, q07: phone, q05: '港澳居民来往内地通行证' }, elapsed: 60000 }, ip })).json.id;
+const mk = async (name, phone, ip) => (await call('POST', '/api/public/forms/signup-test1', { body: { answers: { ...good, q02: name, q07: phone, q05: '港澳居民来往内地通行证', q06: 'H12345678' }, elapsed: 60000 }, ip })).json.id;
 const b1 = await mk('甲同学 JIA', '13700000001', '5.5.5.1'), b2 = await mk('乙同学 YI', '13700000002', '5.5.5.2');
 r = await call('POST', '/api/admin/form-submissions/assign', { as: 3, body: { ids: [b1, b2], team: 'T-CTB', salesUserId: 2 } });
 assert.equal(r.status, 200); assert.equal(r.json.results.length, 2);

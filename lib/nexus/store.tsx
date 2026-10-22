@@ -194,11 +194,32 @@ export function Provider({children}:{children:ReactNode}){
   for(const rec of changedRecords(list,map,idOf,OMIT[name])){
    const key=name+':'+idOf(rec),body=stableJson(rec,OMIT[name]);if(inflight.current.get(key)===body)continue;inflight.current.set(key,body);
    const payload=JSON.parse(body);
-   api.put<{id?:string;program?:string}>(name,idOf(rec),payload).then(({record})=>{
-    const canonical=stableJson(record,OMIT[name]);map.set(idOf(record),canonical);setPersisted(true);
-    // Adopt server-side fields (e.g. 状态更新人/时间, computed 津贴) without re-sending.
-    if(canonical!==body)(setters[name] as unknown as Dispatch<SetStateAction<{id?:string;program?:string}[]>>)(l=>l.map(x=>idOf(x)===idOf(record)?{...x,...record}:x));
-   }).catch(e=>{setPersisted(false);toast.error(e instanceof ApiError&&e.status===403?'没有权限执行此操作，修改未保存':e instanceof ApiError&&(e.status===400||e.status===409)&&e.message&&e.message!==e.code?e.message:'保存到服务器失败，请稍后重试');if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}).finally(()=>{if(inflight.current.get(key)===body)inflight.current.delete(key);if(!inflight.current.size)setTimeout(()=>{if(!inflight.current.size)void refresh()},50)});
+   const send=()=>{
+    api.put<{id?:string;program?:string}>(name,idOf(rec),payload).then(({record})=>{
+     const canonical=stableJson(record,OMIT[name]);map.set(idOf(record),canonical);setPersisted(true);
+     // Adopt server-side fields (e.g. 状态更新人/时间, computed 津贴) without re-sending.
+     if(canonical!==body)(setters[name] as unknown as Dispatch<SetStateAction<{id?:string;program?:string}[]>>)(l=>l.map(x=>idOf(x)===idOf(record)?{...x,...record}:x));
+    }).catch(e=>{setPersisted(false);toast.error(e instanceof ApiError&&e.status===403?'没有权限执行此操作，修改未保存':e instanceof ApiError&&(e.status===400||e.status===409)&&e.message&&e.message!==e.code?e.message:'保存到服务器失败，请稍后重试');if(e instanceof ApiError&&e.status===401){token.clear();setAuthenticated(false)}}).finally(()=>{if(inflight.current.get(key)===body)inflight.current.delete(key);if(!inflight.current.size)setTimeout(()=>{if(!inflight.current.size)void refresh()},50)});
+   };
+   // team_logs.team → teams.id: wait for the team PUT to land before writing the log,
+   // otherwise a parallel create races the FK and surfaces 「引用的记录不存在」.
+   if(name==='teamLogs'){
+    const teamId=String((rec as {team?:string}).team||'');
+    const teamKey='teams:'+teamId;
+    const ready=()=>!!synced.current.teams?.has(teamId);
+    if(!ready()){
+     let tries=0;
+     const wait=()=>{
+      if(inflight.current.get(key)!==body)return; // superseded
+      if(ready()){send();return}
+      if(inflight.current.has(teamKey)||tries<60){tries++;setTimeout(wait,50);return}
+      send(); // give up waiting; real FK errors still surface
+     };
+     wait();
+     continue;
+    }
+   }
+   send();
   }
  },[refresh,setters]);
  const collections:[Collection,{id?:string;program?:string}[]][]=[['programs',programs],['teams',teams],['teamLogs',teamLogs],['students',students],['enrollments',enrollments],['courses',courses],['feedbacks',feedbacks],['resources',files],['assignments',assignments],['articles',articles],['posts',posts],['classTypes',classTypes],['projects',projects],['teachers',teachers],['opsCourses',opsCourses],['lessons',lessons],['lessonFeedbacks',lessonFeedbacks],['courseSessions',courseSessions],['resourceFolders',resourceFolders]];

@@ -85,7 +85,7 @@ export const DEFAULT_FORM: Omit<FormDef, 'id' | 'slug' | 'version' | 'open'> = {
     q('q05', 'single', '身份证明文件类型', 'ID DOCUMENT TYPE', { required: true, mapTo: 'idType', options: [
       o('居民身份证', '居民身份证', 'Resident ID Card'), o('护照', '护照', 'Passport'), o('港澳居民来往内地通行证', '港澳居民来往内地通行证', 'MAINLAND TRAVEL PERMIT FOR HONG KONG AND MACAO RESIDENTS'),
       o('台湾居民来往大陆通行证', '台湾居民来往大陆通行证', 'Taiwan Compatriot Permit'), o('其他', '其他', 'Other', true)] }),
-    q('q06', 'text', '证件号码', 'ID NUMBER', { required: true, mapTo: 'idNumber', helpZh: '请仔细核对号码及有效期；按报名要求提供。', helpEn: 'Double-check the number and expiry date.' }),
+    q('q06', 'text', '证件号码', 'ID NUMBER', { required: true, mapTo: 'idNumber', helpZh: '居民身份证须为 18 位（末位可为 X）；港澳居民来往内地通行证为 H/M + 8 位数字。请仔细核对。', helpEn: 'PRC ID: 18 digits (last may be X). HK/Macao mainland travel permit: H/M + 8 digits. Double-check carefully.' }),
     q('q07', 'phone', '学生手机号', 'STUDENT MOBILE', { required: true, mapTo: 'phone', helpZh: '大陆手机号可直接填写；如非大陆号码请注明国家/地区代码。', helpEn: 'Mainland numbers as is; otherwise include the country/region code, e.g. +852.' }),
     q('q08', 'email', '常用邮箱', 'EMAIL', { required: true, mapTo: 'email', helpZh: '用于接收赛事重要信息、注册通知及证书。', helpEn: 'Used for key competition notices, registration and certificates.' }),
     q('q09', 'textarea', '居住地址（英文）', 'HOME ADDRESS (IN ENGLISH)', { required: true, mapTo: 'address', helpZh: '需包含街道、城市、省/州、国家及邮编。', helpEn: 'Street, city, province/state, country and postal code.' }),
@@ -126,6 +126,46 @@ const isEmpty = (v: AnswerValue | undefined) => v == null || (Array.isArray(v) ?
 /** Option value from a stored answer string ("其他：xxx" → 其他). */
 export const optionPart = (v: string) => v.split(OTHER_SEP)[0];
 
+/** PRC 居民身份证 checksum (GB 11643). Last char may be X. */
+export function prcIdChecksumOk(id: string): boolean {
+  const s = id.trim().toUpperCase();
+  if (!/^\d{17}[\dX]$/.test(s)) return false;
+  const w = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const map = '10X98765432';
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += Number(s[i]) * w[i];
+  return map[sum % 11] === s[17];
+}
+
+/**
+ * ID document number check for the signup form.
+ * - 居民身份证: 18 chars, checksum
+ * - 港澳居民来往内地通行证: H/M + 8 digits (+ optional check char)
+ * - 护照 / other: no strict format
+ */
+export function idDocumentIssue(idType: unknown, idNumber: unknown): string | null {
+  const type = String(idType ?? '').trim();
+  const raw = String(idNumber ?? '').trim();
+  if (!raw) return null;
+  const n = raw.replace(/\s+/g, '');
+  if (type === '居民身份证') {
+    if (!/^\d{17}[\dXx]$/.test(n)) {
+      return '请输入18位居民身份证号码（末位可为 X） / Enter an 18-digit PRC Resident ID (last digit may be X)';
+    }
+    if (!prcIdChecksumOk(n)) {
+      return '身份证校验位不正确，请核对 / ID checksum is invalid — please double-check';
+    }
+    return null;
+  }
+  if (type === '港澳居民来往内地通行证') {
+    if (!/^[HMhm]\d{8}[0-9A-Za-z]?$/.test(n)) {
+      return '请输入港澳居民来往内地通行证号码（H/M + 8 位数字） / Enter HK/Macao mainland travel permit (H/M + 8 digits)';
+    }
+    return null;
+  }
+  return null;
+}
+
 /**
  * Validate and normalise raw answers against the questions. Returns per-question errors (Chinese) and the cleaned values.
  * Unknown ids are dropped; strings trimmed and capped; options must exist.
@@ -159,6 +199,12 @@ export function validateAnswers(questions: FormQuestion[], raw: Record<string, u
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d + 'T00:00:00Z')) || d < '1900-01-01' || d > '2100-12-31') { errors[qu.id] = '请选择有效日期'; continue; }
     }
     if (qu.type === 'number' && !/^-?\d+(\.\d+)?$/.test(v as string)) { errors[qu.id] = '请输入数字'; continue; }
+    if (qu.mapTo === 'idNumber') {
+      const typeQ = questions.find(x => x.mapTo === 'idType');
+      const typeVal = typeQ ? String((values[typeQ.id] ?? (typeof raw[typeQ.id] === 'string' ? raw[typeQ.id] : '')) || '') : '';
+      const idErr = idDocumentIssue(typeVal, v as string);
+      if (idErr) { errors[qu.id] = idErr; continue; }
+    }
     values[qu.id] = v;
   }
   return { errors, values };
