@@ -197,6 +197,9 @@ assert.equal(O.canEditLockedLessonMonth({ name: 'x', email: 'zhangjiejia@nexus.l
 assert(readFileSync('drizzle/0015_lesson_month_locks.sql','utf8').includes('lesson_month_locks'));
 assert(readFileSync('db/schema.ts','utf8').includes('lessonMonthLocks'));
 assert(readFileSync('server/app.ts','utf8').includes('lesson-month-locks'));
+assert(readFileSync('server/app.ts','utf8').includes("app.delete('/lesson-month-locks/:month'") && readFileSync('server/app.ts','utf8').includes('只有张捷嘉可以驳回解锁'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('驳回解锁') && readFileSync('components/nexus/ops-pages.tsx','utf8').includes('unlockLessonMonth'));
+assert(readFileSync('lib/nexus/store.tsx','utf8').includes('unlockLessonMonth'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('跟课合计'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('我的课时费用'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('myTeachingLessonHours'));

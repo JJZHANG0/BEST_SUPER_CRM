@@ -74,6 +74,8 @@ export type Store={refresh:()=>Promise<void>;authenticated:boolean;setAuthentica
   lessonMonthLocks:string[];
   /** Hold-confirm a month: locks edits and notifies 张捷嘉 via 项目公告. */
   confirmLessonMonth:(month:string)=>Promise<{ok:true;already?:boolean}|{ok:false;error:string}>;
+  /** 张捷嘉驳回某月确认，解除锁定，运营老师可以继续改课时。 */
+  unlockLessonMonth:(month:string)=>Promise<{ok:true;already?:boolean}|{ok:false;error:string}>;
   /** Role + 部门负责人 flag, for the permission helpers in roles.ts. */
 
   viewer:Viewer;
@@ -416,6 +418,23 @@ export function Provider({children}:{children:ReactNode}){
   return { ok: true as const, already: false };
  };
 
+ const unlockLessonMonth = async (month: string) => {
+  const m = (month || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return { ok: false as const, error: '请选择有效月份' };
+  if (API_ENABLED) {
+    try {
+      const res = await api.unlockLessonMonth(m);
+      setLessonMonthLocks(l => l.filter(x => x !== m));
+      if (res.announcement) setAnnouncements(l => l.some(a => a.id === res.announcement!.id) ? l : [res.announcement!, ...l]);
+      setPersisted(true);
+      return { ok: true as const, already: res.already };
+    } catch (e) { return { ok: false as const, error: apiError(e, '解锁失败') }; }
+  }
+  if (!lessonMonthLocks.includes(m)) return { ok: true as const, already: true };
+  setLessonMonthLocks(l => { const next = l.filter(x => x !== m); write(STORAGE_KEYS.lessonMonthLocks, next); return next; });
+  return { ok: true as const, already: false };
+ };
+
   const removeRecord=async(name:OpsCollection,id:string)=>{
   const drop=()=>{
     (setters[name] as unknown as Dispatch<SetStateAction<{id:string}[]>>)(l=>l.filter(x=>x.id!==id));
@@ -492,7 +511,7 @@ export function Provider({children}:{children:ReactNode}){
  };
 
 const switchPortal=async(p:'ops'|'teacher'):Promise<string|null>=>{try{const res=await api.switchPortal(p);token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());go('dashboard');return null}catch(e){return e instanceof ApiError&&e.message?e.message:'切换失败，请稍后重试'}};
-return <Context.Provider value={{refresh,switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,resourceFolders,setResourceFolders,announcements,unreadAnnouncements,createAnnouncement,markAnnouncementRead,markAllAnnouncementsRead,loadAnnouncementReads,loadAnnouncementDirectory,lessonMonthLocks,confirmLessonMonth,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,updateWeatherCity,updatePixelPet,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+return <Context.Provider value={{refresh,switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,resourceFolders,setResourceFolders,announcements,unreadAnnouncements,createAnnouncement,markAnnouncementRead,markAllAnnouncementsRead,loadAnnouncementReads,loadAnnouncementDirectory,lessonMonthLocks,confirmLessonMonth,unlockLessonMonth,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,updateWeatherCity,updatePixelPet,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){
   const s=useNexus();

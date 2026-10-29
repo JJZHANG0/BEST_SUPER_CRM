@@ -814,6 +814,31 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     });
   });
 
+  /** 张捷嘉驳回月度确认，解除锁定。其他账号不能解开。 */
+  app.delete('/lesson-month-locks/:month', async c => {
+    const user = c.get('user');
+    if (!canEditLockedLessonMonth(user)) return c.json({ error: 'forbidden', message: '只有张捷嘉可以驳回解锁' }, 403);
+    const month = c.req.param('month').trim();
+    if (!isLessonMonth(month)) return c.json({ error: 'invalid', message: '请选择有效月份（YYYY-MM）' }, 400);
+    const [existing] = await db.select().from(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month)).limit(1);
+    if (!existing) return c.json({ month, already: true as const, announcement: null });
+    await db.delete(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month));
+
+    let announcement = null as ReturnType<typeof annView> | null;
+    const [confirmer] = await db.select().from(schema.users).where(eq(schema.users.email, existing.confirmedBy)).limit(1);
+    if (confirmer && confirmer.id !== user.id) {
+      const title = `${monthLabel(month)}课时确认已驳回`;
+      const content = `${user.name} 已驳回 ${monthLabel(month)} 的课时确认。该月课时记录已解锁，可以继续修改。`;
+      const id = 'ANN-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const [ann] = await db.insert(schema.announcements).values({
+        id, title, body: content, tag: '课时确认', program: null, audience: 'selected', recipientIds: [confirmer.id], authorId: user.id, authorName: user.name,
+      }).returning();
+      await db.insert(schema.announcementReads).values({ announcementId: id, userId: user.id }).onConflictDoNothing();
+      announcement = annView(ann, { read: true, readCount: 1, recipientCount: 1 });
+    }
+    return c.json({ month, already: false as const, announcement });
+  });
+
     /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');

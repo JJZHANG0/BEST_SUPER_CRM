@@ -1263,7 +1263,11 @@ html[data-workspace=public] body{background:#f4f2f7}
 .month-confirm-hold:hover{border-color:#b89ae6;background:#faf7ff}
 .month-confirm-hold.busy{opacity:.7;cursor:wait}
 .month-confirm-hold:disabled{opacity:.6;cursor:not-allowed}
-.month-lock-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;min-height:28px;padding:0 10px;border-radius:999px;background:#f1ecf8;color:#6d5b8c;font-size:.6875rem;font-weight:600;border:1px solid #e4daf2}
+.month-lock-actions{display:inline-flex;align-items:center;gap:6px;margin-left:8px}
+.month-lock-badge{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border-radius:999px;background:#f1ecf8;color:#6d5b8c;font-size:.6875rem;font-weight:600;border:1px solid #e4daf2}
+.month-unlock{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border-radius:999px;border:1px solid #e7c4b0;background:#fff7f2;color:#9a4d2a;font-size:.6875rem;font-weight:700;cursor:pointer}
+.month-unlock:hover{background:#fff1e8;border-color:#d7a88a}
+.month-unlock:disabled{opacity:.6;cursor:wait}
 .ops-table [data-slot=table-row].is-locked-month [data-slot=table-cell]:not(.row-actions){opacity:.78}
 .row-lock-hint{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;color:#9a8aae}
 .fee-stat{cursor:help}

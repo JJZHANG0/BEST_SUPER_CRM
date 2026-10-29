@@ -1,7 +1,7 @@
 'use client';
 /** 课时记录 (lesson hours + 教务津贴) and 课情反馈 (lesson feedback) for ops teachers. */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { Clock, Copy, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap, Lock, CheckCircle2 } from 'lucide-react';
+import { Clock, Copy, Download, Pencil, Trash2, MessageSquareText, BookOpenCheck, Link2, CalendarDays, Users, GraduationCap, Lock, LockOpen, CheckCircle2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TeacherPicker } from './teacher-picker';
 import { CourseCombobox } from './course-combobox';
@@ -241,9 +241,22 @@ function MonthConfirmHold({ month, locked }: { month: string; locked: boolean })
     raf.current = requestAnimationFrame(tick);
   };
   const onUp = () => { if (progress < 1) clear(); };
+  const canUnlock = canEditLockedLessonMonth(s.user);
+  const unlock = async () => {
+    if (busy || !month) return;
+    if (!window.confirm(`驳回${monthLabel(month)}的课时确认？解锁后运营老师可以继续修改。`)) return;
+    setBusy(true);
+    const r = await s.unlockLessonMonth(month);
+    setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    toast.success(r.already ? `${monthLabel(month)}本来就没有锁定` : `${monthLabel(month)}已驳回解锁，可以继续修改`);
+  };
   if (!month) return null;
   if (locked) {
-    return <span className="month-lock-badge" title="本月课时已确认，仅张捷嘉可修改"><Lock size={13} />已确认锁定</span>;
+    return <span className="month-lock-actions">
+      <span className="month-lock-badge" title="本月课时已确认，仅张捷嘉可修改"><Lock size={13} />已确认锁定</span>
+      {canUnlock && <button type="button" className="month-unlock" disabled={busy} onClick={() => void unlock()}><LockOpen size={13} />{busy ? '解锁中…' : '驳回解锁'}</button>}
+    </span>;
   }
   return <button type="button" className={'month-confirm-hold' + (busy ? ' busy' : '')} disabled={busy}
     aria-label="长按三秒确认本月授课老师课时"

@@ -119,6 +119,7 @@ export const api = {
   announcementDirectory: () => request<{ users: import('./announcements').AnnouncementDirectoryUser[] }>('/announcements/directory'),
   lessonMonthLocks: () => request<{ months: string[]; locks: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }[] }>('/lesson-month-locks'),
   confirmLessonMonth: (month: string) => request<{ lock: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }; announcement: import('./announcements').Announcement | null; already: boolean }>('/lesson-month-locks', { method: 'POST', body: JSON.stringify({ month }) }),
+  unlockLessonMonth: (month: string) => request<{ month: string; already: boolean; announcement: import('./announcements').Announcement | null }>(`/lesson-month-locks/${encodeURIComponent(month)}`, { method: 'DELETE' }),
 };
 
 
