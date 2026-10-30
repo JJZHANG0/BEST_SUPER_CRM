@@ -4,7 +4,7 @@
  * Generate migrations with `npm run db:generate` after editing this file.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, doublePrecision, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 const stamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -456,16 +456,21 @@ export const workHours = pgTable('work_hours', {
 ]);
 
 /**
- * 课时记录月度确认锁定: once ops confirms a YYYY-MM month, lesson create/edit/delete
- * for dates in that month is blocked for everyone except 张捷嘉.
+ * 课时记录月度确认锁定: an ops teacher confirms a YYYY-MM month for themselves only.
+ * Their own lesson create/edit/delete in that month is blocked; other teachers are not.
+ * 张捷嘉 can still edit, and can reject one teacher's lock.
  */
 export const lessonMonthLocks = pgTable('lesson_month_locks', {
-  month: text('month').primaryKey(),
+  month: text('month').notNull(),
+  /** 教务老师 whose records this lock covers (email). */
+  opsTeacher: text('ops_teacher').notNull(),
   confirmedBy: text('confirmed_by').notNull(),
   confirmedByName: text('confirmed_by_name').notNull(),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull().defaultNow(),
   ...stamps,
-});
+}, t => [
+  primaryKey({ columns: [t.month, t.opsTeacher] }),
+]);
 
 /**
  * 收集表单 (student self-registration). Superadmin-managed; the public page is /#/f/<slug>.

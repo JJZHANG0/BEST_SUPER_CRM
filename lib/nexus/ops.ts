@@ -339,10 +339,17 @@ export const RED_PACKET_YUAN_PER_DAY = 2.4;
 const MS_PER_DAY = 24 * 3600_000;
 /** YYYY-MM month key validation (same shape as KPI months). */
 export const isLessonMonth = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
-/** Whether `dateOrMonth` (YYYY-MM or YYYY-MM-DD) falls in a confirmed/locked month. */
-export function isLessonMonthLocked(locks: readonly string[], dateOrMonth: string) {
+/** One ops teacher's confirmation of their own lessons in a YYYY-MM month. */
+export type LessonMonthLock = { month: string; opsTeacher: string };
+/**
+ * Whether this 教务老师's lessons in `dateOrMonth` are confirmed.
+ * Another teacher's lock for the same month does not match.
+ */
+export function isLessonMonthLocked(locks: readonly LessonMonthLock[], dateOrMonth: string, opsTeacher: string) {
   const m = (dateOrMonth || '').length >= 7 ? (dateOrMonth || '').slice(0, 7) : '';
-  return !!m && locks.includes(m);
+  const who = (opsTeacher || '').trim().toLowerCase();
+  if (!m || !who) return false;
+  return locks.some(l => l.month === m && (l.opsTeacher || '').trim().toLowerCase() === who);
 }
 /** 张捷嘉 (部门负责人) may still edit locked months; everyone else is frozen. */
 export function canEditLockedLessonMonth(user: { name?: string | null; email?: string | null; leader?: boolean | null } | null | undefined) {

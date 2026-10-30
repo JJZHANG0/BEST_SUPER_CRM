@@ -745,22 +745,21 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     return c.json(await issue(row, body.portal, portals));
   });
 
-  async function lockedMonths() {
-    const rows = await db.select({ month: schema.lessonMonthLocks.month }).from(schema.lessonMonthLocks);
-    return rows.map(r => r.month);
+  async function lessonLocks() {
+    const rows = await db.select({ month: schema.lessonMonthLocks.month, opsTeacher: schema.lessonMonthLocks.opsTeacher }).from(schema.lessonMonthLocks);
+    return rows.map(r => ({ month: r.month, opsTeacher: r.opsTeacher.toLowerCase() }));
   }
 
-  // ---- 课时记录 · 月度确认锁定 ----
+  // ---- 课时记录 · 月度确认锁定（只锁确认人自己的课时） ----
   app.get('/lesson-month-locks', async c => {
     const user = c.get('user');
     if (!canWrite(user) && !isTeacher(user.role)) return forbidden(c);
     const rows = await db.select().from(schema.lessonMonthLocks).orderBy(desc(schema.lessonMonthLocks.month));
     return c.json({
       locks: rows.map(r => ({
-        month: r.month, confirmedBy: r.confirmedBy, confirmedByName: r.confirmedByName,
+        month: r.month, opsTeacher: r.opsTeacher.toLowerCase(), confirmedBy: r.confirmedBy, confirmedByName: r.confirmedByName,
         confirmedAt: r.confirmedAt.toISOString(),
       })),
-      months: rows.map(r => r.month),
     });
   });
 
@@ -770,35 +769,36 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     const body = await c.req.json().catch(() => null) as { month?: unknown } | null;
     const month = typeof body?.month === 'string' ? body.month.trim() : '';
     if (!isLessonMonth(month)) return c.json({ error: 'invalid', message: '请选择有效月份（YYYY-MM）' }, 400);
-    const [existing] = await db.select().from(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month)).limit(1);
+    const who = user.email.toLowerCase();
+    const [existing] = await db.select().from(schema.lessonMonthLocks).where(and(eq(schema.lessonMonthLocks.month, month), eq(schema.lessonMonthLocks.opsTeacher, who))).limit(1);
     if (existing) {
       return c.json({
-        lock: { month: existing.month, confirmedBy: existing.confirmedBy, confirmedByName: existing.confirmedByName, confirmedAt: existing.confirmedAt.toISOString() },
+        lock: { month: existing.month, opsTeacher: existing.opsTeacher.toLowerCase(), confirmedBy: existing.confirmedBy, confirmedByName: existing.confirmedByName, confirmedAt: existing.confirmedAt.toISOString() },
         already: true as const,
       });
     }
     const now = new Date();
     const [row] = await db.insert(schema.lessonMonthLocks).values({
-      month, confirmedBy: user.email.toLowerCase(), confirmedByName: user.name, confirmedAt: now,
+      month, opsTeacher: who, confirmedBy: who, confirmedByName: user.name, confirmedAt: now,
     }).returning();
 
-    // Auto-notify 张捷嘉 with a directed 项目公告.
+    // Tell 张捷嘉 this teacher locked only their own records.
     let announcement = null as ReturnType<typeof annView> | null;
     const [leader] = await db.select().from(schema.users).where(and(eq(schema.users.active, true), or(eq(schema.users.name, '张捷嘉'), eq(schema.users.leader, true)))).orderBy(asc(schema.users.id)).limit(1);
-    if (leader) {
+    if (leader && leader.id !== user.id) {
       const lessonRows = await db.select().from(schema.lessonRecords);
       const courseRows = await db.select({ id: schema.opsCourses.id, teacher: schema.opsCourses.teacher }).from(schema.opsCourses);
-      const inMonth = lessonRows.filter(r => String(r.date).slice(0, 7) === month);
-      const byTeacher = hoursByLessonTeacher(inMonth.map(r => ({
+      const mine = lessonRows.filter(r => String(r.date).slice(0, 7) === month && String(r.opsTeacher).toLowerCase() === who);
+      const byTeacher = hoursByLessonTeacher(mine.map(r => ({
         id: r.id, course: r.course, date: r.date, hours: r.hours, expectedCount: r.expectedCount, actualCount: r.actualCount,
         opsTeacher: r.opsTeacher, rate: r.rate, unit: r.unit as 'hour' | 'person_hour' | 'session', amount: r.amount, note: r.note, createdBy: r.createdBy, teacher: r.teacher ?? undefined,
       })), courseRows, month);
       const totalH = Math.round(byTeacher.reduce((n, x) => n + x.hours, 0) * 100) / 100;
       const lines = byTeacher.length
         ? byTeacher.map(t => `· ${t.teacher}：${t.hours} 小时（${t.count} 节）`).join('\n')
-        : '· （本月暂无授课老师课时）';
-      const title = `${monthLabel(month)}授课老师课时已确认`;
-      const content = `${user.name} 已确认 ${monthLabel(month)} 的授课老师课时无误，该月课时记录已锁定（仅张捷嘉可再修改）。\n\n合计 ${byTeacher.length} 位老师 · ${totalH} 小时：\n${lines}`;
+        : '· （本人本月暂无授课老师课时）';
+      const title = `${user.name}确认了自己的${monthLabel(month)}课时`;
+      const content = `${user.name} 已确认自己在 ${monthLabel(month)} 的课时记录，只锁定了自己的课时，其他运营老师不受影响。\n\n本人记录里的授课老师合计 ${byTeacher.length} 位 · ${totalH} 小时：\n${lines}`;
       const id = 'ANN-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
       const [ann] = await db.insert(schema.announcements).values({
         id, title, body: content, tag: '课时确认', program: null, audience: 'selected', recipientIds: [leader.id], authorId: user.id, authorName: user.name,
@@ -808,27 +808,29 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     }
 
     return c.json({
-      lock: { month: row.month, confirmedBy: row.confirmedBy, confirmedByName: row.confirmedByName, confirmedAt: row.confirmedAt.toISOString() },
+      lock: { month: row.month, opsTeacher: row.opsTeacher.toLowerCase(), confirmedBy: row.confirmedBy, confirmedByName: row.confirmedByName, confirmedAt: row.confirmedAt.toISOString() },
       announcement,
       already: false as const,
     });
   });
 
-  /** 张捷嘉驳回月度确认，解除锁定。其他账号不能解开。 */
+  /** 张捷嘉驳回某一位运营老师的月度确认。其他账号不能解开，也不能一次解开所有人。 */
   app.delete('/lesson-month-locks/:month', async c => {
     const user = c.get('user');
     if (!canEditLockedLessonMonth(user)) return c.json({ error: 'forbidden', message: '只有张捷嘉可以驳回解锁' }, 403);
     const month = c.req.param('month').trim();
+    const who = (c.req.query('opsTeacher') || '').trim().toLowerCase();
     if (!isLessonMonth(month)) return c.json({ error: 'invalid', message: '请选择有效月份（YYYY-MM）' }, 400);
-    const [existing] = await db.select().from(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month)).limit(1);
-    if (!existing) return c.json({ month, already: true as const, announcement: null });
-    await db.delete(schema.lessonMonthLocks).where(eq(schema.lessonMonthLocks.month, month));
+    if (!/^[^\s@]+@[^\s@]+$/.test(who)) return c.json({ error: 'invalid', message: '请指定要解锁的运营老师' }, 400);
+    const [existing] = await db.select().from(schema.lessonMonthLocks).where(and(eq(schema.lessonMonthLocks.month, month), eq(schema.lessonMonthLocks.opsTeacher, who))).limit(1);
+    if (!existing) return c.json({ month, opsTeacher: who, already: true as const, announcement: null });
+    await db.delete(schema.lessonMonthLocks).where(and(eq(schema.lessonMonthLocks.month, month), eq(schema.lessonMonthLocks.opsTeacher, who)));
 
     let announcement = null as ReturnType<typeof annView> | null;
-    const [confirmer] = await db.select().from(schema.users).where(eq(schema.users.email, existing.confirmedBy)).limit(1);
+    const [confirmer] = await db.select().from(schema.users).where(eq(schema.users.email, who)).limit(1);
     if (confirmer && confirmer.id !== user.id) {
       const title = `${monthLabel(month)}课时确认已驳回`;
-      const content = `${user.name} 已驳回 ${monthLabel(month)} 的课时确认。该月课时记录已解锁，可以继续修改。`;
+      const content = `${user.name} 已驳回你在 ${monthLabel(month)} 的课时确认。只解开了你自己的记录，可以继续修改。`;
       const id = 'ANN-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
       const [ann] = await db.insert(schema.announcements).values({
         id, title, body: content, tag: '课时确认', program: null, audience: 'selected', recipientIds: [confirmer.id], authorId: user.id, authorName: user.name,
@@ -836,15 +838,14 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       await db.insert(schema.announcementReads).values({ announcementId: id, userId: user.id }).onConflictDoNothing();
       announcement = annView(ann, { read: true, readCount: 1, recipientCount: 1 });
     }
-    return c.json({ month, already: false as const, announcement });
+    return c.json({ month, opsTeacher: who, already: false as const, announcement });
   });
 
     /** Everything the signed-in user may see, in the frontend's shapes. */
   app.get('/bootstrap', async c => {
     const user = c.get('user');
     const [programs, teams, teamLogs, students, enrollments, courses, feedbacks, resources, resourceFolders, assignments, classTypes, projects, opsCourses, lessons, lessonFeedbacks, teachers, courseSessions] = await Promise.all((['programs', 'teams', 'teamLogs', 'students', 'enrollments', 'courses', 'feedbacks', 'resources', 'resourceFolders', 'assignments', 'classTypes', 'projects', 'opsCourses', 'lessons', 'lessonFeedbacks', 'teachers', 'courseSessions'] as const).map(list));
-    const lessonMonthLockRows = await db.select({ month: schema.lessonMonthLocks.month }).from(schema.lessonMonthLocks);
-    const lessonMonthLocks = lessonMonthLockRows.map(r => r.month);
+    const lessonMonthLocks = await lessonLocks();
     const staffRows = await db.select().from(schema.users).orderBy(asc(schema.users.id));
     const staff = staffRows.filter(u => isOpsLike(u.role)).map(u => ({ email: u.email, name: u.name, role: u.role, active: u.active, leader: u.leader === true }));
     // 课时 / 课情反馈 / 津贴: the 部门负责人 sees every teacher's; everyone else (incl. other superadmins) only their own.
@@ -1143,11 +1144,13 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       data.opsTeacher = String(data.opsTeacher).toLowerCase();
       data.createdBy = current ? current.createdBy : user.email;
       if (name === 'lessons' && !canEditLockedLessonMonth(user)) {
+        const locks = await lessonLocks();
+        const owners = [String(data.opsTeacher || '').toLowerCase()];
+        if (current) owners.push(String(current.opsTeacher || '').toLowerCase());
         const dates = [String(data.date || '')];
         if (current) dates.push(String(current.date || ''));
-        const months = await lockedMonths();
-        for (const d of dates) {
-          if (isLessonMonthLocked(months, d)) return c.json({ error: 'forbidden', message: '该月课时已确认锁定，仅张捷嘉可修改' }, 403);
+        for (const who of owners) for (const d of dates) {
+          if (isLessonMonthLocked(locks, d, who)) return c.json({ error: 'forbidden', message: '你在该月的课时已确认锁定，仅张捷嘉可修改' }, 403);
         }
       }
       if (name === 'lessons') {
@@ -1213,8 +1216,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
     }
     if (!allowed) return c.json({ error: 'forbidden', message: '没有权限删除此记录' }, 403);
     if (name === 'lessons' && !canEditLockedLessonMonth(user)) {
-      const months = await lockedMonths();
-      if (isLessonMonthLocked(months, String(current.date || ''))) return c.json({ error: 'forbidden', message: '该月课时已确认锁定，仅张捷嘉可修改' }, 403);
+      const locks = await lessonLocks();
+      if (isLessonMonthLocked(locks, String(current.date || ''), String(current.opsTeacher || ''))) return c.json({ error: 'forbidden', message: '你在该月的课时已确认锁定，仅张捷嘉可修改' }, 403);
     }
     try {
       if (name === 'lessons') await db.update(schema.lessonFeedbacks).set({ lesson: null }).where(eq(schema.lessonFeedbacks.lesson, id));

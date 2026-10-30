@@ -13,7 +13,7 @@ import { isPetId, DEFAULT_PET, writeStoredPet, readStoredPet, type PetId } from 
 import { api, publicApi, visitorId, API_ENABLED, ApiError, NETWORK_ERROR_MESSAGE, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
-import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
+import { defaultClassTypes, type ClassType, type Project, type OpsCourse, type LessonRecord, type LessonFeedback, type Teacher, type LessonMonthLock, normalizeLesson, teacherRosterScope, opsOwnScope } from './ops';
 import { realProjects, realCourses, realTeachers, realLessons, realLessonFeedbacks } from './real-seed';
 import { rosterStudents, rosterTeams, rosterEnrollments } from './roster-seed';
 import { isOpsLike, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isLeader, passwordIssues, type Role, type Viewer, normalizeUsername, usernameIssue } from './roles';
@@ -70,12 +70,12 @@ export type Store={refresh:()=>Promise<void>;authenticated:boolean;setAuthentica
   markAllAnnouncementsRead:()=>Promise<boolean>;
   loadAnnouncementReads:(id:string)=>Promise<{rows:AnnouncementReadRow[];error?:string}>;
   loadAnnouncementDirectory:()=>Promise<AnnouncementDirectoryUser[]>;
-  /** YYYY-MM months whose 课时记录 are confirmed/locked (only 张捷嘉 may still edit). */
-  lessonMonthLocks:string[];
-  /** Hold-confirm a month: locks edits and notifies 张捷嘉 via 项目公告. */
+  /** Per-teacher month locks. One row freezes only that 教务老师's lessons. */
+  lessonMonthLocks:LessonMonthLock[];
+  /** Hold-confirm a month: locks the signed-in teacher's own lessons and notifies 张捷嘉. */
   confirmLessonMonth:(month:string)=>Promise<{ok:true;already?:boolean}|{ok:false;error:string}>;
-  /** 张捷嘉驳回某月确认，解除锁定，运营老师可以继续改课时。 */
-  unlockLessonMonth:(month:string)=>Promise<{ok:true;already?:boolean}|{ok:false;error:string}>;
+  /** 张捷嘉驳回某一位运营老师的月度确认。 */
+  unlockLessonMonth:(month:string,opsTeacher:string)=>Promise<{ok:true;already?:boolean}|{ok:false;error:string}>;
   /** Role + 部门负责人 flag, for the permission helpers in roles.ts. */
 
   viewer:Viewer;
@@ -116,7 +116,7 @@ const Context=createContext<Store>(null!);
  * API mode: data is loaded from /api/bootstrap after login and every record the UI changes is
  * written back with PUT /api/<collection>/<id>; the server is the source of truth.
  */
-export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v3',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',teamLogs:'nexus.demo.team-logs.v1',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1',announcements:'nexus.demo.announcements.v1',resourceFolders:'nexus.demo.resource-folders.v1',lessonMonthLocks:'nexus.demo.lesson-month-locks.v1'} as const;
+export const STORAGE_KEYS={articles:'nexus.demo.articles.v2',posts:'nexus.demo.posts.v1',postMetrics:'nexus.demo.post-metrics.v1',todos:'nexus.demo.todos.v2',users:'nexus.demo.users.v3',programs:'nexus.demo.programs.v2',teams:'nexus.demo.teams.v3',teamLogs:'nexus.demo.team-logs.v1',students:'nexus.demo.students.v3',enrollments:'nexus.demo.enrollments.v3',courses:'nexus.demo.courses.v2',feedbacks:'nexus.demo.feedbacks.v2',assignments:'nexus.demo.assignments.v2',classTypes:'nexus.demo.class-types.v2',projects:'nexus.demo.projects.v3',teachers:'nexus.demo.teachers.v3',opsCourses:'nexus.demo.ops-courses.v3',lessons:'nexus.demo.lessons.v3',lessonFeedbacks:'nexus.demo.lesson-feedbacks.v3',courseSessions:'nexus.demo.course-sessions.v1',kpi:'nexus.demo.kpi.v1',announcements:'nexus.demo.announcements.v1',resourceFolders:'nexus.demo.resource-folders.v1',lessonMonthLocks:'nexus.demo.lesson-month-locks.v2'} as const;
 /** v2 → v3 of 项目/课程/课时/课情反馈 loads the real data imported from the 运营部 spreadsheet (lib/nexus/real-seed.ts). */
 export const LEGACY_KEYS=['nexus.demo.users.v2','nexus.demo.articles.v1','nexus.demo.student-health.v1','nexus.demo.todos.v1','nexus.demo.projects.v2','nexus.demo.ops-courses.v2','nexus.demo.lessons.v2','nexus.demo.lesson-feedbacks.v2','nexus.demo.students.v2','nexus.demo.teams.v2','nexus.demo.enrollments.v2'];
 const PW_LATER_KEY='nexus.password-later.v1';
@@ -126,7 +126,7 @@ function write(key:string,value:unknown){try{localStorage.setItem(key,JSON.strin
 // users.v2 → v3: carry this browser's account overrides over, minus stale roles of demoted accounts (张雪航 → ops).
 if(typeof window!=='undefined'&&!API_ENABLED){try{const old=localStorage.getItem('nexus.demo.users.v2');if(old&&!localStorage.getItem(STORAGE_KEYS.users))localStorage.setItem(STORAGE_KEYS.users,JSON.stringify(migrateOverrides(JSON.parse(old))))}catch{/* storage unavailable */}}
 if(typeof window!=='undefined'&&!API_ENABLED){try{LEGACY_KEYS.forEach(k=>localStorage.removeItem(k))}catch{/* storage unavailable */}}
-type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];teamLogs?:seed.TeamLog[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];resourceFolders?:seed.ResourceFolder[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[];courseSessions?:CourseSession[];announcements?:Announcement[];lessonMonthLocks?:string[]};
+type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:seed.Team[];teamLogs?:seed.TeamLog[];students:seed.Student[];enrollments:seed.Enrollment[];courses:seed.Course[];feedbacks:seed.Feedback[];resources:FileRecord[];resourceFolders?:seed.ResourceFolder[];assignments:Assignment[];articles:ProgramArticle[];todos?:ApiTodo[];classTypes?:ClassType[];projects?:Project[];teachers?:Teacher[];opsCourses?:OpsCourse[];lessons?:LessonRecord[];lessonFeedbacks?:LessonFeedback[];staff?:StaffMember[];courseSessions?:CourseSession[];announcements?:Announcement[];lessonMonthLocks?:LessonMonthLock[]};
 /** Browser-only fields that never go to the API. */
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
@@ -162,7 +162,7 @@ export function Provider({children}:{children:ReactNode}){
  const [courseSessions,setCourseSessions]=useState<CourseSession[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.courseSessions,[]));
  const [resourceFolders,setResourceFolders]=useState<seed.ResourceFolder[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.resourceFolders,[]));
  const [announcements,setAnnouncements]=useState<Announcement[]>(()=>API_ENABLED?[]:readList(STORAGE_KEYS.announcements,[]));
- const [lessonMonthLocks,setLessonMonthLocks]=useState<string[]>(()=>API_ENABLED?[]:readList<string>(STORAGE_KEYS.lessonMonthLocks,[]));
+ const [lessonMonthLocks,setLessonMonthLocks]=useState<LessonMonthLock[]>(()=>API_ENABLED?[]:readList<LessonMonthLock>(STORAGE_KEYS.lessonMonthLocks,[]));
  const [passwordDeferred,setPasswordDeferred]=useState(false);
  const [overrides,setOverrides]=useState<Overrides>(()=>{const v=read(STORAGE_KEYS.users);return v&&typeof v==='object'&&!Array.isArray(v)?v as Overrides:{}});
  const [apiStaff,setApiStaff]=useState<StaffMember[]>([]);
@@ -385,18 +385,22 @@ export function Provider({children}:{children:ReactNode}){
 
  const confirmLessonMonth = async (month: string) => {
   const m = (month || '').trim();
+  const who = (user?.email || '').trim().toLowerCase();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return { ok: false as const, error: '请选择有效月份' };
+  if (!who) return { ok: false as const, error: '请先登录' };
+  const has = (l: LessonMonthLock[]) => l.some(x => x.month === m && x.opsTeacher.toLowerCase() === who);
   if (API_ENABLED) {
     try {
       const res = await api.confirmLessonMonth(m);
-      setLessonMonthLocks(l => l.includes(m) ? l : [...l, m].sort());
+      const opsTeacher = (res.lock.opsTeacher || who).toLowerCase();
+      setLessonMonthLocks(l => l.some(x => x.month === m && x.opsTeacher.toLowerCase() === opsTeacher) ? l : [...l, { month: m, opsTeacher }]);
       if (res.announcement) setAnnouncements(l => l.some(a => a.id === res.announcement!.id) ? l : [res.announcement!, ...l]);
       setPersisted(true);
       return { ok: true as const, already: res.already };
     } catch (e) { return { ok: false as const, error: apiError(e, '确认失败') }; }
   }
-  if (lessonMonthLocks.includes(m)) return { ok: true as const, already: true };
-  const next = [...lessonMonthLocks, m].sort();
+  if (has(lessonMonthLocks)) return { ok: true as const, already: true };
+  const next = [...lessonMonthLocks, { month: m, opsTeacher: who }];
   setLessonMonthLocks(next);
   write(STORAGE_KEYS.lessonMonthLocks, next);
   // Demo: directed note to 张捷嘉
@@ -408,8 +412,8 @@ export function Provider({children}:{children:ReactNode}){
   const [y, mo] = m.split('-');
   const label = `${y}年${Number(mo)}月`;
   const a: Announcement = {
-    id: 'ANN-' + Date.now().toString(36).toUpperCase(), title: `${label}授课老师课时已确认`,
-    body: `${user?.name || '运营'} 已确认 ${label} 的授课老师课时无误，该月课时记录已锁定（仅张捷嘉可再修改）。`,
+    id: 'ANN-' + Date.now().toString(36).toUpperCase(), title: `${user?.name || '运营'}确认了自己的${label}课时`,
+    body: `${user?.name || '运营'} 已确认自己在 ${label} 的课时记录，只锁定了自己的课时，其他运营老师不受影响。`,
     tag: '课时确认', program: null, audience: 'selected', recipientIds: leaderId < 0 ? [leaderId] : [],
     authorId: user?.id || 0, authorName: user?.name || '我', date: stamp, createdAt: now.toISOString(),
     read: true, readCount: 1, recipientCount: 1,
@@ -418,20 +422,23 @@ export function Provider({children}:{children:ReactNode}){
   return { ok: true as const, already: false };
  };
 
- const unlockLessonMonth = async (month: string) => {
+ const unlockLessonMonth = async (month: string, opsTeacher: string) => {
   const m = (month || '').trim();
+  const who = (opsTeacher || '').trim().toLowerCase();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return { ok: false as const, error: '请选择有效月份' };
+  if (!who) return { ok: false as const, error: '请指定要解锁的运营老师' };
+  const drop = (l: LessonMonthLock[]) => l.filter(x => !(x.month === m && x.opsTeacher.toLowerCase() === who));
   if (API_ENABLED) {
     try {
-      const res = await api.unlockLessonMonth(m);
-      setLessonMonthLocks(l => l.filter(x => x !== m));
+      const res = await api.unlockLessonMonth(m, who);
+      setLessonMonthLocks(drop);
       if (res.announcement) setAnnouncements(l => l.some(a => a.id === res.announcement!.id) ? l : [res.announcement!, ...l]);
       setPersisted(true);
       return { ok: true as const, already: res.already };
     } catch (e) { return { ok: false as const, error: apiError(e, '解锁失败') }; }
   }
-  if (!lessonMonthLocks.includes(m)) return { ok: true as const, already: true };
-  setLessonMonthLocks(l => { const next = l.filter(x => x !== m); write(STORAGE_KEYS.lessonMonthLocks, next); return next; });
+  if (!lessonMonthLocks.some(x => x.month === m && x.opsTeacher.toLowerCase() === who)) return { ok: true as const, already: true };
+  setLessonMonthLocks(l => { const next = drop(l); write(STORAGE_KEYS.lessonMonthLocks, next); return next; });
   return { ok: true as const, already: false };
  };
 

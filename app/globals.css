@@ -1268,6 +1268,7 @@ html[data-workspace=public] body{background:#f4f2f7}
 .month-unlock{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border-radius:999px;border:1px solid #e7c4b0;background:#fff7f2;color:#9a4d2a;font-size:.6875rem;font-weight:700;cursor:pointer}
 .month-unlock:hover{background:#fff1e8;border-color:#d7a88a}
 .month-unlock:disabled{opacity:.6;cursor:wait}
+.month-lock-scope{margin-left:8px;font-size:.75rem;font-weight:500;color:#8a7aa0}
 .ops-table [data-slot=table-row].is-locked-month [data-slot=table-cell]:not(.row-actions){opacity:.78}
 .row-lock-hint{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;color:#9a8aae}
 .fee-stat{cursor:help}

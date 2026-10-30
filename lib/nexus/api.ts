@@ -117,9 +117,9 @@ export const api = {
   markAllAnnouncementsRead: () => request<{ ok: true; count: number }>('/announcements/read-all', { method: 'POST' }),
   announcementReads: (id: string) => request<{ announcement: { id: string; title: string; audience: string; audienceLabel: string }; rows: import('./announcements').AnnouncementReadRow[] }>(`/announcements/${encodeURIComponent(id)}/reads`),
   announcementDirectory: () => request<{ users: import('./announcements').AnnouncementDirectoryUser[] }>('/announcements/directory'),
-  lessonMonthLocks: () => request<{ months: string[]; locks: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }[] }>('/lesson-month-locks'),
-  confirmLessonMonth: (month: string) => request<{ lock: { month: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }; announcement: import('./announcements').Announcement | null; already: boolean }>('/lesson-month-locks', { method: 'POST', body: JSON.stringify({ month }) }),
-  unlockLessonMonth: (month: string) => request<{ month: string; already: boolean; announcement: import('./announcements').Announcement | null }>(`/lesson-month-locks/${encodeURIComponent(month)}`, { method: 'DELETE' }),
+  lessonMonthLocks: () => request<{ locks: { month: string; opsTeacher: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }[] }>('/lesson-month-locks'),
+  confirmLessonMonth: (month: string) => request<{ lock: { month: string; opsTeacher: string; confirmedBy: string; confirmedByName: string; confirmedAt: string }; announcement: import('./announcements').Announcement | null; already: boolean }>('/lesson-month-locks', { method: 'POST', body: JSON.stringify({ month }) }),
+  unlockLessonMonth: (month: string, opsTeacher: string) => request<{ month: string; opsTeacher: string; already: boolean; announcement: import('./announcements').Announcement | null }>(`/lesson-month-locks/${encodeURIComponent(month)}?opsTeacher=${encodeURIComponent(opsTeacher)}`, { method: 'DELETE' }),
 };
 
 

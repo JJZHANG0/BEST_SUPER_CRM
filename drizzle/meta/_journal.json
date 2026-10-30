@@ -183,6 +183,13 @@
       "when": 1791850000000,
       "tag": "0025_remove_form_checklist",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791860000000,
+      "tag": "0026_lesson_lock_per_teacher",
+      "breakpoints": true
     }
   ]
 }

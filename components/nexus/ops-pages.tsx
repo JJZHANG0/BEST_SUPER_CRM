@@ -123,8 +123,9 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     if (!(h > 0 && h <= 24)) return toast.error('课时需在 0–24 小时之间');
     if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 1000)) return toast.error('实到人数需为 0–1000 的整数');
     if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写实到人数');
-    if (!canEditLockedLessonMonth(s.user) && (isLessonMonthLocked(s.lessonMonthLocks, date) || (record && isLessonMonthLocked(s.lessonMonthLocks, record.date)))) {
-      return toast.error('该月课时已确认锁定，仅张捷嘉可修改');
+    const ownerEmail = (record?.opsTeacher || me).toLowerCase();
+    if (!canEditLockedLessonMonth(s.user) && (isLessonMonthLocked(s.lessonMonthLocks, date, ownerEmail) || (record && isLessonMonthLocked(s.lessonMonthLocks, record.date, record.opsTeacher)))) {
+      return toast.error('你在该月的课时已确认锁定，仅张捷嘉可修改');
     }
     const owner = all ? (ops || me) : me;
     const rec: LessonRecord = { id: record?.id || newRecordId('L'), course: course.id, date, hours: h, expectedCount: expected ?? null, actualCount: n, opsTeacher: owner.toLowerCase(), rate, unit, amount, note: note.trim(), createdBy: record?.createdBy || me, teacher: teacher.trim(), replayUrl: replay.trim() };
@@ -199,8 +200,8 @@ function PersonTabs({ value, onChange, counts }: { value: string; onChange: (v: 
   </div>;
 }
 
-/** Hold 3s to confirm the month's 授课老师课时 (locks edits; notifies 张捷嘉). */
-function MonthConfirmHold({ month, locked }: { month: string; locked: boolean }) {
+/** Hold 3s to confirm the signed-in teacher's own lessons for the month. Does not lock anyone else. */
+function MonthConfirmHold({ month, locked, opsTeacher, own }: { month: string; locked: boolean; opsTeacher: string; own: boolean }) {
   const s = useNexus();
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -222,7 +223,7 @@ function MonthConfirmHold({ month, locked }: { month: string; locked: boolean })
     const r = await s.confirmLessonMonth(month);
     setBusy(false);
     if (!r.ok) return toast.error(r.error);
-    toast.success(r.already ? `${monthLabel(month)}已确认锁定` : `${monthLabel(month)}课时已确认，已通知张捷嘉并锁定编辑`);
+    toast.success(r.already ? `${monthLabel(month)}你的课时已经锁定` : `${monthLabel(month)}已锁定你自己的课时，其他老师不受影响`);
   }, [busy, clear, month, s]);
   const tick = useCallback((now: number) => {
     if (!holding.current) return;
@@ -243,24 +244,26 @@ function MonthConfirmHold({ month, locked }: { month: string; locked: boolean })
   const onUp = () => { if (progress < 1) clear(); };
   const canUnlock = canEditLockedLessonMonth(s.user);
   const unlock = async () => {
-    if (busy || !month) return;
-    if (!window.confirm(`驳回${monthLabel(month)}的课时确认？解锁后运营老师可以继续修改。`)) return;
+    if (busy || !month || !opsTeacher) return;
+    const whoName = s.staffName(opsTeacher);
+    if (!window.confirm(`驳回${whoName}在${monthLabel(month)}的课时确认？只解开 TA 自己的记录。`)) return;
     setBusy(true);
-    const r = await s.unlockLessonMonth(month);
+    const r = await s.unlockLessonMonth(month, opsTeacher);
     setBusy(false);
     if (!r.ok) return toast.error(r.error);
-    toast.success(r.already ? `${monthLabel(month)}本来就没有锁定` : `${monthLabel(month)}已驳回解锁，可以继续修改`);
+    toast.success(r.already ? `${whoName}在${monthLabel(month)}本来就没有锁定` : `已驳回${whoName}在${monthLabel(month)}的锁定`);
   };
-  if (!month) return null;
+  if (!month || !opsTeacher) return null;
   if (locked) {
     return <span className="month-lock-actions">
-      <span className="month-lock-badge" title="本月课时已确认，仅张捷嘉可修改"><Lock size={13} />已确认锁定</span>
+      <span className="month-lock-badge" title={own ? '你在本月的课时已锁定，仅张捷嘉可驳回' : '这位老师本月的课时已锁定'}><Lock size={13} />已确认锁定</span>
       {canUnlock && <button type="button" className="month-unlock" disabled={busy} onClick={() => void unlock()}><LockOpen size={13} />{busy ? '解锁中…' : '驳回解锁'}</button>}
     </span>;
   }
+  if (!own) return <span className="month-lock-scope">尚未锁定</span>;
   return <button type="button" className={'month-confirm-hold' + (busy ? ' busy' : '')} disabled={busy}
     aria-label="长按三秒确认本月授课老师课时"
-    title="长按 3 秒确认本月授课老师课时无误（确认后锁定，并通知张捷嘉）"
+    title="长按 3 秒确认。只锁定你自己的课时，其他运营老师不受影响"
     onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={clear} onPointerLeave={onUp}
     onContextMenu={e => e.preventDefault()}>
     <i style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
@@ -270,15 +273,18 @@ function MonthConfirmHold({ month, locked }: { month: string; locked: boolean })
 }
 
 /** 授课老师 hours for the selected month (within the records this viewer may see). */
-function TeacherHours({ rows, month }: { rows: LessonRecord[]; month: string }) {
+function TeacherHours({ rows, month, lockSubject, own }: { rows: LessonRecord[]; month: string; lockSubject: string; own: boolean }) {
   const s = useNexus();
   const list = hoursByLessonTeacher(rows, s.opsCourses, month);
-  const locked = !!month && isLessonMonthLocked(s.lessonMonthLocks, month);
+  const locked = !!month && !!lockSubject && isLessonMonthLocked(s.lessonMonthLocks, month, lockSubject);
+  const lockControl = !!month && !!lockSubject
+    ? <MonthConfirmHold month={month} locked={locked} opsTeacher={lockSubject} own={own} />
+    : (month && s.lessonMonthLocks.some(l => l.month === month) ? <span className="month-lock-scope">按老师分别锁定。要驳回，先点开那位老师。</span> : null);
   if (!list.length && !month) return null;
   if (!list.length) {
     return month ? <div className="teacher-hours" aria-label="授课老师课时">
       <div className="teacher-hours-head"><GraduationCap size={15} /><strong>{monthLabel(month)} · 授课老师课时</strong>
-        <MonthConfirmHold month={month} locked={locked} /></div>
+        {lockControl}</div>
       <p className="teacher-hours-empty">本月还没有授课老师课时可确认。</p>
     </div> : null;
   }
@@ -286,7 +292,7 @@ function TeacherHours({ rows, month }: { rows: LessonRecord[]; month: string }) 
   return <div className="teacher-hours" aria-label="授课老师课时">
     <div className="teacher-hours-head"><GraduationCap size={15} /><strong>{month ? monthLabel(month) : '全部月份'} · 授课老师课时</strong>
       <small>{list.length} 位老师 · 共 {Math.round(list.reduce((n, x) => n + x.hours, 0) * 100) / 100} 小时</small>
-      {!!month && <MonthConfirmHold month={month} locked={locked} />}
+      {lockControl}
     </div>
     <div className="teacher-hours-list">{list.map(t => <div key={t.teacher} className="teacher-hour-chip" title={`${t.teacher}：${t.count} 节 · ${t.hours} 小时`}>
       <span className="th-name">{t.teacher}</span><b>{t.hours}<small> 小时</small></b><small className="th-count">{t.count} 节</small>
@@ -315,6 +321,9 @@ export function LessonsPage() {
   );
   const myFee = myLessonTeachingFee(myHours);
   const canBypassLock = canEditLockedLessonMonth(s.user);
+  const meEmail = me.toLowerCase();
+  const lockSubject = all && teacher !== ALL ? teacher.toLowerCase() : (all ? '' : meEmail);
+  const lockOwn = !!lockSubject && lockSubject === meEmail;
   const exportCsv = () => {
     const head = ['日期', '项目编号', '课程编号', '课程名称', '班级类型', '课时(小时)', '应到人数', '实到人数', '津贴标准', '津贴(元)', '授课老师', '教务老师', '备注', '课程回放链接'];
     download(`课时记录-${person ? person + '-' : ''}${month || '全部'}.csv`, toCsv([head, ...rows.map(r => { const c = course(r.course); return [r.date, s.projects.find(p => p.id === c?.project)?.code || '', c?.code || '', c?.name || '', typeName(c), r.hours, r.expectedCount ?? '', r.actualCount ?? '', `${r.rate}${unitLabel(r.unit)}`, r.amount, lessonTeacher(r, s.opsCourses), s.staffName(r.opsTeacher), r.note, r.replayUrl || '']; })]));
@@ -331,12 +340,12 @@ export function LessonsPage() {
     else toast.error('浏览器限制了复制，请手动选择文字');
   };
   const remove = async (r: LessonRecord) => {
-    if (!canBypassLock && isLessonMonthLocked(s.lessonMonthLocks, r.date)) return toast.error('该月课时已确认锁定，仅张捷嘉可修改');
+    if (!canBypassLock && isLessonMonthLocked(s.lessonMonthLocks, r.date, r.opsTeacher)) return toast.error('你在该月的课时已确认锁定，仅张捷嘉可修改');
     if (!confirmDelete('课时记录')) return;
     if (await s.removeRecord('lessons', r.id)) { s.setLessonFeedbacks(l => l.map(f => f.lesson === r.id ? { ...f, lesson: null } : f)); toast.success('已删除'); }
   };
   const hasFb = (r: LessonRecord) => s.lessonFeedbacks.some(f => f.lesson === r.id);
-  const rowEditable = (r: LessonRecord) => canBypassLock || !isLessonMonthLocked(s.lessonMonthLocks, r.date);
+  const rowEditable = (r: LessonRecord) => canBypassLock || !isLessonMonthLocked(s.lessonMonthLocks, r.date, r.opsTeacher);
   return <>
     <PageTitle title="课时记录" en="LESSON HOURS" description={all ? '部门负责人：按老师分开查看每个人的课时与当月教务津贴，可按月份、项目筛选。' : '记录你负责课程的课时与学情反馈，津贴按班级类型自动计算；只有你和部门负责人能看到你的记录。'} action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />
     {all && <PersonTabs value={teacher} onChange={setTeacher} counts={counts} />}
@@ -358,7 +367,7 @@ export function LessonsPage() {
     <section className="glass panel">
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
-        <TeacherHours rows={rows} month={month} />
+        <TeacherHours rows={rows} month={month} lockSubject={lockSubject} own={lockOwn} />
         {all && teacher === ALL && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <button type="button" key={t.opsTeacher} onClick={() => setTeacher(s.staff.find(u => u.email.toLowerCase() === t.opsTeacher.toLowerCase())?.email || t.opsTeacher)} title={'只看 ' + s.staffName(t.opsTeacher)}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></button>)}</div>}
         <div className="results-meta">{rows.length} 条记录<span>{all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
         {rows.length ? <>
@@ -375,11 +384,11 @@ export function LessonsPage() {
             <TableCell className="nowrap">{s.staffName(r.opsTeacher)}</TableCell>
             <TableCell className="row-actions">
               <button type="button" className="icon-button" aria-label="复制课程反馈" title="复制课程反馈" onClick={e => copyRow(r, e.currentTarget)}><Copy size={15} /></button>
-              <button className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} title={hasFb(r) ? '已有学情反馈' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('该月课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={15} /></button>
+              <button className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} title={hasFb(r) ? '已有学情反馈' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('你在该月的课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={15} /></button>
               {editable
                 ? <><button className="icon-button" aria-label="编辑" title="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={15} /></button>
                   <button className="icon-button" aria-label="删除" title="删除" onClick={() => remove(r)}><Trash2 size={15} /></button></>
-                : <span className="row-lock-hint" title="该月已确认锁定，仅张捷嘉可修改"><Lock size={14} /></span>}
+                : <span className="row-lock-hint" title="你在该月的课时已锁定，仅张捷嘉可驳回"><Lock size={14} /></span>}
             </TableCell>
           </TableRow>; })}</TableBody></Table></div>
           <ul className="ops-mobile-cards">{rows.map(r => { const c = course(r.course); const editable = rowEditable(r); return <li key={r.id} className={'ops-mobile-card' + (editable ? '' : ' is-locked-month')}>
@@ -389,11 +398,11 @@ export function LessonsPage() {
             <div className="ops-mobile-meta"><span>{r.hours} 课时</span><span>{headcount(r)}</span><span>{lessonTeacher(r, s.opsCourses)}</span></div>
             <div className="ops-mobile-actions">
               <button type="button" className="icon-button" aria-label="复制课程反馈" onClick={e => copyRow(r, e.currentTarget)}><Copy size={18} /></button>
-              <button type="button" className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('该月课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={18} /></button>
+              <button type="button" className={'icon-button' + (hasFb(r) ? ' has-feedback' : '')} aria-label={hasFb(r) ? '已有学情反馈，点击编辑' : '写课情反馈'} onClick={() => hasFb(r) ? (editable ? (setEditing(r), setOpen(true)) : toast.error('你在该月的课时已确认锁定，仅张捷嘉可修改')) : s.go('lesson-feedback?new&lesson=' + r.id)}><MessageSquareText size={18} /></button>
               {editable
                 ? <><button type="button" className="icon-button" aria-label="编辑" onClick={() => { setEditing(r); setOpen(true); }}><Pencil size={18} /></button>
                   <button type="button" className="icon-button" aria-label="删除" onClick={() => remove(r)}><Trash2 size={18} /></button></>
-                : <span className="row-lock-hint" title="该月已确认锁定，仅张捷嘉可修改"><Lock size={16} /></span>}
+                : <span className="row-lock-hint" title="你在该月的课时已锁定，仅张捷嘉可驳回"><Lock size={16} /></span>}
             </div>
           </li>; })}</ul>
         </>
