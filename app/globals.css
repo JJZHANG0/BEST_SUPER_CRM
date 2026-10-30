@@ -764,8 +764,17 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .todo-check:hover{background:#f3eef9;color:#7a5aad}
 .todo-row.done .todo-check{color:#43896d;background:#e7f4ee}
 .todo-main{flex:1;min-width:0;text-align:left}
-.todo-main strong{display:block;font-size:.8125rem;font-weight:550;color:#3f354c;line-height:1.5}
-.todo-row.done .todo-main strong{color:#8a8296;text-decoration:line-through;text-decoration-color:#cfc6db}
+.todo-main strong,.todo-title{display:block;font-size:.8125rem;font-weight:550;color:#3f354c;line-height:1.5}
+.todo-title{width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer}
+.todo-title:hover{color:#1f6fd9}
+.todo-row.editing{align-items:flex-start}
+.todo-edit{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;padding:2px 0}
+.todo-edit>input,.todo-edit-row input{border:1px solid #e3d9ee;border-radius:8px;padding:8px 10px;background:#fffd;color:#594368;font-size:.8125rem;min-height:36px;outline:none}
+.todo-edit>input:focus,.todo-edit-row input:focus{border-color:#ae8dcf;box-shadow:0 0 0 3px #d6c5ed44}
+.todo-edit-row{display:flex;gap:8px;align-items:center}
+.todo-edit-row>input{flex:1;min-width:0}
+.todo-edit-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.todo-row.done .todo-main strong,.todo-row.done .todo-title{color:#8a8296;text-decoration:line-through;text-decoration-color:#cfc6db}
 .todo-main p{font-size:.6875rem;color:#95809f;margin-top:5px;line-height:1.6}
 .todo-due{display:inline-flex;align-items:center;gap:4px;color:#7d6e92}
 .todo-actions{display:flex;align-items:center;gap:2px;opacity:.55}
@@ -779,7 +788,7 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 }
 @media(max-width:767px){
   .todo-add-extra{grid-template-columns:1fr}
-  .todo-main strong{font-size:.875rem}
+  .todo-main strong,.todo-title{font-size:.875rem}
   .todo-main p{font-size:.75rem}
   .todo-actions{opacity:1}
 }

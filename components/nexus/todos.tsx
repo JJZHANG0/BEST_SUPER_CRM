@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2, Crown, Sparkles } from 'lucide-react';
+import { Check, Circle, Plus, Trash2, CalendarDays, RotateCcw, ListTodo, Inbox, Share2, Copy, Target, Send, UserRoundCheck, Undo2, Crown, Sparkles, Pencil } from 'lucide-react';
 import { HuskyLabel } from './brand';
 import { toast } from 'sonner';
 import { useNexus } from '@/lib/nexus/store';
@@ -61,9 +61,43 @@ function AddTodoForm({ compact, onAdded }: { compact?: boolean; onAdded?: () => 
   );
 }
 
+function TodoEditForm({ todo, onClose }: { todo: Todo; onClose: () => void }) {
+  const s = useNexus();
+  const [title, setTitle] = useState(todo.title);
+  const [note, setNote] = useState(todo.note || '');
+  const [dueAt, setDueAt] = useState(todo.dueAt ? todo.dueAt.slice(0, 10) : '');
+  const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = title.trim();
+    if (!t) { toast.error('请填写待办标题'); return; }
+    setBusy(true);
+    const ok = await s.updateTodo(todo.id, { title: t, note: note.trim() || null, dueAt: dueAt || null });
+    setBusy(false);
+    if (!ok) return;
+    s.log('修改待办：' + t);
+    toast.success('待办已更新');
+    onClose();
+  };
+  return (
+    <form className="todo-edit" onSubmit={save}>
+      <input aria-label="待办标题" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} autoFocus disabled={busy} />
+      <div className="todo-edit-row">
+        <label className="todo-ddl"><span>期望DDL</span><input type="date" aria-label="期望DDL" value={dueAt} onChange={e => setDueAt(e.target.value)} disabled={busy} /></label>
+        <input aria-label="备注" placeholder="备注（可选）" maxLength={2000} value={note} onChange={e => setNote(e.target.value)} disabled={busy} />
+      </div>
+      <div className="todo-edit-actions">
+        <button type="button" className="text-button" onClick={onClose} disabled={busy}>取消</button>
+        <button type="submit" className="primary compact" disabled={busy || !title.trim()}>保存</button>
+      </div>
+    </form>
+  );
+}
+
 function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
   const s = useNexus();
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const toggle = async () => {
     setBusy(true);
     const ok = mode === 'open' ? await s.completeTodo(todo.id) : await s.restoreTodo(todo.id);
@@ -81,16 +115,20 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
     toast.success('待办已删除');
   };
   const assignedToMe = !!todo.assignedByName && String(todo.assignedBy ?? '').toLowerCase() !== s.meKey.toLowerCase();
+  const canEdit = !assignedToMe;
   const upward = assignedToMe && s.leader;
   const tag = upward ? UPWARD_TAG : CAPITALIST_TAG;
   const verb = upward ? '布置' : '指派';
   return (
-    <div className={'todo-row ' + mode + (assignedToMe ? ' assigned' : '')}>
+    <div className={'todo-row ' + mode + (assignedToMe ? ' assigned' : '') + (editing ? ' editing' : '')}>
+      {editing ? <TodoEditForm todo={todo} onClose={() => setEditing(false)} /> : <>
       <button type="button" className="todo-check" aria-label={mode === 'open' ? '标记完成' : '恢复为待办'} disabled={busy} onClick={toggle}>
         {mode === 'open' ? <Circle size={18} /> : <Check size={18} />}
       </button>
       <div className="todo-main">
-        <strong>{todo.title}{assignedToMe && <span className={upward ? 'todo-upward-tag' : 'todo-capitalist-tag'} title={`由 ${todo.assignedByName} ${verb} · ${formatDue(todo.createdAt)}`} aria-label={`${tag}（由 ${todo.assignedByName} ${verb}）`}>{tag}</span>}</strong>
+        {canEdit
+          ? <button type="button" className="todo-title" title="点击修改" onClick={() => setEditing(true)}>{todo.title}</button>
+          : <strong>{todo.title}{assignedToMe && <span className={upward ? 'todo-upward-tag' : 'todo-capitalist-tag'} title={`由 ${todo.assignedByName} ${verb} · ${formatDue(todo.createdAt)}`} aria-label={`${tag}（由 ${todo.assignedByName} ${verb}）`}>{tag}</span>}</strong>}
         {(todo.note || todo.dueAt) && (
           <p className="todo-meta">
             {todo.dueAt && <span className={'todo-due' + (mode === 'open' && todo.dueAt.slice(0, 10) < todayIso() ? ' overdue' : '')} title="期望DDL"><CalendarDays size={12} aria-hidden="true" /><span>DDL {formatDue(todo.dueAt)}</span></span>}
@@ -100,11 +138,13 @@ function TodoRow({ todo, mode }: { todo: Todo; mode: 'open' | 'done' }) {
         )}
       </div>
       <div className="todo-actions">
+        {canEdit && <button type="button" className="icon-button" aria-label="编辑待办" title="编辑" disabled={busy} onClick={() => setEditing(true)}><Pencil size={15} /></button>}
         {mode === 'done' && (
           <button type="button" className="icon-button" aria-label="恢复" disabled={busy} onClick={toggle}><RotateCcw size={15} /></button>
         )}
         {!assignedToMe && <button type="button" className="icon-button" aria-label="删除" disabled={busy} onClick={remove}><Trash2 size={15} /></button>}
       </div>
+      </>}
     </div>
   );
 }

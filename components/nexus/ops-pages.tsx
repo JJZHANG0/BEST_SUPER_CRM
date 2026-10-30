@@ -120,7 +120,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
     e.preventDefault();
     if (!course || !type) return toast.error('请选择课程');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return toast.error('请选择上课日期');
-    if (!(h > 0 && h <= 24)) return toast.error('课时需在 0–24 小时之间');
+    if (!Number.isFinite(h) || h < 0) return toast.error('课时不能小于 0');
     if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 1000)) return toast.error('实到人数需为 0–1000 的整数');
     if (needsStudents(unit) && !(n && n > 0)) return toast.error('该班型按人数计算津贴，请填写实到人数');
     const ownerEmail = (record?.opsTeacher || me).toLowerCase();
@@ -157,7 +157,7 @@ function LessonDialog({ record, open, onClose }: { record: LessonRecord | null; 
         : <CourseCombobox courses={options} value={courseId} projectLabel={projectLabel} onChange={v => { setCourseId(v); const c = s.opsCourses.find(x => x.id === v); if (c?.opsTeacher && all) setOps(c.opsTeacher); if (c) setTeacher(c.teacher || ''); }} />}</div>
       <div className="form-columns four">
         <FormField label="上课日期"><input type="date" required value={date} onChange={e => setDate(e.target.value)} /></FormField>
-        <FormField label="课时（小时）"><input type="number" required min="0.25" max="24" step="0.25" value={hours} onChange={e => setHours(e.target.value)} /></FormField>
+        <FormField label="课时（小时）"><input type="number" required min="0" step="any" value={hours} onChange={e => setHours(e.target.value)} /></FormField>
         <div className="form-field expected-field"><span>应到人数</span><output className={'expected-count' + (expected == null ? ' unknown' : '')} aria-label="应到人数" title={expectedHint}>{expected ?? '—'}<small>{expected == null ? '' : ' 人'}</small></output><small className="field-hint">{expectedHint}</small></div>
         <FormField label={needsStudents(unit) ? '实到人数（按人计费，必填）' : '实到人数'}><input type="number" min="0" max="1000" step="1" inputMode="numeric" value={actual} required={needsStudents(unit)} onChange={e => setActual(e.target.value)} placeholder={expected != null ? `例如 ${expected}` : '例如 6'} aria-label="实到人数" /></FormField>
       </div>

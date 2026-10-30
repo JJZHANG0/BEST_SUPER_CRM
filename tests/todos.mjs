@@ -58,6 +58,9 @@ assert.deepEqual(T.assignedByKey(asg,'zhangjiejia@nexus.local').map(t=>t.id),['a
 assert.deepEqual(T.assignedByKey(asg,'xujin@nexus.local'),[]);
 assert.deepEqual(T.assignmentStats(T.assignedByKey(asg,'zhangjiejia@nexus.local')),{total:2,done:1,open:1});
 assert(tsx.includes('一键导出')&&tsx.includes('一键复制')&&tsx.includes('>当月绩效<')&&tsx.includes('>我指派的<'));
+assert(tsx.includes('aria-label="编辑待办"')&&tsx.includes('title="点击修改"'),'own todos can be edited again');
+assert(readFileSync('server/collections.ts','utf8').includes('hours: z.number().finite().min(0)')&&!readFileSync('server/collections.ts','utf8').includes('.max(24)'),'lesson hours have no 24h cap');
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('课时不能小于 0')&&!readFileSync('components/nexus/ops-pages.tsx','utf8').includes('max="24"'));
 // Leader-assigned todos carry 【万恶的资本家】 (assigner in the tooltip); non-leaders get 「领导万岁」 instead of 「我指派的」.
 assert.equal(T.CAPITALIST_TAG,'【万恶的资本家】');
 assert.equal(T.UPWARD_TAG,'【以下犯上】');
