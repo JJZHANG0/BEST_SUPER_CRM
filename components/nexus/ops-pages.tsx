@@ -14,7 +14,7 @@ import { canSeeAllLessons, canManageSystem, isTeacher, type Viewer } from '@/lib
 import {
   computeAllowance, currentMonth, today, monthOf, monthLabel, money2, unitLabel, needsStudents, summarizeByTeacher,
   visibleLessons, monthAllowance, toCsv, newRecordId, lessonTeacher, hoursByLessonTeacher, lessonWithFeedback, expectedAttendance, attendanceText,
-  isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours,
+  isLessonMonthLocked, canEditLockedLessonMonth, myLessonTeachingFee, myTeachingLessonHours, sameTeacherName,
   lessonFeedbackRequested, parentFeedbackText,
   type LessonRecord, type LessonFeedback, type OpsCourse, type FeedbackDraft,
   opsOwnScope,
@@ -273,7 +273,7 @@ function MonthConfirmHold({ month, locked, opsTeacher, own }: { month: string; l
 }
 
 /** 授课老师 hours for the selected month (within the records this viewer may see). */
-function TeacherHours({ rows, month, lockSubject, own }: { rows: LessonRecord[]; month: string; lockSubject: string; own: boolean }) {
+function TeacherHours({ rows, month, lockSubject, own, selected, onSelect }: { rows: LessonRecord[]; month: string; lockSubject: string; own: boolean; selected: string; onSelect: (teacher: string) => void }) {
   const s = useNexus();
   const list = hoursByLessonTeacher(rows, s.opsCourses, month);
   const locked = !!month && !!lockSubject && isLessonMonthLocked(s.lessonMonthLocks, month, lockSubject);
@@ -294,10 +294,15 @@ function TeacherHours({ rows, month, lockSubject, own }: { rows: LessonRecord[];
       <small>{list.length} 位老师 · 共 {Math.round(list.reduce((n, x) => n + x.hours, 0) * 100) / 100} 小时</small>
       {lockControl}
     </div>
-    <div className="teacher-hours-list">{list.map(t => <div key={t.teacher} className="teacher-hour-chip" title={`${t.teacher}：${t.count} 节 · ${t.hours} 小时`}>
-      <span className="th-name">{t.teacher}</span><b>{t.hours}<small> 小时</small></b><small className="th-count">{t.count} 节</small>
-      <i style={{ width: `${Math.max(6, (t.hours / max) * 100)}%` }} aria-hidden="true" />
-    </div>)}</div>
+    <div className="teacher-hours-list">{list.map(t => {
+      const on = selected === t.teacher;
+      return <button type="button" key={t.teacher} className={'teacher-hour-chip' + (on ? ' selected' : '')} aria-pressed={on}
+        title={on ? `取消只看 ${t.teacher}` : `只看 ${t.teacher} 本月的课时记录`}
+        onClick={() => onSelect(on ? '' : t.teacher)}>
+        <span className="th-name">{t.teacher}</span><b>{t.hours}<small> 小时</small></b><small className="th-count">{t.count} 节</small>
+        <i style={{ width: `${Math.max(6, (t.hours / max) * 100)}%` }} aria-hidden="true" />
+      </button>;
+    })}</div>
   </div>;
 }
 
@@ -309,7 +314,10 @@ export function LessonsPage() {
   const visible = useMemo(() => visibleLessons(s.lessons, s.viewer, me), [s.lessons, s.viewer, me]);
   // Leader tabs count the month's records per 教务老师 (before the person filter).
   const counts = useMemo(() => { const m = new Map<string, number>(); for (const r of visible) if (!month || monthOf(r.date) === month) m.set(r.opsTeacher.toLowerCase(), (m.get(r.opsTeacher.toLowerCase()) || 0) + 1); return m; }, [visible, month]);
-  const rows = useMemo(() => visible.filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [visible, matches]);
+  const monthRows = useMemo(() => visible.filter(matches).sort((a, b) => b.date.localeCompare(a.date)), [visible, matches]);
+  const [coach, setCoach] = useState('');
+  useEffect(() => { setCoach(''); }, [month]);
+  const rows = useMemo(() => coach ? monthRows.filter(r => sameTeacherName(lessonTeacher(r, s.opsCourses), coach)) : monthRows, [monthRows, coach, s.opsCourses]);
   const total = rows.reduce((n, r) => n + r.amount, 0), hours = rows.reduce((n, r) => n + r.hours, 0);
   const summary = summarizeByTeacher(rows);
   const typeName = (c?: OpsCourse) => s.classTypes.find(t => t.id === c?.classType)?.name || '—';
@@ -367,9 +375,9 @@ export function LessonsPage() {
     <section className="glass panel">
       {toolbar}
       {!s.opsCourses.length ? <NoCourses /> : <>
-        <TeacherHours rows={rows} month={month} lockSubject={lockSubject} own={lockOwn} />
+        <TeacherHours rows={monthRows} month={month} lockSubject={lockSubject} own={lockOwn} selected={coach} onSelect={setCoach} />
         {all && teacher === ALL && summary.length > 0 && <div className="teacher-summary">{summary.map(t => <button type="button" key={t.opsTeacher} onClick={() => setTeacher(s.staff.find(u => u.email.toLowerCase() === t.opsTeacher.toLowerCase())?.email || t.opsTeacher)} title={'只看 ' + s.staffName(t.opsTeacher)}><span className="avatar small-avatar">{s.staffName(t.opsTeacher).slice(0, 1)}</span><div><strong>{s.staffName(t.opsTeacher)}</strong><small>{t.count} 条 · {t.hours} 小时</small></div><b>{money2(t.amount)}</b></button>)}</div>}
-        <div className="results-meta">{rows.length} 条记录<span>{all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
+        <div className="results-meta">{rows.length} 条记录<span>{coach ? <>仅 {coach} 的授课记录<button type="button" className="text-button inline-action" onClick={() => setCoach('')}>取消筛选</button></> : all ? (person ? `仅 ${person} 的记录` : '部门负责人可查看全部老师') : '仅显示你的记录'}{rows.length > 0 && <button className="text-button inline-action" onClick={exportCsv}><Download size={14} />导出 CSV</button>}</span></div>
         {rows.length ? <>
           <div className="ops-table-wrap desktop-only-table"><Table className="ops-table"><TableHeader><TableRow>{['日期', '课程', '班级类型', '课时', '实到/应到', '津贴标准', '津贴', '授课老师', '教务老师', ''].map(h => <TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{rows.map(r => { const c = course(r.course); const editable = rowEditable(r); return <TableRow key={r.id} className={editable ? undefined : 'is-locked-month'}>
@@ -406,6 +414,7 @@ export function LessonsPage() {
             </div>
           </li>; })}</ul>
         </>
+          : coach ? <p className="muted today-empty">{monthLabel(month || '')}没有 {coach} 的课时记录。再点一次卡片可取消筛选。</p>
           : <EmptyState icon={Clock} title={month ? `${monthLabel(month)}${person ? ' · ' + person : ''}还没有课时记录` : '还没有课时记录'} description="每上完一节课记录一次（可同时填写学情反馈），月底即可直接核对教务津贴。" action="记录课时" onAction={() => { setEditing(null); setOpen(true); }} />}
       </>}
     </section>

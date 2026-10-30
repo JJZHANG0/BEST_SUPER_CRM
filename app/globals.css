@@ -1257,7 +1257,9 @@ html[data-workspace=public] body{background:#f4f2f7}
 .teacher-hours-head strong{font-size:.8125rem;color:#3f354c}
 .teacher-hours-head small{margin-left:auto;color:#9a8aae;font-size:.6875rem}
 .teacher-hours-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-.teacher-hour-chip{position:relative;display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;padding:9px 11px 12px;border-radius:11px;background:#fff;border:1px solid #eee8f4;overflow:hidden}
+.teacher-hour-chip{position:relative;display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;width:100%;padding:9px 11px 12px;border-radius:11px;background:#fff;border:1px solid #eee8f4;overflow:hidden;font:inherit;text-align:left;color:inherit;cursor:pointer}
+.teacher-hour-chip:hover{border-color:#c9b6ea;background:#fbf8ff}
+.teacher-hour-chip.selected{border-color:#7c4ddb;background:#f6f1ff;box-shadow:0 0 0 1px #7c4ddb}
 .teacher-hour-chip .th-name{font-size:.8125rem;font-weight:600;color:#3f354c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .teacher-hour-chip b{font-size:1rem;color:#5b3bb0;font-variant-numeric:tabular-nums}
 .teacher-hour-chip b small{font-size:.6875rem;color:#9a8aae;font-weight:500}

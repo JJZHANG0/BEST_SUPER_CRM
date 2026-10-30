@@ -209,6 +209,7 @@ assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('跟课合
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('我的课时费用'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('myTeachingLessonHours'));
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('MonthConfirmHold'));
+assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('只看 ${t.teacher} 本月的课时记录') && readFileSync('components/nexus/ops-pages.tsx','utf8').includes('sameTeacherName(lessonTeacher'), 'clicking a 授课老师 card filters that month');
 assert(readFileSync('components/nexus/ops-pages.tsx','utf8').includes('course-cell'));
 assert(readFileSync('app/globals.css','utf8').includes('course-stack'));
 // workbench cards: rename + red packet + weather chrome
