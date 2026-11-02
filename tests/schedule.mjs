@@ -95,7 +95,7 @@ assert.equal(O.lessonFeedbackRequested(true, {...empty, attendance:'李同学请
 assert.equal(O.lessonFeedbackRequested(true, {...empty, content:'画布'}, false), true);
 assert.equal(O.lessonFeedbackRequested(false, {...empty, content:'画布'}, true), false);
 const pasted=O.parentFeedbackText({courseName:'商业计划',courseCode:'BPA-01',date:'2026-10-20',teacher:'Dora',hours:1.5,actualCount:4,expectedCount:5,content:'商业模式画布',performance:'积极',note:'补课',replayUrl:' https://meet.example/r '});
-assert.match(pasted,/^【课程反馈】\n课程：商业计划 · BPA-01\n日期：2026-10-20\n授课老师：Dora\n课时：1.5 小时\n到课：4\/5 到课/);
+assert.match(pasted,/^【课程反馈】\n课程：商业计划 · BPA-01\n日期：2026-10-20\n到课：4\/5 到课/);assert(!/授课老师|课时|迟到/.test(pasted));assert.equal(O.parentFeedbackText({attendance:'4/5 到课，迟到 1 人'}).includes('迟到'),false);
 assert.match(pasted,/本次课程内容：\n商业模式画布/);assert.match(pasted,/课程回放：https:\/\/meet\.example\/r$/);
 assert.equal(O.parentFeedbackText({teacher:'未填写',date:'2026-10-20'}).includes('授课老师'), false);
 

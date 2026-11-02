@@ -452,10 +452,9 @@ export function parentFeedbackText(input: {
   const course = [input.courseName, input.courseCode].map(v => (v || '').trim()).filter(Boolean).join(' · ');
   if (course) lines.push(`课程：${course}`);
   if ((input.date || '').trim()) lines.push(`日期：${input.date!.trim()}`);
-  const teacher = (input.teacher || '').trim();
-  if (teacher && teacher !== '未填写') lines.push(`授课老师：${teacher}`);
-  if (input.hours != null && Number.isFinite(input.hours)) lines.push(`课时：${input.hours} 小时`);
-  const attendance = (input.attendance || '').trim() || attendanceText(input.actualCount ?? null, input.expectedCount ?? null);
+  // 授课老师 / 课时 / 迟到人数 are internal — never pasted into the parent group.
+  const attendance = ((input.attendance || '').trim() || attendanceText(input.actualCount ?? null, input.expectedCount ?? null))
+    .split(/[，,、;；]\s*/).filter(x => x.trim() && !/迟到/.test(x)).join('，');
   if (attendance) lines.push(`到课：${attendance}`);
   for (const [label, value] of [['本次课程内容', input.content], ['学生布置', input.performance], ['问题与风险', input.issues], ['下一步安排', input.nextSteps], ['备注', input.note]] as const) {
     const v = (value || '').trim();
