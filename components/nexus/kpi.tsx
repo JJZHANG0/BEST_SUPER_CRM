@@ -17,7 +17,7 @@ import type { KpiReviewRow } from '@/lib/nexus/api';
 import { PageTitle, EmptyState, Back, Notice } from './ui';
 import { readOkrDraft, clearOkrDraft } from './okr';
 import { okrToKpiItems, hasOkrContent, type OkrDraft } from '@/lib/nexus/okr';
-import { buildKpiExportRows, renderKpiMonthPdf } from '@/lib/nexus/kpi-pdf';
+import { buildKpiExportRows, renderKpiMonthPdf, renderKpiPersonPdf, kpiPersonPdfName } from '@/lib/nexus/kpi-pdf';
 import { Sparkles, X } from 'lucide-react';
 
 type Mode = 'self' | 'review' | 'readonly';
@@ -189,6 +189,7 @@ export function KpiSelfPanel() {
         <KpiStatusBadge status={status} />
         <span className="kpi-head-meta">{editable ? `已填写 ${filled}/${slots} 个 KR` : status === 'submitted' ? `提交于 ${stamp(sheet?.submittedAt)}` : `由 ${sheet?.reviewedByName || '审核人'} 定稿于 ${stamp(sheet?.finalizedAt)}`}{doneThisMonth > 0 && editable ? ` · 本月已完成待办 ${doneThisMonth} 项，可插入 KR` : ''}</span>
       </div>
+      {status === 'finalized' && sheet && <div className="kpi-head-actions"><button type="button" className="primary compact export-button" onClick={() => void exportKpiPersonPdf(s.user?.name || sheet.userName, '项目运营老师', month, sheet)}><FileDown size={15} />导出 PDF</button></div>}
       {editable && <div className="kpi-head-actions">
         <button type="button" className="secondary compact" disabled={busy || loading} onClick={() => save(false)}><Save size={15} />保存草稿</button>
         <button type="button" className="primary compact" disabled={busy || loading} onClick={() => save(true)}><Send size={15} />提交审核</button>
@@ -219,6 +220,20 @@ export function KpiSelfPanel() {
   </div>;
 }
 
+
+const longStamp = (iso?: string | null) => iso ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso)) : '';
+/** 导出 PDF for one person's sheet — exactly one A4 page, ~300 dpi. */
+export async function exportKpiPersonPdf(name: string, roleLabel: string, month: string, sheet: KpiSheet) {
+  try {
+    const pdf = await renderKpiPersonPdf({ name, roleLabel, month, sheet, generatedAt: longStamp(new Date().toISOString()), finalizedAt: longStamp(sheet.finalizedAt), submittedAt: longStamp(sheet.submittedAt) });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
+    a.download = kpiPersonPdfName(name, month);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast.success(`已导出 ${name} ${monthKeyLabel(month)}绩效 PDF（单页 A4）`);
+  } catch (e) { toast.error(e instanceof Error ? e.message : '导出失败'); }
+}
 
 async function exportKpiPdf(month: string, rows: KpiReviewRow[], reviewer: string) {
   try {
@@ -281,7 +296,7 @@ export function KpiReviewPage() {
             <TableCell className="num">{r.sheet ? `${filled}/16` : '—'}</TableCell>
             <TableCell className="nowrap">{stamp(r.sheet?.submittedAt) || '—'}</TableCell>
             <TableCell className="num">{total === null || st === 'none' || st === 'draft' ? '—' : <b className={st === 'finalized' ? 'kpi-total-final' : ''}>{fmt(total)}{st !== 'finalized' && <small className="muted"> 暂计</small>}</b>}</TableCell>
-            <TableCell className="row-actions"><button className="text-button" onClick={e => { e.stopPropagation(); go(month, r.user.key); }}>{st === 'submitted' ? '去评分' : '查看'}<ChevronRight size={14} /></button></TableCell>
+            <TableCell className="row-actions">{st === 'finalized' && r.sheet && <button className="text-button" title="导出单页 PDF" onClick={e => { e.stopPropagation(); void exportKpiPersonPdf(r.user.name, r.user.role === 'ops' ? '项目运营老师' : '超级管理员', month, r.sheet!); }}><FileDown size={14} />PDF</button>}<button className="text-button" onClick={e => { e.stopPropagation(); go(month, r.user.key); }}>{st === 'submitted' ? '去评分' : '查看'}<ChevronRight size={14} /></button></TableCell>
           </TableRow>;
         })}</TableBody></Table></div>
         : <EmptyState icon={ClipboardCheck} title="还没有运营老师" description="在系统管理中添加项目运营老师账号后，他们的月度绩效会出现在这里。" />}
@@ -327,6 +342,7 @@ function KpiReviewDetail({ month, row, loading, onBack, onSaved }: { month: stri
           <button type="button" className="primary compact" disabled={busy} onClick={() => act('finalize')}><Lock size={15} />定稿</button>
         </>}
         {sheet.status === 'finalized' && !self && <button type="button" className="secondary compact" disabled={busy} onClick={() => act('reopen')}><LockOpen size={15} />撤销定稿</button>}
+        {sheet.status === 'finalized' && <button type="button" className="primary compact export-button" onClick={() => void exportKpiPersonPdf(row.user.name, row.user.role === 'ops' ? '项目运营老师' : '超级管理员', month, sheet)}><FileDown size={15} />导出 PDF</button>}
       </div>
     </section>
     {self && <Notice>不能审核自己的绩效，请由其他审核人评分。</Notice>}
