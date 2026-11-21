@@ -10,6 +10,7 @@ import { isHealth, type Assignment } from './students';
 import { authenticateDemo, directory, makeHash, randomPassword, usernameTaken, migrateOverrides, type Overrides, type DirectoryUser } from './auth';
 import { applyTheme, writeStoredTheme, readStoredTheme, isThemeId, DEFAULT_THEME, type ThemeId } from './themes';
 import { isPetId, DEFAULT_PET, writeStoredPet, readStoredPet, type PetId } from './pets';
+import { quickActionsOrDefault, type QuickActionId } from './quick-actions';
 import { api, publicApi, visitorId, API_ENABLED, ApiError, NETWORK_ERROR_MESSAGE, token, stableJson, changedRecords, type ApiUser, type ApiTodo, type KpiReviewRow, type Collection, type OpsCollection, type StaffMember, type AdminUser } from './api';
 import { storedTodos, newTodoId, type Todo } from './todos';
 import { ownerView, teacherSave, reviewSheet, type KpiItem, type KpiReviewAction, type KpiSheet } from './kpi';
@@ -93,6 +94,8 @@ export type Store={refresh:()=>Promise<void>;authenticated:boolean;setAuthentica
   updateWeatherCity:(city:string)=>Promise<string|null>;
   /** Floating desktop pet (rabbit|cat|carrot|pig). */
   updatePixelPet:(id:PetId)=>Promise<string|null>;
+  /** Ordered personal workbench shortcuts (1–6). */
+  updateQuickActions:(actions:QuickActionId[])=>Promise<string|null>;
   /** Change the signed-in user's password. Resolves to an error message, or null on success. */
   changePassword:(current:string,next:string)=>Promise<string|null>;
   /** 系统管理 · 用户管理 (superadmin). */
@@ -131,7 +134,7 @@ type Bootstrap={posts?:ArticlePost[];user:ApiUser;programs:seed.Program[];teams:
 const OMIT:Partial<Record<Collection,string[]>>={resources:['url']};
 const idOf=(x:{id?:string;program?:string})=>(x.id??x.program) as string;
 const asTodo=(t:ApiTodo):Todo=>({id:t.id,userId:t.userId,title:t.title,note:t.note??undefined,dueAt:t.dueAt??null,completedAt:t.completedAt??null,assignedBy:t.assignedBy??null,assignedByName:t.assignedByName??null,ownerName:t.ownerName??null,ownerEmail:t.ownerEmail??null,createdAt:t.createdAt,updatedAt:t.updatedAt});
-const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,theme:DEFAULT_THEME,weatherCity:'杭州',pixelPet:DEFAULT_PET,mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
+const demoUser=(u:DirectoryUser):ApiUser=>({id:0,email:u.email,username:u.username,name:u.name,role:u.role,salesName:u.salesName,theme:DEFAULT_THEME,weatherCity:'杭州',pixelPet:DEFAULT_PET,quickActions:quickActionsOrDefault(null),mustChangePassword:u.mustChange,leader:u.leader,avatar:u.avatar??null});
 const asAdmin=(u:DirectoryUser,i:number):AdminUser=>({id:-(i+1),email:u.email,username:u.username,name:u.name,role:u.role,active:u.active,mustChangePassword:u.mustChange,salesName:u.salesName,leader:u.leader,salesRegion:u.salesRegion??null,salesLead:u.salesLead===true});
 const apiError=(e:unknown,fallback:string)=>e instanceof ApiError?(e.message&&e.message!==e.code?e.message:e.status===403?'没有权限执行此操作':e.status===409?'该账号已存在':fallback):NETWORK_ERROR_MESSAGE;
 
@@ -260,7 +263,7 @@ export function Provider({children}:{children:ReactNode}){
    let match:DirectoryUser|null=null;
    try{match=await authenticateDemo(email,password,overrides)}catch{return {ok:false,error:'当前浏览器不支持安全登录（需要 HTTPS），请更换浏览器后重试。'}}
    if(!match)return {ok:false,error:'账号或密码不正确，或账号已停用。'};
-   clearPwLater();const du=demoUser(match);const ov=overrides[match.email];const th=isThemeId(ov?.theme)?ov!.theme as ThemeId:(readStoredTheme()||DEFAULT_THEME);applyTheme(th);const pet=isPetId(ov?.pixelPet)?ov!.pixelPet as PetId:(readStoredPet()||DEFAULT_PET);writeStoredPet(pet);setUser({...du,theme:th,weatherCity:ov?.weatherCity||du.weatherCity||'杭州',pixelPet:pet,avatar:ov?.avatar??du.avatar});setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
+   clearPwLater();const du=demoUser(match);const ov=overrides[match.email];const th=isThemeId(ov?.theme)?ov!.theme as ThemeId:(readStoredTheme()||DEFAULT_THEME);applyTheme(th);const pet=isPetId(ov?.pixelPet)?ov!.pixelPet as PetId:(readStoredPet()||DEFAULT_PET);writeStoredPet(pet);setUser({...du,theme:th,weatherCity:ov?.weatherCity||du.weatherCity||'杭州',pixelPet:pet,quickActions:quickActionsOrDefault(ov?.quickActions),avatar:ov?.avatar??du.avatar});setRole(match.role);setAuthenticated(true);return {ok:true,role:match.role};
   }
   try{const res=await api.login(email,password,role==='sales'?'sales':role==='teacher'?'teacher':'ops');clearPwLater();token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());setAuthenticated(true);return {ok:true,role:res.user.role}}
   catch(e){token.clear();return {ok:false,error:e instanceof ApiError?(e.status===403?(e.message&&!/^HTTP|forbidden|portal_denied/.test(e.message)?e.message:'该账号没有所选登录身份，请选择正确的身份后再登录。'):e.status===401?'账号或密码不正确，或账号已停用。':e.status===429?'尝试次数过多，请 10 分钟后再试。':e.status>=500?'服务器暂时不可用，请稍后重试。':'登录失败，请稍后重试。'):NETWORK_ERROR_MESSAGE}}
@@ -537,9 +540,15 @@ export function Provider({children}:{children:ReactNode}){
   if(API_ENABLED){try{const r=await api.updatePixelPet(id);setUser(u=>u?{...u,pixelPet:r.user.pixelPet??id}:u);return null}catch(e){return apiError(e,'桌宠保存失败')}}
   const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),pixelPet:id}};setOverrides(next);setUser(u=>u?{...u,pixelPet:id}:u);write(STORAGE_KEYS.users,next);return null;
  };
+  const updateQuickActions=async(actions:QuickActionId[]):Promise<string|null>=>{
+  const clean=quickActionsOrDefault(actions);
+  if(!user)return '请先登录';
+  if(API_ENABLED){try{const r=await api.updateQuickActions(clean);setUser(u=>u?{...u,quickActions:quickActionsOrDefault(r.user.quickActions)}:u);return null}catch(e){return apiError(e,'快捷方式保存失败')}}
+  const key=user.email;const next={...overrides,[key]:{...(overrides[key]||{}),quickActions:clean}};setOverrides(next);setUser(u=>u?{...u,quickActions:clean}:u);write(STORAGE_KEYS.users,next);return null;
+ };
 
 const switchPortal=async(p:'ops'|'teacher'):Promise<string|null>=>{try{const res=await api.switchPortal(p);token.set(res.token);applyServer(await api.bootstrap<Bootstrap>());go('dashboard');return null}catch(e){return e instanceof ApiError&&e.message?e.message:'切换失败，请稍后重试'}};
-return <Context.Provider value={{refresh,switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,resourceFolders,setResourceFolders,announcements,unreadAnnouncements,createAnnouncement,markAnnouncementRead,markAllAnnouncementsRead,loadAnnouncementReads,loadAnnouncementDirectory,lessonMonthLocks,confirmLessonMonth,unlockLessonMonth,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,updateWeatherCity,updatePixelPet,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
+return <Context.Provider value={{refresh,switchPortal,authenticated,setAuthenticated,enrollments,setEnrollments,role,setRole,programs,setPrograms,students,setStudents,teams,setTeams,teamLogs,setTeamLogs,courses,setCourses,feedbacks,setFeedbacks,files,setFiles,route,go,favorites,setFavorites,recent,setRecent,logs,log:(s)=>setLogs(v=>[s,...v]),assignments,setAssignments,articles,updateArticles,posts,updatePosts,createPost,postMetrics,trackPost,likedLocal,todos,addTodo,meKey,kpi,completeTodo,restoreTodo,deleteTodo,updateTodo,classTypes,setClassTypes,projects,setProjects,teachers,setTeachers,opsCourses,setOpsCourses,lessons,setLessons,lessonFeedbacks,setLessonFeedbacks,courseSessions,setCourseSessions,resourceFolders,setResourceFolders,announcements,unreadAnnouncements,createAnnouncement,markAnnouncementRead,markAllAnnouncementsRead,loadAnnouncementReads,loadAnnouncementDirectory,lessonMonthLocks,confirmLessonMonth,unlockLessonMonth,viewer,leader,removeRecord,staff,staffName,changePassword,updateAvatar,updateTheme,updateWeatherCity,updatePixelPet,updateQuickActions,admin,persisted,apiMode:API_ENABLED,user,restoring,login,logout,passwordDeferred,deferPasswordChange}}>{children}</Context.Provider>}
 export const useNexus=()=>useContext(Context);
 export function useVisible(){
   const s=useNexus();

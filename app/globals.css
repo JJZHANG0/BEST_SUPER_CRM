@@ -911,14 +911,27 @@ html[data-workspace=sales] .resource-projects .selected :is(.program-mark,.resou
 .dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);grid-template-areas:"todo quick" "schedule schedule";gap:20px;align-items:start}
 .dashboard-grid>.dg-todo{grid-area:todo;display:flex;min-width:0}
 .dashboard-grid>.dg-todo>.todo-home-panel{flex:1;min-width:0}
-.dashboard-grid>.dg-quick{grid-area:quick;display:flex;flex-direction:column;padding-bottom:18px;align-self:start;height:fit-content}
+.dashboard-grid>.dg-quick{grid-area:quick;display:flex;flex-direction:column;padding-bottom:18px;align-self:start;height:fit-content;position:sticky;top:96px}
 .dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(2,1fr);gap:10px;align-content:start}
 .dashboard-grid>.dg-quick .quick-grid button{justify-content:center;border:1px solid #efe9f7;border-radius:13px;background:#fbf9fe;min-height:72px;height:auto;font-size:.75rem}
 .dashboard-grid>.dg-quick .quick-grid button:hover{background:#f4effb;border-color:#e3d7f3}
 .dashboard-grid>.dg-schedule{grid-area:schedule;min-width:0;height:100%;display:flex;flex-direction:column}.dashboard-grid>.dg-schedule .today-courses{flex:1}
 .dashboard-grid>.dg-note{grid-area:note;position:relative;align-self:stretch!important;display:block!important;min-height:0;min-width:0;height:auto}
-@media(max-width:900px){.dashboard-grid{grid-template-columns:1fr;grid-template-areas:"todo" "quick" "schedule"}.news-panel{height:auto!important;max-height:min(420px,55vh)}.dashboard-grid>.dg-note{display:none}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(4,1fr);grid-auto-rows:auto}.dashboard-grid>.dg-quick .quick-grid button{min-height:76px}}
+@media(max-width:900px){.dashboard-grid{grid-template-columns:1fr;grid-template-areas:"todo" "quick" "schedule"}.dashboard-grid>.dg-note{display:none}.dashboard-grid>.dg-quick{position:static}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(4,1fr);grid-auto-rows:auto}.dashboard-grid>.dg-quick .quick-grid button{min-height:76px}}
 @media(max-width:767px){.dashboard-grid{gap:18px;grid-template-areas:"quick" "todo" "schedule"}.dashboard-grid>.dg-quick .quick-grid{grid-template-columns:repeat(2,1fr)}}
+
+.quick-actions-dialog [data-slot=dialog-title]{display:flex;align-items:center;gap:8px}
+.quick-action-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:3px 0}
+.quick-action-picker>button{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:72px;padding:10px 11px;text-align:left;border:1px solid #e8e1ef;border-radius:13px;background:#fff;color:#4b4058}
+.quick-action-picker>button:hover{border-color:var(--nx-accent-border);background:var(--nx-accent-softer)}
+.quick-action-picker>button.selected{border-color:var(--nx-accent-muted);background:var(--nx-accent-softer);box-shadow:inset 0 0 0 1px var(--nx-accent-border)}
+.quick-picker-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:var(--nx-accent-soft);color:var(--nx-accent-ink)}
+.quick-action-picker strong{display:block;font-size:.8125rem;font-weight:600}
+.quick-action-picker small{display:block;margin-top:4px;color:#95879f;font-size:.6875rem;line-height:1.45}
+.quick-action-picker i{display:flex;align-items:center;gap:3px;font-style:normal;font-size:.6875rem;color:var(--nx-accent-ink);white-space:nowrap}
+.quick-actions-footer{display:flex;align-items:center;gap:12px;margin-top:4px;padding-top:15px;border-top:1px solid #ece6f2}
+.quick-actions-footer>span{flex:1;text-align:center;color:#91849c;font-size:.75rem}
+@media(max-width:600px){.quick-action-picker{grid-template-columns:1fr}.quick-actions-footer{flex-wrap:wrap}.quick-actions-footer>span{order:-1;flex-basis:100%}.quick-actions-footer .secondary,.quick-actions-footer .primary{flex:1}}
 /* 期望DDL picker in the todo add row. */
 .todo-ddl{display:inline-flex;align-items:center;gap:6px;border:1px solid #e3d9ee;border-radius:10px;padding:0 8px 0 10px;background:#fffd;min-height:40px;color:#8a7b9c;font-size:.75rem;white-space:nowrap;flex-shrink:0}
 .todo-ddl:focus-within{border-color:#ae8dcf;box-shadow:0 0 0 3px #d6c5ed44}

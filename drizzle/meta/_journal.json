@@ -197,6 +197,13 @@
       "when": 1791870000000,
       "tag": "0027_user_calendar_feed_token",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791880000000,
+      "tag": "0028_user_quick_actions",
+      "breakpoints": true
     }
   ]
 }

@@ -1,18 +1,19 @@
 'use client';
-import { Users, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet } from 'lucide-react';
+import { Users, UsersRound, CalendarDays, Plus, FileText, MessageSquare, Clock, ChevronRight, Wallet, Settings2, Check, RotateCcw, Layers, ListTodo } from 'lucide-react';
 import { WorkbenchWelcomeTools } from './workbench-chrome';
 import { WorkHoursCard, RedPacketCard, useMonthlyWorkHours } from './work-hours-card';
 import { Badge, SectionTitle } from './ui';
 import { TodoHomeCard } from './todos';
-import { NewsPanel } from './news-panel';
-import { useMemo } from 'react';
-import { openTodos, ownedBy } from '@/lib/nexus/todos';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { useMonthAllowance } from './ops-pages';
 import { greeting } from './recruitment';
 import { useNexus, useMe } from '@/lib/nexus/store';
 import { money2, monthLabel, today as todayIso, teacherRosterScope } from '@/lib/nexus/ops';
 import { type Program, type Student, type Team, type Course, type Role } from '@/lib/nexus/data';
 import { occurrences, onDate, inWeek } from '@/lib/nexus/schedule';
+import { DEFAULT_QUICK_ACTIONS, MAX_QUICK_ACTIONS, quickActionsOrDefault, type QuickActionId } from '@/lib/nexus/quick-actions';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -23,6 +24,56 @@ function weekOf(day: string) {
   return Array.from({ length: 7 }, (_, i) => { const x = new Date(monday); x.setDate(monday.getDate() + i); return iso(x); });
 }
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+
+const quickActionCatalog: { id: QuickActionId; label: string; hint: string; path: string; icon: typeof Clock }[] = [
+  { id: 'lessons', label: '记录课时', hint: '登记本次授课时长', path: 'lessons?new', icon: Clock },
+  { id: 'feedback', label: '课情反馈', hint: '记录学习与课堂情况', path: 'lesson-feedback?new', icon: MessageSquare },
+  { id: 'student', label: '新增学生', hint: '建立新的学生档案', path: 'students/new', icon: Plus },
+  { id: 'team', label: '新建队伍', hint: '为项目建立参赛队伍', path: 'teams/new', icon: UsersRound },
+  { id: 'course', label: '新建课程', hint: '创建课程与排课', path: 'courses/new', icon: CalendarDays },
+  { id: 'resource', label: '上传资料', hint: '补充项目文件与图片', path: 'resources/upload', icon: FileText },
+  { id: 'todos', label: '待办事项', hint: '查看和管理全部任务', path: 'todos', icon: ListTodo },
+  { id: 'programs', label: '项目中心', hint: '查看项目进度与资料', path: 'programs', icon: Layers },
+];
+
+function QuickActionsPanel({ go }: { go: (v: string) => void }) {
+  const s = useNexus();
+  const selected = quickActionsOrDefault(s.user?.quickActions);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<QuickActionId[]>(selected);
+  const [busy, setBusy] = useState(false);
+  const show = quickActionCatalog.filter(x => selected.includes(x.id)).sort((a, b) => selected.indexOf(a.id) - selected.indexOf(b.id));
+  const customize = () => { setDraft([...selected]); setOpen(true); };
+  const toggle = (id: QuickActionId) => {
+    if (draft.includes(id)) {
+      if (draft.length === 1) return toast.info('至少保留 1 个快捷方式');
+      setDraft(v => v.filter(x => x !== id));
+    } else {
+      if (draft.length >= MAX_QUICK_ACTIONS) return toast.info(`最多选择 ${MAX_QUICK_ACTIONS} 个快捷方式`);
+      setDraft(v => [...v, id]);
+    }
+  };
+  const save = async () => {
+    setBusy(true);
+    const error = await s.updateQuickActions(draft);
+    setBusy(false);
+    if (error) return toast.error(error);
+    setOpen(false);
+    toast.success('快捷方式已保存');
+  };
+  return <>
+    <section className="glass panel quick-panel dg-quick">
+      <SectionTitle title="快捷方式" sub="按你的习惯定制" action="自定义" onClick={customize} />
+      <div className="quick-grid dashboard-quick-grid">{show.map(x => <button key={x.id} onClick={() => go(x.path)} title={x.hint}><span><x.icon size={20} /></span>{x.label}</button>)}</div>
+    </section>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="ops-dialog quick-actions-dialog">
+      <DialogTitle><Settings2 size={19} />自定义快捷方式</DialogTitle>
+      <DialogDescription>选择 1–{MAX_QUICK_ACTIONS} 个常用入口。已选项按加入顺序显示，设置会跟随当前账号。</DialogDescription>
+      <div className="quick-action-picker">{quickActionCatalog.map(x => { const active = draft.includes(x.id); return <button key={x.id} type="button" className={active ? 'selected' : ''} aria-pressed={active} onClick={() => toggle(x.id)}><span className="quick-picker-icon"><x.icon size={19} /></span><span><strong>{x.label}</strong><small>{x.hint}</small></span><i>{active ? <><Check size={13} /> {draft.indexOf(x.id) + 1}</> : '添加'}</i></button>; })}</div>
+      <div className="quick-actions-footer"><button type="button" className="secondary" onClick={() => setDraft([...DEFAULT_QUICK_ACTIONS])}><RotateCcw size={16} />恢复默认</button><span>已选 {draft.length} / {MAX_QUICK_ACTIONS}</span><button type="button" className="primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存设置'}</button></div>
+    </DialogContent></Dialog>
+  </>;
+}
 
 export default function Dashboard({ programs, students, teams, courses, go }: { role: Role; programs: Program[]; students: Student[]; teams: Team[]; courses: Course[]; go: (v: string) => void }) {
   const s = useNexus(), me = useMe(), allowance = useMonthAllowance();
@@ -36,7 +87,6 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
   // L→R: 学生总数 → 本周课程 → 本月使用时长 → 本月红包提现 → 当月教务津贴
   const studentStat = { label: '学生总数', value: students.length, unit: '位', icon: Users, sub: students.length ? `${new Set(students.map(x => x.program)).size} 个项目有在读学生` : '暂无学生，点击新增', tone: 'violet', path: students.length ? 'students' : 'students/new' };
   const weekStat = { label: '本周课程', value: thisWeek.length, unit: '节', icon: CalendarDays, sub: `今天有 ${todays.length} 节课程`, tone: 'green', path: 'courses' };
-  const openTodoCount = useMemo(() => openTodos(ownedBy(s.todos, s.meKey)).length, [s.todos, s.meKey]);
   const allowanceStat = { label: allowance.team ? '当月教务津贴 · 团队' : '当月教务津贴', value: money2(allowance.amount), unit: '', icon: Wallet, sub: allowance.count ? `${monthLabel(allowance.month)}${allowance.team ? ' · 全部老师' : ''} · ${allowance.hours} 小时 · ${allowance.count} 条` : `${monthLabel(allowance.month)}暂无课时记录`, tone: 'orange', path: 'lessons' };
   return <>
     <div className="welcome"><div><div className="eyebrow">YOUR INNOVATION WORKSPACE</div><h1>{greeting()}，{me.name || '老师'} <span className="hello-spark">✧</span></h1><p>让每一个创新项目，都被高效推进。</p></div><WorkbenchWelcomeTools now={now} /></div>
@@ -47,13 +97,10 @@ export default function Dashboard({ programs, students, teams, courses, go }: { 
       <RedPacketCard displayMs={workHours.displayMs} month={workHours.month} />
       <button className="stat-card glass" onClick={() => go(allowanceStat.path)}><div className="stat-top"><span>{allowanceStat.label}</span><span className={`stat-icon ${allowanceStat.tone}`}><Wallet size={19} /></span></div><div className="stat-value">{allowanceStat.value}{allowanceStat.unit && <span>{allowanceStat.unit}</span>}</div><div className="stat-foot"><span>{allowanceStat.sub}</span><ChevronRight size={14} /></div></button>
     </div>
-    {/* Same 5-column grid as the KPI cards: 待办 / 今日课程 span cards 1–4, 快捷操作 / note sit under card 5. */}
-    {/* 快捷操作 keeps natural height; when incomplete todos > 2, swap in 当日新闻. */}
+    {/* 待办可以继续变长；右侧个人快捷方式保持紧凑并在桌面端随页面滚动。 */}
     <div className="dashboard-grid">
       <div className="dg-todo"><TodoHomeCard /></div>
-      {openTodoCount > 2
-        ? <NewsPanel />
-        : <section className="glass panel quick-panel dg-quick"><SectionTitle title="快捷操作" /><div className="quick-grid">{[{ label: '记录课时', icon: Clock, path: 'lessons?new' }, { label: '课情反馈', icon: MessageSquare, path: 'lesson-feedback?new' }, { label: '新增学生', icon: Plus, path: 'students/new' }, { label: '上传资料', icon: FileText, path: 'resources/upload' }].map(x => <button key={x.label} onClick={() => go(x.path)}><span><x.icon size={20} /></span>{x.label}</button>)}</div></section>}
+      <QuickActionsPanel go={go} />
       <section className="glass panel schedule-panel dg-schedule"><SectionTitle title="今日课程" action="日历" onClick={() => go('courses')} /><div className="mini-date"><span>{now.getMonth() + 1} 月</span>{week.map((d, i) => <button key={d} className={d === today ? 'selected' : ''} onClick={() => go(`courses?date=${d}`)}><small>{weekdays[i]}</small>{Number(d.slice(-2))}</button>)}</div>
         <div className="today-courses">{todays.map((o, i) => { const c = o.course; return <button key={o.key} className={`today-course line-${i % 3}`} onClick={() => go(`courses/${c.id}`)}><small><Clock size={13} />{o.start && o.end ? `${o.start}–${o.end}` : c.time}{c.code && <Badge tone="violet">{c.code}</Badge>}<Badge tone="neutral">{c.status}</Badge></small><strong>{c.name}</strong><p>{teams.find(t => t.id === c.team)?.name || '—'} <span>·</span> {c.teacher}{o.location && <><span>·</span> {o.location}</>}</p></button>; })}{!todays.length && <p className="muted today-empty">今天暂无课程安排</p>}</div>
         <button className="full-link" onClick={() => go('courses')}>查看完整课程安排 <ChevronRight size={15} /></button></section>

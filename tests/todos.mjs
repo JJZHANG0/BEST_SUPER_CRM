@@ -28,7 +28,10 @@ const dash=readFileSync('components/nexus/dashboard.tsx','utf8');
 assert(dash.includes('TodoHomeCard'));
 assert(!dash.includes('需要关注的队伍')&&!dash.includes('最新项目公告'),'dashboard sections removed');
 assert(dash.includes('dg-todo')&&dash.includes('dg-quick')&&dash.includes('dg-schedule'));
+assert(!dash.includes('NewsPanel')&&!dash.includes('当日新闻'),'news is never shown on the workbench');
+assert(dash.includes('QuickActionsPanel')&&dash.includes('自定义快捷方式')&&dash.includes('updateQuickActions'),'personal shortcuts replace news');
 assert(/grid-template-areas:"todo quick" "schedule schedule"/.test(readFileSync('app/globals.css','utf8')),'快捷操作 beside 待办, 今日课程 below');
+assert(/\.dashboard-grid>\.dg-quick\{[^}]*position:sticky/.test(readFileSync('app/globals.css','utf8')),'desktop shortcuts stay available beside a long todo list');
 assert(!/14|18/.test((dash.match(/const stats = \[[\s\S]*?\];/)||[''])[0].replace(/\d+px/g,'')),'no hardcoded KPI numbers');
 // Date line: icon + date are one flex item aligned to the note's first line.
 const row=readFileSync('components/nexus/todos.tsx','utf8');
@@ -37,6 +40,13 @@ assert(/\.todo-meta \.todo-due\{[^}]*align-items:center[^}]*height:1\.6em/.test(
 const schema=readFileSync('db/schema.ts','utf8');
 assert(schema.includes("pgTable('todos'"));
 assert(readFileSync('drizzle/0001_blue_ben_parker.sql','utf8').includes('CREATE TABLE "todos"'));
+const qaSource=ts.transpileModule(readFileSync('lib/nexus/quick-actions.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const QA=await import('data:text/javascript;base64,'+Buffer.from(qaSource).toString('base64'));
+assert.deepEqual(QA.quickActionsOrDefault(null),['lessons','feedback','student','resource']);
+assert.deepEqual(QA.parseQuickActions(['todos','programs']),['todos','programs']);
+assert.equal(QA.parseQuickActions([]),null);assert.equal(QA.parseQuickActions(['todos','todos']),null);assert.equal(QA.parseQuickActions(['unknown']),null);
+assert(readFileSync('db/schema.ts','utf8').includes("quickActions: jsonb('quick_actions')")&&readFileSync('drizzle/0028_user_quick_actions.sql','utf8').includes('ADD COLUMN IF NOT EXISTS "quick_actions"'),'shortcut preference has a server migration');
+assert(readFileSync('drizzle/meta/_journal.json','utf8').includes('0028_user_quick_actions'),'shortcut migration is registered');
 
 // 一键导出: plain-text summary per month (or all months, grouped), assigner noted.
 const ex=[{...base,id:'e1',title:'完成 BPA 备课',note:'第二阶段 12 课时\n晋级奖励',dueAt:'2026-10-06',completedAt:'2026-10-05T10:00:00+08:00',assignedBy:'zhangjiejia@nexus.local',assignedByName:'张捷嘉'},{...base,id:'e2',title:'IGEM 计划书',completedAt:'2026-10-08T10:00:00+08:00'},{...base,id:'e3',title:'九月事项',completedAt:'2026-09-08T10:00:00+08:00'},{...base,id:'e4',title:'未完成'}];

@@ -35,6 +35,8 @@ export const users = pgTable('users', {
   weatherCity: text('weather_city').notNull().default('杭州'),
   /** Floating desktop pet id (see lib/nexus/pets.ts). */
   pixelPet: text('pixel_pet').notNull().default('rabbit'),
+  /** Ordered personal shortcuts shown on the workbench (max 6 stable ids). */
+  quickActions: jsonb('quick_actions').$type<string[]>(),
   /** Unguessable secret for personal Apple Calendar / webcal course feed (nullable until first subscribe). */
   calendarFeedToken: text('calendar_feed_token'),
   /** 销售区域 (sales users): 销售大部 | 商务拓展一区 | 商务拓展二区 | 商务拓展三区 (lib/nexus/roles.ts SALES_REGIONS). */
