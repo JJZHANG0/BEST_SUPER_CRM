@@ -19,7 +19,9 @@ import { isCollection, recordSchemas, tables, toRecord, systemCollections, owned
 import { isAudience, isRecipient, AUDIENCE_LABELS, type AnnouncementAudience } from '../lib/nexus/announcements';
 import { canWrite as roleCanWrite, canManageSystem, canSeeAllLessons, canEditOwned, canAssignTodos, canAssignToLeader, canReviewKpi, canFillKpi, isOpsLike, isTeacher, isRole, isSalesRegion, passwordIssues, normalizeUsername, usernameIssue, type Role } from '../lib/nexus/roles';
 import { isMonth, normalizeItems, ownerView, reviewSheet, teacherSave, type KpiSheet, type KpiStatus } from '../lib/nexus/kpi';
-import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled, findSimilarTeam, teamNameConflictMessage } from '../lib/nexus/sales';
+import { stages } from '../lib/nexus/data';
+import { CURRENT_OPERATIONS_YEAR } from '../lib/nexus/operations-year';
+import { salesOwns, capacityFromClassType, inactiveEnrollment, isPseudoTeam, canEditTeam, teamEnrolled, normalizeRecruitStatus, TEAM_RECRUIT_STATUSES, findSimilarTeam, teamNameConflictMessage } from '../lib/nexus/sales';
 import { computeAllowance, normalizeLesson, isUnit, sameTeacherName, teacherRosterScope, opsOwnScope, bootstrapVisibleOpsCourses, canonicalTeacherName, isLessonMonth, isLessonMonthLocked, canEditLockedLessonMonth, monthLabel, hoursByLessonTeacher } from '../lib/nexus/ops';
 import { isValidArticle, articleIssues, type ProgramArticle } from '../lib/nexus/articles';
 import { visiblePosts } from '../lib/nexus/posts';
@@ -157,6 +159,23 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
   registerPublicFormRoutes(app, forms);
   // 课表日历 ICS feed (Apple Calendar fetches by secret URL; no cookies).
   registerPublicCalendarRoutes(app, db, config.publicOrigin);
+
+  app.get('/public/teams/:id', async c => {
+    const [row] = await db.select({
+      name: schema.teams.name, year: schema.teams.year, archived: schema.teams.archived,
+      intro: schema.teams.publicIntro, stage: schema.teams.stage, recruitStatus: schema.teams.recruitStatus,
+      capacity: schema.teams.recruitCapacity, program: schema.programs.name, description: schema.programs.description,
+    }).from(schema.teams).innerJoin(schema.programs, eq(schema.teams.program, schema.programs.id))
+      .where(eq(schema.teams.id, c.req.param('id'))).limit(1);
+    if (!row || row.archived || isPseudoTeam(row.name)) return c.json({ error: 'not_found' }, 404);
+    const status = normalizeRecruitStatus(row.recruitStatus);
+    return c.json({
+      name: row.name, program: row.program, year: row.year, intro: row.intro || row.description,
+      recruitStatus: row.year < CURRENT_OPERATIONS_YEAR ? '已结束'
+        : TEAM_RECRUIT_STATUSES.find(value => value === status) ?? '待公布',
+      stage: stages[row.stage - 1] ?? null, capacity: row.capacity,
+    });
+  });
 
   // Everything below requires a valid bearer token.
   app.use('*', async (c, next) => {
@@ -1149,7 +1168,8 @@ export function createApp(db: Db, config: Config, startedAt = new Date(), posts:
       // Only superadmins may hand a team to another 负责人; archiving goes through DELETE.
       const d = parsed.data as Record<string, unknown>;
       if (cur && !canManageSystem(user.role) && (cur.opsOwner || '')) d.opsOwner = cur.opsOwner;
-      if (cur) d.archived = cur.archived ?? false; else d.archived = false;
+      if (cur) d.archived = cur.archived ?? false;
+      else { d.archived = false; d.year ??= CURRENT_OPERATIONS_YEAR; }
       if (!cur && !canManageSystem(user.role) && !d.opsOwner) d.opsOwner = user.name;
       // Exact + near-duplicate name check (normalize TEAM/队 wrappers, quotes, case, spaces).
       const others = await db.select({ id: schema.teams.id, name: schema.teams.name }).from(schema.teams);

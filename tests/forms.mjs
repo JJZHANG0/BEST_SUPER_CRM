@@ -8,7 +8,7 @@ import { sign } from 'hono/jwt';
 
 const outdir = 'node_modules/.cache/nexus-tests';
 mkdirSync(outdir, { recursive: true });
-await build({ entryPoints: { salesLib: 'lib/nexus/sales.ts', formsLib: 'lib/nexus/forms.ts', formsApp: 'server/app.ts', formsApi: 'server/forms.ts', postsApi2: 'server/posts.ts', xlsx: 'lib/nexus/xlsx.ts' }, outdir, bundle: true, platform: 'node', format: 'esm', packages: 'external', outExtension: { '.js': '.mjs' }, logLevel: 'error' });
+await build({ entryPoints: { salesLib: 'lib/nexus/sales.ts', operationsYear: 'lib/nexus/operations-year.ts', formsLib: 'lib/nexus/forms.ts', formsApp: 'server/app.ts', formsApi: 'server/forms.ts', postsApi2: 'server/posts.ts', xlsx: 'lib/nexus/xlsx.ts' }, outdir, bundle: true, platform: 'node', format: 'esm', packages: 'external', outExtension: { '.js': '.mjs' }, logLevel: 'error' });
 const load = n => import(pathToFileURL(`${outdir}/${n}.mjs`).href + '?t=' + Date.now());
 const F = await load('formsLib'), { createApp } = await load('formsApp'), A = await load('formsApi'), S = await load('postsApi2'), X = await load('xlsx');
 
@@ -83,6 +83,24 @@ assert.equal(plan.created, false); assert.equal(plan.student.id, 'S-OLD');
 assert.equal(plan.student.profile.school, '旧学校', 'linking never overwrites values on file'); assert.equal(plan.student.profile.schoolEn, 'Hangzhou No.2 High School', 'blank fields are filled');
 assert.equal(plan.student.team, 'T-CTB'); assert.equal(plan.student.sales, '顾问 A'); assert.equal(plan.enrollment.team, 'T-CTB'); assert(plan.enrollmentCreated);
 
+const oldEnrollment = { id: 'E-2026', student: existing.id, program: 'ctb', team: 'T-2026', year: 2026, status: '已结项' };
+const crossYear = F.planAssignment(
+  { id: 'FS-2027', answers: snap, createdAt: '2026-11-26T02:00:00.000Z' },
+  { program: 'ctb', team: 'T-2027', year: 2027 },
+  { students: [{ ...existing, team: 'T-2026', teamYear: 2026 }], enrollments: [oldEnrollment], linkTo: existing.id, by: '运营', stamp: '', newId: 'S-NEW' },
+);
+assert(crossYear.enrollmentCreated, 'same program in a new year gets a separate enrollment');
+assert.notEqual(crossYear.enrollment.id, oldEnrollment.id);
+assert.equal(crossYear.enrollment.team, 'T-2027');
+assert.equal(crossYear.student.team, 'T-2026');
+assert.equal(oldEnrollment.status, '已结项');
+const { studentsForYear } = await load('operationsYear');
+const roster = [crossYear.student, { id: 'S-UNASSIGNED', team: '', intakeYear: 2027 }, { id: 'S-LEGACY', team: '' }];
+const teamsByYear = [{ id: 'T-2026' }, { id: 'T-2027', year: 2027 }];
+const enrollmentsByYear = [oldEnrollment, crossYear.enrollment];
+assert.deepEqual(studentsForYear(roster, teamsByYear, enrollmentsByYear, 2026).map(student => student.id), [existing.id, 'S-LEGACY']);
+assert.deepEqual(studentsForYear(roster, teamsByYear, enrollmentsByYear, 2027).map(student => student.id), [existing.id, 'S-UNASSIGNED']);
+
 // ---- export --------------------------------------------------------------------------------------------
 const sub0 = { id: 'FS-1', formId: 'F', formVersion: 1, answers: snap, name: '程雪晴', phone: 'x', status: '待分配', program: null, team: null, studentId: null, assignedBy: null, assignedAt: null, note: '', createdAt: '2026-10-20T02:00:00.000Z' };
 const table = F.submissionTable([sub0]);
@@ -106,6 +124,28 @@ const call = async (method, path, { body, as, portal, ip = '1.1.1.1' } = {}) => 
   const res = await app.request(path, { method, headers: { 'x-real-ip': ip, ...(body ? { 'content-type': 'application/json' } : {}), ...(tok ? { authorization: 'Bearer ' + tok } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { status: res.status, json: await res.json().catch(() => null) };
 };
+let showcaseRow = {
+  name: 'CTB 研究队', program: 'CTB', year: 2027, intro: '研究课题介绍', description: '项目介绍',
+  recruitStatus: '正常招募', stage: 2, capacity: 8, archived: false, note: '内部备注', opsOwner: '内部负责人',
+};
+const showcaseDb = {
+  select: () => ({ from: () => ({ innerJoin: () => ({ where: () => ({ limit: async () => showcaseRow ? [showcaseRow] : [] }) }) }) }),
+};
+const showcaseApp = createApp(showcaseDb, config, new Date(), S.memoryRepo([], []), repo);
+const publicTeam = () => showcaseApp.request('/api/public/teams/T-CTB');
+const showcase = await publicTeam();
+assert.equal(showcase.status, 200, 'a poster visitor does not need a login');
+assert.deepEqual(await showcase.json(), {
+  name: 'CTB 研究队', program: 'CTB', year: 2027, intro: '研究课题介绍',
+  recruitStatus: '招募中', stage: '研究与开发', capacity: 8,
+});
+showcaseRow = { ...showcaseRow, year: 2026, intro: '' };
+const historyTeam = await (await publicTeam()).json();
+assert.equal(historyTeam.recruitStatus, '已结束');
+assert.equal(historyTeam.intro, '项目介绍');
+showcaseRow = { ...showcaseRow, archived: true };
+assert.equal((await publicTeam()).status, 404);
+
 let r = await call('GET', '/api/public/forms/signup-test1');
 assert.equal(r.status, 200); assert.equal(r.json.form.questions.length, F.DEFAULT_FORM.questions.length);
 assert(r.json.form.questions.every(q => !('mapTo' in q)) && !('id' in r.json.form), 'public form hides mapping + internal id');

@@ -17,7 +17,7 @@ export type StudentProfile = {
   nameEn?:string; birthDate?:string; address?:string; schoolEn?:string; schoolAddress?:string; schoolType?:string; guardianEmail?:string;
   signupPrograms?:string; languageTest?:string; languageTotal?:string; languageSpeaking?:string; pastCompetitions?:string; formNote?:string; formExtras?:string; formSubmission?:string;
 };
-export type Student = {id:string;name:string;program:string;team:string;status:string;sales:string;updated:string;grade:string;
+export type Student = {intakeYear?:number;id:string;name:string;program:string;team:string;status:string;sales:string;updated:string;grade:string;
   /** 学生状态 — set by ops, drives the sales list order (worst first). */
   health:StudentHealth;healthNote:string;healthUpdated:string;healthBy:string;
   /** Extra fields from 花名册 import (union schema). */
@@ -26,7 +26,7 @@ export type Enrollment = {id:string;student:string;program:string;team:string;st
 export type TeamProgress = {summary:string;milestones:string;risks:string;updated?:string;updatedBy?:string};
 export type TeamMaterials = {checklist:string;links:string;notes:string;updated?:string;updatedBy?:string};
 export type TeamLog = {id:string;team:string;at:string;by:string;byName:string;action:string;detail:string};
-export type Team = {id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string;
+export type Team = {year?:number;publicIntro?:string;id:string;name:string;program:string;teacher:string;stage:number;status:string;note:string;
   /** 队伍进度 — PM 定义字段，队伍老师/运营老师后续填写 */ progress?:TeamProgress;
   /** 成果材料 */ materials?:TeamMaterials;
   /** 运营负责人 (name) — may edit 名额 / 招募状态 / 海报 / 成员 */ opsOwner?:string;

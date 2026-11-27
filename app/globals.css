@@ -2632,3 +2632,30 @@ a.cal-sub-webcal{display:inline-flex;align-items:center;gap:6px;text-decoration:
 .cal-sub-steps{margin:0 0 12px;padding:0 0 0 1.1rem;color:#8a7e98;font-size:.78rem;line-height:1.7}
 .cal-sub-steps li{margin:0 0 6px}
 .cal-sub-steps li svg{display:inline;vertical-align:-2px;margin-right:4px;color:var(--nx-accent-ink,#6e4fb8)}
+
+.ops-roster-toolbar { margin-bottom: 1rem; }
+.team-share-qr { display: block; width: min(100%, 240px); height: auto; margin: 0 auto; }
+.team-showcase {
+  min-height: 100dvh;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 2.5rem);
+  color: #242038;
+  background: #f6f3fa;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.team-showcase-header, .team-showcase-panel {
+  border-radius: 1rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
+.team-showcase-header { color: #fff; background: #352456; }
+.team-showcase-header h1 { font-size: clamp(1.75rem, 6vw, 2.75rem); line-height: 1.2; margin: 0.4rem 0 0; }
+.team-showcase-panel { background: #fff; border: 1px solid #ddd6ea; }
+.team-showcase-panel h2 { font-size: 1.25rem; margin-bottom: 0.75rem; }
+.team-showcase-intro { white-space: pre-wrap; }
+.team-showcase-panel dl { display: flex; flex-wrap: wrap; gap: 1rem 2rem; }
+.team-showcase-panel dt { color: #51465e; }
+.team-showcase-panel dd { font-weight: 650; margin: 0; }

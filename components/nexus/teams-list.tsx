@@ -4,12 +4,13 @@
  * Row: name · project logo/short · 招募状态 · 名额 · 负责人 · members · status.
  * Expand inline for progress / notes / poster / member preview; 「进入队伍」 opens the existing detail page.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, Users, ArrowRight } from 'lucide-react';
 import { useNexus, useVisible } from '@/lib/nexus/store';
+import { CURRENT_OPERATIONS_YEAR, teamYear } from '@/lib/nexus/operations-year';
 import { stages, type Team } from '@/lib/nexus/data';
 import { teamEnrolled, normalizeRecruitStatus, inactiveEnrollment } from '@/lib/nexus/sales';
-import { Badge, SearchBox, Choice, NoResults, StageBar, PageTitle, EmptyState } from './ui';
+import { Badge, SearchBox, Choice, NoResults, StageBar, EmptyState } from './ui';
 import { CompetitionLogo } from './competition-logo';
 
 function seatLabel(t: Team, live: number) {
@@ -24,7 +25,7 @@ function TeamRow({ team, open, onToggle }: { team: Team; open: boolean; onToggle
   const members = s.enrollments.filter(e => e.team === team.id && !inactiveEnrollment(e.status));
   const live = new Set(members.map(e => e.student)).size;
   const enrolled = teamEnrolled(live, team.recruitEnrolled);
-  const recruit = normalizeRecruitStatus(team.recruitStatus);
+  const recruit = teamYear(team) < CURRENT_OPERATIONS_YEAR ? '已结束' : normalizeRecruitStatus(team.recruitStatus);
   const preview = members.slice(0, 5).map(e => s.students.find(x => x.id === e.student)).filter(Boolean);
   return (
     <li className={'team-row glass' + (open ? ' is-open' : '')}>
@@ -69,22 +70,22 @@ function TeamRow({ team, open, onToggle }: { team: Team; open: boolean; onToggle
   );
 }
 
-export function Teams() {
+export function Teams({ year }: { year: number }) {
   const s = useNexus(), v = useVisible();
   const [q, setQ] = useState(''), [filter, setFilter] = useState(s.route.includes('attention') ? '需要关注' : '全部队伍'), [program, setProgram] = useState(''), [openId, setOpenId] = useState<string | null>(null);
-  const programChips = useMemo(() => s.programs.map(p => ({ id: p.id, name: p.name, short: p.short, color: p.color, count: v.teams.filter(t => t.program === p.id).length })).filter(p => p.count > 0), [s.programs, v.teams]);
-  const list = v.teams.filter(t => (t.name + (s.programs.find(p => p.id === t.program)?.name || '')).includes(q) && (!program || t.program === program) && (filter === '全部队伍' || (filter === '需要关注' ? t.status !== '正常进行' : t.status === '正常进行')));
+  const teams = v.teams.filter(team => teamYear(team) === year);
+  const programChips = s.programs.map(p => ({ id: p.id, name: p.name, short: p.short, color: p.color, count: teams.filter(t => t.program === p.id).length })).filter(p => p.count > 0);
+  const list = teams.filter(t => (t.name + (s.programs.find(p => p.id === t.program)?.name || '')).includes(q) && (!program || t.program === program) && (filter === '全部队伍' || (filter === '需要关注' ? t.status !== '正常进行' : t.status === '正常进行')));
   return <>
-    <PageTitle title="队伍管理" en="TEAM MANAGEMENT" description="协同每一支队伍，让想法走向成果。" action={s.role !== 'sales' ? '新建队伍' : undefined} onAction={() => s.go('teams/new')} />
     <div className="filter-toolbar"><SearchBox value={q} onChange={setQ} placeholder="搜索队伍或项目" /><Choice value={filter} onChange={setFilter} options={['全部队伍', '需要关注', '正常进行']} label="队伍状态" /></div>
     {programChips.length > 0 && <div className="filter-chips team-program-chips" role="group" aria-label="按项目筛选队伍">
-      <button type="button" className={!program ? 'selected' : ''} aria-pressed={!program} onClick={() => setProgram('')}>全部<em>{v.teams.length}</em></button>
+      <button type="button" className={!program ? 'selected' : ''} aria-pressed={!program} onClick={() => setProgram('')}>全部<em>{teams.length}</em></button>
       {programChips.map(p => <button type="button" key={p.id} className={program === p.id ? 'selected' : ''} aria-pressed={program === p.id} onClick={() => setProgram(x => x === p.id ? '' : p.id)}>
         <CompetitionLogo program={p} size={18} /><span>{p.short}</span><em>{p.count}</em>
       </button>)}
     </div>}
     <div className="results-meta">共 {list.length} 支队伍</div>
     {list.length ? <ul className="team-list">{list.map(t => <TeamRow key={t.id} team={t} open={openId === t.id} onToggle={() => setOpenId(x => x === t.id ? null : t.id)} />)}</ul>
-      : (v.teams.length ? <NoResults /> : <EmptyState icon={Users} title="还没有队伍" description="新建队伍并关联项目，之后可为学生分配队伍、跟进阶段进度。" action={s.role !== 'sales' ? '新建队伍' : undefined} onAction={() => s.go('teams/new')} />)}
+      : (teams.length ? <NoResults /> : <EmptyState icon={Users} title="该年度暂无队伍" description="新建队伍并关联项目，之后可为学生分配队伍、跟进阶段进度。" action={s.role !== 'sales' ? '新建队伍' : undefined} onAction={() => s.go('teams/new?year='+year)} />)}
   </>;
 }

@@ -139,7 +139,12 @@ async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error || 'http_' + res.status, (data as { message?: string }).message);
   return data as T;
 }
+export type PublicTeam = {
+  name: string; program: string; year: number; intro: string;
+  recruitStatus: string; stage: string | null; capacity: number | null;
+};
 export const publicApi = {
+  team: (id: string, signal: AbortSignal) => publicRequest<PublicTeam>(`/public/teams/${encodeURIComponent(id)}`, { signal }),
   article: (slug: string, visitor: string) => publicRequest<{ article: PublicArticle; liked: boolean }>(`/public/articles/${encodeURIComponent(slug)}?visitor=${encodeURIComponent(visitor)}`),
   track: (slug: string, kind: 'view' | 'share' | 'like', visitor: string) => publicRequest<{ counted: boolean; metrics: import('./posts').PostMetrics; liked: boolean }>(`/public/articles/${encodeURIComponent(slug)}/${kind}`, { method: 'POST', body: JSON.stringify({ visitor }) }),
 };
@@ -188,8 +193,10 @@ export const formsApi = {
   assign: (body: { ids: string[]; team: string; salesUserId?: number | null; links?: Record<string, string> }) => request<{ ok: true; results: { submission: string; student: string; created: boolean }[] }>('/admin/form-submissions/assign', { method: 'POST', body: JSON.stringify(body) }),
 };
 /** Public URL of a form (hash route works in WeChat's in-app browser). */
-export function formUrl(slug: string) {
+export const formUrl = (slug: string) => publicPageUrl(`f/${slug}`);
+
+export function publicPageUrl(route: string) {
   const origin = process.env.NEXT_PUBLIC_SITE_ORIGIN || (typeof location !== 'undefined' ? location.origin : '');
   const base = process.env.NEXT_PUBLIC_BASE_PATH || '';
-  return `${origin}${base}/#/f/${slug}`;
+  return `${origin}${base}/#/${route}`;
 }

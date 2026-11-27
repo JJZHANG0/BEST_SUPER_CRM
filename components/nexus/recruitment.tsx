@@ -1,4 +1,5 @@
 'use client';
+import { teamYear } from '@/lib/nexus/operations-year';
 import { useRef, useState, type CSSProperties } from 'react';
 import { Users, CalendarDays, GraduationCap, ClipboardList, ChevronRight, Download, Eye, Copy, Maximize2, X, Image as ImageIcon, UserPlus } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
@@ -216,7 +217,7 @@ export function TeamRoster({ team, onEditMembers }: { team: Team; onEditMembers?
         <span className="avatar">{mine ? x.name.slice(0, 1) : '•'}</span>
         <div><h3>{mine ? x.name : '已报名队员（姓名隐藏）'}</h3><p>{x.grade} · {mine ? x.sales : '其他顾问负责'}</p></div>
         <Badge>{e.status}</Badge>
-        {mine && <button type="button" className="text-button" onClick={() => s.go('students/' + x.id)}>查看档案</button>}
+        {mine && <button type="button" className="text-button" onClick={() => s.go('students/' + x.id + (s.role === 'sales' ? '' : '?year=' + teamYear(team)))}>查看档案</button>}
       </div>;
     })}
     {!entries.length && (

@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { useNexus } from '@/lib/nexus/store';
 import { api } from '@/lib/nexus/api';
+import { teamYear } from '@/lib/nexus/operations-year';
 import type { Team } from '@/lib/nexus/data';
 import { TEAM_RECRUIT_STATUSES, normalizeRecruitStatus, teamEnrolled, teamRemaining, canEditTeam, inactiveEnrollment, findSimilarTeam, teamNameConflictMessage } from '@/lib/nexus/sales';
 import { Badge, Choice, FormField, Notice } from './ui';
@@ -28,7 +29,7 @@ export function TeamEditor({ team, open, onOpenChange }: { team: Team; open: boo
   const editable = useTeamAccess(team);
   const superadmin = (s.user?.role ?? 'superadmin') === 'superadmin';
   const [f, setF] = useState(() => ({
-    name: team.name, program: team.program, teacher: team.teacher || '', opsOwner: team.opsOwner || '', status: team.status || '正常进行', note: team.note || '',
+    year: String(teamYear(team)), publicIntro: team.publicIntro || '', name: team.name, program: team.program, teacher: team.teacher || '', opsOwner: team.opsOwner || '', status: team.status || '正常进行', note: team.note || '',
     recruitStatus: normalizeRecruitStatus(team.recruitStatus) || '招募中', capacity: team.recruitCapacity != null ? String(team.recruitCapacity) : '', recorded: team.recruitEnrolled != null ? String(team.recruitEnrolled) : '',
   }));
   const [poster, setPoster] = useState(team.posterUrl || '');
@@ -49,7 +50,8 @@ export function TeamEditor({ team, open, onOpenChange }: { team: Team; open: boo
     if (!f.name.trim()) return toast.error('请填写队伍名称');
     const hit = findSimilarTeam(f.name.trim(), s.teams, team.id);
     if (hit) return toast.error(teamNameConflictMessage(hit.name));
-    const next: Team = { ...team, name: f.name.trim(), program: f.program, teacher: f.teacher.trim(), opsOwner: f.opsOwner.trim() || undefined, status: f.status, note: f.note,
+    if (!/^\d{4}$/.test(f.year) || Number(f.year) < 2000 || Number(f.year) > 2100) return toast.error('请输入有效的运营年度');
+    const next: Team = { ...team, year: Number(f.year), publicIntro: f.publicIntro.trim(), name: f.name.trim(), program: f.program, teacher: f.teacher.trim(), opsOwner: f.opsOwner.trim() || undefined, status: f.status, note: f.note,
       recruitStatus: f.recruitStatus, recruitCapacity: num(f.capacity), recruitEnrolled: num(f.recorded), posterUrl: poster || null };
     s.setTeams(a => a.map(x => x.id === team.id ? next : x));
     log('编辑队伍', `名额 ${next.recruitCapacity ?? '待定'} · 已招 ${enrolled} · 剩余 ${remaining ?? '—'} · ${f.recruitStatus}`);
@@ -113,6 +115,8 @@ export function TeamEditor({ team, open, onOpenChange }: { team: Team; open: boo
           {!members.length && <p className="muted">暂无成员</p>}
           {editable && <div className="team-member-add"><select value={pick} onChange={e => setPick(e.target.value)} aria-label="选择学生"><option value="">选择学生加入队伍…</option>{candidates.map(x => <option key={x.id} value={x.id}>{x.name} · {x.grade}{x.program !== team.program ? '（其他项目）' : ''}</option>)}</select><button type="button" className="secondary compact" disabled={!pick} onClick={addMember}><UserPlus size={15} />添加</button></div>}
         </div></FormField>
+        <FormField label="运营年度"><input type="number" min={2000} max={2100} value={f.year} disabled={!editable} onChange={e => set('year')(e.target.value)} /></FormField>
+        <FormField label="扫码页课题简介"><textarea rows={4} maxLength={4000} value={f.publicIntro} disabled={!editable} placeholder="面向家长和学生公开展示" onChange={e => set('publicIntro')(e.target.value)} /></FormField>
         <FormField label="备注"><textarea rows={3} value={f.note} disabled={!editable} onChange={e => set('note')(e.target.value)} /></FormField>
         {editable && <div className="team-editor-actions">
           <button type="button" className="secondary danger" onClick={() => setConfirm(true)}><Trash2 size={15} />删除队伍</button>

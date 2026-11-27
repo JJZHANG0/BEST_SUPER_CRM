@@ -204,6 +204,13 @@
       "when": 1791880000000,
       "tag": "0028_user_quick_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791890000000,
+      "tag": "0029_team_year_and_public_intro",
+      "breakpoints": true
     }
   ]
 }

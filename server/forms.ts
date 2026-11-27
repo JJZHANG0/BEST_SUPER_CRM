@@ -30,7 +30,7 @@ export type FormRepo = {
   deleteSubmission(id: string): Promise<void>;
   students(): Promise<StudentLike[]>;
   enrollments(): Promise<EnrollmentLike[]>;
-  team(id: string): Promise<{ id: string; program: string; name: string } | null>;
+  team(id: string): Promise<{ id: string; program: string; name: string; year?: number; archived?: boolean | null } | null>;
   /** Active role=sales accounts (负责销售 options). */
   salesAccounts(): Promise<SalesAccount[]>;
   /** Persist one assignment atomically: student upsert, enrollment upsert, submission → 已分配. */
@@ -197,7 +197,7 @@ export function registerFormRoutes(app: AnyApp, repo: FormRepo) {
     const ids = Array.isArray(body?.ids) ? [...new Set(body.ids.filter((x): x is string => typeof x === 'string'))].slice(0, 200) : [];
     if (!ids.length) return c.json({ error: 'invalid', message: '请选择要分配的记录' }, 400);
     const team = typeof body?.team === 'string' ? await repo.team(body.team) : null;
-    if (!team) return c.json({ error: 'invalid', message: '请选择项目与队伍' }, 400);
+    if (!team || team.archived) return c.json({ error: 'invalid', message: '请选择项目与队伍' }, 400);
     const links = (body?.links && typeof body.links === 'object' ? body.links : {}) as Record<string, unknown>;
     // 负责销售 = the sales account's name (exactly what salesOwns matches on the sales side).
     let sales = '';
@@ -221,7 +221,7 @@ export function registerFormRoutes(app: AnyApp, repo: FormRepo) {
       const link = links[sub.id];
       const linkTo = typeof link === 'string' && link !== 'new' ? link : sub.studentId && sub.status === '已分配' ? sub.studentId : null;
       if (linkTo && !students.some(x => x.id === linkTo)) return c.json({ error: 'invalid', message: '要关联的学生不存在' }, 400);
-      const plan = planAssignment(sub, { program: team.program, team: team.id, sales }, { students, enrollments: await repo.enrollments(), linkTo, by: user.name, stamp: shanghaiStamp(new Date()), newId: 'S-' + Date.now().toString(36).toUpperCase() + randomBytes(2).toString('hex').toUpperCase() });
+      const plan = planAssignment(sub, { program: team.program, team: team.id, year: team.year, sales }, { students, enrollments: await repo.enrollments(), linkTo, by: user.name, stamp: shanghaiStamp(new Date()), newId: 'S-' + Date.now().toString(36).toUpperCase() + randomBytes(2).toString('hex').toUpperCase() });
       await repo.applyAssignment(plan, sub.id, { status: '已分配', program: team.program, team: team.id, studentId: plan.student.id, assignedBy: user.name, assignedAt: new Date().toISOString() }, user);
       students = plan.created ? [...students, plan.student] : students.map(x => x.id === plan.student.id ? plan.student : x);
       results.push({ submission: sub.id, student: plan.student.id, created: plan.created });
@@ -282,19 +282,25 @@ export function drizzleFormRepo(db: Db): FormRepo {
     },
     async deleteSubmission(id) { await db.delete(schema.formSubmissions).where(eq(schema.formSubmissions.id, id)); },
     async students() {
-      const rows = await db.select().from(schema.students);
-      return rows.map(r => ({ id: r.id, name: r.name, program: r.program, team: r.team, status: r.status, sales: r.sales, updated: r.updated, grade: r.grade, health: r.health, healthNote: r.healthNote, healthUpdated: r.healthUpdated, healthBy: r.healthBy, profile: r.profile ?? {} }));
+      const rows = await db.select({ student: schema.students, teamYear: schema.teams.year })
+        .from(schema.students).leftJoin(schema.teams, eq(schema.teams.id, schema.students.team));
+      return rows.map(({ student: r, teamYear }) => ({ id: r.id, intakeYear: r.intakeYear, teamYear: teamYear ?? undefined, name: r.name, program: r.program, team: r.team, status: r.status, sales: r.sales, updated: r.updated, grade: r.grade, health: r.health, healthNote: r.healthNote, healthUpdated: r.healthUpdated, healthBy: r.healthBy, profile: r.profile ?? {} }));
     },
-    async enrollments() { return (await db.select().from(schema.enrollments)).map(r => ({ id: r.id, student: r.student, program: r.program, team: r.team, status: r.status })); },
+    async enrollments() {
+      const rows = await db.select({ enrollment: schema.enrollments, year: schema.teams.year, intakeYear: schema.students.intakeYear })
+        .from(schema.enrollments).leftJoin(schema.teams, eq(schema.teams.id, schema.enrollments.team))
+        .innerJoin(schema.students, eq(schema.students.id, schema.enrollments.student));
+      return rows.map(({ enrollment: r, year, intakeYear }) => ({ id: r.id, student: r.student, program: r.program, team: r.team, status: r.status, year: year ?? intakeYear }));
+    },
     async salesAccounts() {
       const rows = await db.select({ id: schema.users.id, name: schema.users.name, salesName: schema.users.salesName, region: schema.users.salesRegion, role: schema.users.role, active: schema.users.active }).from(schema.users).orderBy(asc(schema.users.id));
       return rows.filter(r => r.role === 'sales' && r.active).map(r => ({ id: r.id, name: r.name, salesName: r.salesName, region: r.region ?? null }));
     },
-    async team(id) { const [t] = await db.select({ id: schema.teams.id, program: schema.teams.program, name: schema.teams.name }).from(schema.teams).where(eq(schema.teams.id, id)).limit(1); return t ?? null; },
+    async team(id) { const [t] = await db.select({ id: schema.teams.id, program: schema.teams.program, name: schema.teams.name, year: schema.teams.year, archived: schema.teams.archived }).from(schema.teams).where(eq(schema.teams.id, id)).limit(1); return t ?? null; },
     async applyAssignment(plan, submissionId, p, by) {
       await db.transaction(async tx => {
         const st = plan.student, now = new Date();
-        const values = { name: st.name, program: st.program, team: st.team, status: st.status, sales: st.sales, updated: st.updated, grade: st.grade, health: st.health, healthNote: st.healthNote, healthUpdated: st.healthUpdated, healthBy: st.healthBy, profile: st.profile ?? {}, updatedAt: now };
+        const values = { intakeYear: st.intakeYear, name: st.name, program: st.program, team: st.team, status: st.status, sales: st.sales, updated: st.updated, grade: st.grade, health: st.health, healthNote: st.healthNote, healthUpdated: st.healthUpdated, healthBy: st.healthBy, profile: st.profile ?? {}, updatedAt: now };
         if (plan.created) {
           const [{ m }] = await tx.select({ m: max(schema.students.sortOrder) }).from(schema.students);
           await tx.insert(schema.students).values({ id: st.id, ...values, healthChangedAt: now, healthChangedBy: by.id, sortOrder: (m ?? 0) + 1 });
@@ -303,7 +309,7 @@ export function drizzleFormRepo(db: Db): FormRepo {
         const e = plan.enrollment;
         if (plan.enrollmentCreated) {
           const [{ m }] = await tx.select({ m: max(schema.enrollments.sortOrder) }).from(schema.enrollments);
-          await tx.insert(schema.enrollments).values({ ...e, sortOrder: (m ?? 0) + 1 }).onConflictDoUpdate({ target: schema.enrollments.id, set: { team: e.team, updatedAt: now } });
+          await tx.insert(schema.enrollments).values({ id: e.id, student: e.student, program: e.program, team: e.team, status: e.status, sortOrder: (m ?? 0) + 1 }).onConflictDoUpdate({ target: schema.enrollments.id, set: { team: e.team, updatedAt: now } });
         } else await tx.update(schema.enrollments).set({ team: e.team, status: e.status, updatedAt: now }).where(eq(schema.enrollments.id, e.id));
         await tx.update(schema.formSubmissions).set({ status: p.status!, program: p.program ?? null, team: p.team ?? null, studentId: p.studentId ?? null, assignedBy: p.assignedBy ?? null, assignedAt: p.assignedAt ? new Date(p.assignedAt) : null, updatedAt: now }).where(eq(schema.formSubmissions.id, submissionId));
       });

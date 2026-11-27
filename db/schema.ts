@@ -71,6 +71,8 @@ export const programs = pgTable('programs', {
 
 /** 队伍 / cohorts. */
 export const teams = pgTable('teams', {
+  year: integer('year').notNull().default(2026),
+  publicIntro: text('public_intro').notNull().default(''),
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   program: text('program').notNull().references(() => programs.id),
@@ -111,6 +113,7 @@ export const teamLogs = pgTable('team_logs', {
 }, t => [index('team_logs_team_idx').on(t.team)]);
 
 export const students = pgTable('students', {
+  intakeYear: integer('intake_year').notNull().default(2026),
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   program: text('program').notNull().references(() => programs.id),

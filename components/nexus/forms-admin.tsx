@@ -10,6 +10,7 @@ import { ArrowDown, ArrowUp, Ban, Check, ClipboardList, Copy, Download, External
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { useNexus } from '@/lib/nexus/store';
+import { CURRENT_OPERATIONS_YEAR, LEGACY_OPERATIONS_YEAR, teamYear } from '@/lib/nexus/operations-year';
 import { canManageSystem } from '@/lib/nexus/roles';
 import { formsApi, formUrl, ApiError, type AdminForm, type DuplicateMap } from '@/lib/nexus/api';
 import {
@@ -145,6 +146,8 @@ function DetailDialog({ sub, onClose, onAssign, onStatus, onDelete, teamName, pr
 
 function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; onClose: () => void; onDone: () => void }) {
   const s = useNexus();
+  const [year, setYear] = useState(CURRENT_OPERATIONS_YEAR);
+  const years = [...new Set([CURRENT_OPERATIONS_YEAR, LEGACY_OPERATIONS_YEAR, ...s.teams.filter(t => !t.archived).map(teamYear)])].sort((a, b) => b - a);
   const [program, setProgram] = useState('');
   const [team, setTeam] = useState('');
   const [q, setQ] = useState('');
@@ -156,8 +159,8 @@ function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; 
   const [dups, setDups] = useState<DuplicateMap | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
   // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when reopened
-  useEffect(() => { if (items) { setTeam(''); setQ(''); setDups(null); setLinks({}); setSalesQ(''); const st = items.length === 1 && items[0].studentId ? s.students.find(x => x.id === items[0].studentId) : null; setSalesId(st ? accounts.find(a => a.name === st.sales)?.id ?? null : null); if (items.length === 1 && items[0].team) { setTeam(items[0].team); setProgram(items[0].program || ''); } } }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
-  const teams = s.teams.filter(t => !t.archived && (!program || t.program === program) && (!q.trim() || (t.name + ' ' + (s.programs.find(p => p.id === t.program)?.name || '') + ' ' + t.teacher).toLowerCase().includes(q.trim().toLowerCase())));
+  useEffect(() => { if (items) { const assigned = items.length === 1 ? s.teams.find(t => !t.archived && t.id === items[0].team) : undefined; setYear(assigned ? teamYear(assigned) : CURRENT_OPERATIONS_YEAR); setProgram(''); setTeam(''); setQ(''); setDups(null); setLinks({}); setSalesQ(''); const st = items.length === 1 && items[0].studentId ? s.students.find(x => x.id === items[0].studentId) : null; setSalesId(st ? accounts.find(a => a.name === st.sales)?.id ?? null : null); if (assigned) { setTeam(assigned.id); setProgram(items[0].program || ''); } } }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const teams = s.teams.filter(t => !t.archived && teamYear(t) === year && (!program || t.program === program) && (!q.trim() || (t.name + ' ' + (s.programs.find(p => p.id === t.program)?.name || '') + ' ' + t.teacher).toLowerCase().includes(q.trim().toLowerCase())));
   const run = async () => {
     if (!items?.length || !team) return;
     setBusy(true);
@@ -181,6 +184,7 @@ function AssignDialog({ items, onClose, onDone }: { items: Submission[] | null; 
   return <Dialog open={!!items} onOpenChange={o => { if (!o) onClose(); }}><DialogContent className="ops-dialog fa-assign">
     <DialogTitle>分配队伍与负责销售</DialogTitle>
     <DialogDescription>为 {items?.length || 0} 名学生建档（或关联已有档案）并加入所选队伍。分配后，运营与负责销售按现有权限可见。</DialogDescription>
+    <Picker label="运营年度" value={String(year)} onChange={value => { setYear(Number(value)); setTeam(''); }} options={years.map(value => ({ value: String(value), label: value + ' 年' }))} />
     <div className="fa-assign-grid">
       <Picker label="项目" value={program} onChange={v => { setProgram(v); setTeam(''); }} options={[{ value: '', label: '全部项目' }, ...s.programs.map(p => ({ value: p.id, label: p.name }))]} />
       <label className="search-box"><Search size={16} /><input placeholder="搜索队伍 / 老师…" value={q} onChange={e => setQ(e.target.value)} aria-label="搜索队伍" /></label>

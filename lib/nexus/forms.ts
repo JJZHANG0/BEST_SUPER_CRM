@@ -231,8 +231,8 @@ export function identityOf(answers: AnswerSnapshot[]) {
 }
 
 // ---------------------------------------------------------------- 队伍绑定分发
-export type StudentLike = { id: string; name: string; program: string; team: string; status: string; sales: string; updated: string; grade: string; health: string; healthNote: string; healthUpdated: string; healthBy: string; profile?: Record<string, string> | null };
-export type EnrollmentLike = { id: string; student: string; program: string; team: string; status: string };
+export type StudentLike = { intakeYear?: number; teamYear?: number; id: string; name: string; program: string; team: string; status: string; sales: string; updated: string; grade: string; health: string; healthNote: string; healthUpdated: string; healthBy: string; profile?: Record<string, string> | null };
+export type EnrollmentLike = { year?: number; id: string; student: string; program: string; team: string; status: string };
 export type DuplicateMatch = { studentId: string; name: string; phone: string; strength: 'name+phone' | 'phone' | 'name' };
 
 /** Existing students that look like the submitter: same name + phone (strong), same phone, or same name. */
@@ -271,7 +271,7 @@ export function profileFromAnswers(answers: AnswerSnapshot[]) {
 }
 
 /** `sales` = the sales account's name (students.sales is matched by salesOwns against users.name / salesName). */
-export type AssignTarget = { program: string; team: string; sales?: string; enrollStatus?: string };
+export type AssignTarget = { year?: number; program: string; team: string; sales?: string; enrollStatus?: string };
 export type AssignPlan = { student: StudentLike; created: boolean; enrollment: EnrollmentLike; enrollmentCreated: boolean };
 /**
  * Plan one 队伍绑定分发: create a new 学生 (or link to `linkTo`), merge mapped form fields into the profile without
@@ -289,16 +289,21 @@ export function planAssignment(sub: Pick<Submission, 'id' | 'answers' | 'created
   if (existing) {
     const profile: Record<string, string> = { ...(existing.profile || {}) };
     for (const [k, v] of Object.entries({ ...mapped.profile, ...source })) if (!profile[k] || !String(profile[k]).trim()) profile[k] = v;
-    // A chosen salesperson always wins (re-binding); the primary team moves when it is empty or in the same project.
-    const moveTeam = !existing.team || existing.program === target.program;
-    student = { ...existing, profile, grade: existing.grade || mapped.grade, team: moveTeam ? target.team : existing.team, program: existing.program || target.program, sales: target.sales || existing.sales || '', updated: '刚刚' };
+    // A chosen salesperson always wins (re-binding); the primary team moves when empty or within the same project and year.
+    const moveTeam = !existing.team || (existing.program === target.program && (target.year === undefined || existing.teamYear === target.year));
+    student = { ...existing, teamYear: moveTeam ? target.year : existing.teamYear, profile, grade: existing.grade || mapped.grade, team: moveTeam ? target.team : existing.team, program: existing.program || target.program, sales: target.sales || existing.sales || '', updated: '刚刚' };
     created = false;
   } else {
-    student = { id: ctx.newId, name: mapped.name || sub.answers.find(a => a.mapTo === 'name')?.value as string || '未命名学生', program: target.program, team: target.team, status, sales: target.sales || '', updated: '刚刚', grade: mapped.grade, health: '状态良好', healthNote: '报名收集表导入，待首次学习评估。', healthUpdated: ctx.stamp, healthBy: ctx.by, profile: { ...mapped.profile, ...source } };
+    student = { teamYear: target.year, intakeYear: target.year, id: ctx.newId, name: mapped.name || sub.answers.find(a => a.mapTo === 'name')?.value as string || '未命名学生', program: target.program, team: target.team, status, sales: target.sales || '', updated: '刚刚', grade: mapped.grade, health: '状态良好', healthNote: '报名收集表导入，待首次学习评估。', healthUpdated: ctx.stamp, healthBy: ctx.by, profile: { ...mapped.profile, ...source } };
     created = true;
   }
-  const prior = ctx.enrollments.find(e => e.student === student.id && e.program === target.program);
-  const enrollment: EnrollmentLike = prior ? { ...prior, team: target.team, status: prior.status || status } : { id: 'E-' + student.id + '-' + target.program, student: student.id, program: target.program, team: target.team, status };
+  const prior = ctx.enrollments.find(e => e.student === student.id && e.program === target.program && (target.year === undefined || e.year === target.year || e.team === target.team));
+  const baseId = 'E-' + student.id + '-' + target.program + (target.year === undefined ? '' : '-' + target.year);
+  // An older record can retain this ID after its team's year is corrected.
+  const id = ctx.enrollments.some(e => e.id === baseId) ? baseId + '-' + ctx.newId : baseId;
+  const enrollment: EnrollmentLike = prior
+    ? { ...prior, year: target.year ?? prior.year, team: target.team, status: prior.status || status }
+    : { id, student: student.id, program: target.program, team: target.team, status, year: target.year };
   return { student, created, enrollment, enrollmentCreated: !prior };
 }
 
